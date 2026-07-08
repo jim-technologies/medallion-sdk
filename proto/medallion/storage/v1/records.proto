@@ -1,0 +1,195 @@
+// Storage record messages describe public object metadata and byte references
+// returned by medallion-storage.
+syntax = "proto3";
+
+package medallion.storage.v1;
+
+import "buf/validate/validate.proto";
+
+option go_package = "github.com/jim-technologies/medallion-sdk/go/gen/medallion/storage/v1;storagev1";
+
+// CatalogEntry is one object's metadata.
+message CatalogEntry {
+  // Last segment of the object's logical path.
+  string filename = 1 [(buf.validate.field).string.min_len = 1];
+
+  // MIME type. Empty defaults to "application/octet-stream".
+  string content_type = 2;
+
+  // Total size in bytes.
+  int64 size_bytes = 3 [(buf.validate.field).int64.gte = 0];
+
+  // SHA-256 of the full object bytes (hex, lowercase).
+  string sha256 = 4 [(buf.validate.field).string.pattern = "^[0-9a-f]{64}$"];
+
+  // Ordered chunk list for this object.
+  repeated ChunkRef chunks = 5;
+
+  // RFC 3339 timestamp of upload completion.
+  string created_at = 6;
+
+  // Optional manifest reference for objects whose chunk list is stored
+  // separately.
+  ManifestRef manifest = 7;
+}
+
+// ManifestRef locates a ChunkManifest blob in byte storage.
+message ManifestRef {
+  // Backend namespace holding the manifest.
+  string repo = 1 [(buf.validate.field).string.min_len = 1];
+  // Backend object path for the manifest.
+  string path = 2 [(buf.validate.field).string.min_len = 1];
+  // Backend owner or account, when applicable.
+  string owner = 3;
+  // Byte backend for this manifest.
+  string backend = 4;
+  // Backend release identifier, when applicable.
+  int64 release_id = 5;
+  // Backend asset identifier, when applicable.
+  int64 asset_id = 6;
+  // Field 7 is reserved for wire compatibility.
+  reserved 7;
+  reserved "asset_name";
+  // Provider digest, e.g. "sha256:<hex>", when available.
+  string digest = 8;
+  // Backend release tag, when applicable.
+  string release_tag = 9;
+}
+
+// ChunkManifest is the full ordered chunk list for one object.
+message ChunkManifest {
+  repeated ChunkRef chunks = 1;
+}
+
+// ChunkRef points to one chunk's bytes in byte storage.
+message ChunkRef {
+  // Backend namespace containing this chunk.
+  string repo = 1 [(buf.validate.field).string.min_len = 1];
+
+  // Backend object path for this chunk.
+  string path = 2 [(buf.validate.field).string.min_len = 1];
+
+  // Bytes in this chunk (raw, pre-base64).
+  int64 size_bytes = 3 [(buf.validate.field).int64.gt = 0];
+
+  // Backend owner or account, when applicable.
+  string owner = 4;
+  // Byte backend for this chunk.
+  string backend = 5;
+  // Backend release identifier, when applicable.
+  int64 release_id = 6;
+  // Backend asset identifier, when applicable.
+  int64 asset_id = 7;
+  // Field 8 is reserved for wire compatibility.
+  reserved 8;
+  reserved "asset_name";
+  // Provider digest, e.g. "sha256:<hex>", when available.
+  string digest = 9;
+  // Backend release tag, when applicable.
+  string release_tag = 10;
+}
+
+// ObjectBytes stores either an inline chunk list or a manifest reference.
+message ObjectBytes {
+  repeated ChunkRef chunks = 1;
+  ManifestRef manifest = 2;
+}
+
+// CatalogAuditRecord records request-level storage mutation facts.
+message CatalogAuditRecord {
+  string operation = 1;
+  string method = 2;
+  string source = 3;
+  string bucket = 4;
+  string path = 5;
+  string from_path = 6;
+  string to_path = 7;
+  string filename = 8;
+  string content_type = 9;
+  int64 size_bytes = 10;
+  string sha256 = 11;
+  int64 chunk_count = 12;
+  string recorded_at = 13;
+}
+
+// NamespaceShardState records backend placement state for a logical namespace.
+message NamespaceShardState {
+  // 1-based number of the currently writable shard.
+  uint32 active_shard = 1;
+  // Bytes written to the active shard so far.
+  int64 active_shard_bytes = 2;
+
+  // Reserved historical owner field.
+  string owner = 3;
+
+  // Number of chunk/blob placements written to the active shard so far.
+  int64 active_shard_entries = 4;
+
+  // Release-backed byte storage counters. Refs record the exact
+  // repo/release/asset identities used for reads.
+  uint32 active_release = 5;
+  int64 active_release_bytes = 6;
+  int64 active_release_assets = 7;
+}
+
+// CatalogStats is a small derived summary for a logical namespace.
+message CatalogStats {
+  string org = 1;
+  int64 file_count = 2;
+  int64 size_bytes = 3;
+  string updated_at = 4;
+}
+
+// CatalogPage is a paged directory listing representation.
+message CatalogPage {
+  // Directory this page represents, relative to the org root.
+  // Empty string for the org root. Slash-separated, no leading or
+  // trailing slash. e.g. "Photos/2024/Birthday".
+  string path = 1;
+
+  // Immediate subdirectory names, one level only.
+  repeated string subdirs = 2;
+
+  // Files directly in this directory (NOT recursive).
+  repeated CatalogEntry entries = 3;
+
+  // 1-based page number, for directories that overflow max_per_page.
+  uint32 page_number = 4;
+  // True when there's a page_{N+1}.binpb file to load next.
+  bool has_next = 5;
+
+  // RFC 3339 — last write time of this page.
+  string updated_at = 6;
+}
+
+// Entry is a single row returned by ListDir — either a subfolder or a
+// file. Slim view: just what the UI needs to render a row. Use the
+// dedicated Download RPC if you need the full chunk list.
+message Entry {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_FOLDER = 1;
+    KIND_FILE = 2;
+  }
+  Kind kind = 1;
+  // Name shown in the UI (leaf segment of the path, or subdir name).
+  string name = 2;
+  // Set for files only; absent for folders.
+  optional int64 size_bytes = 3;
+  optional string content_type = 4;
+  // RFC 3339 — creation timestamp for files; absent for folders.
+  optional string modified_at = 5;
+}
+
+// SearchHit is one match from Search: a file, with its FULL path inside the
+// org (so the UI can jump straight to it) plus the same slim fields
+// ListDir returns. Search matches files only (not folders).
+message SearchHit {
+  // Full slash-separated path inside the org, e.g.
+  // "movies/2024/Dune.mp4".
+  string path = 1;
+  string name = 2; // leaf filename (convenience; == last path segment)
+  int64 size_bytes = 3;
+  string content_type = 4;
+  string modified_at = 5;
+}

@@ -1,0 +1,60 @@
+{
+  "connect": {
+    "service": "medallion.connect.v1.MedallionConnectService",
+    "methods": [
+      "RegisterConnector",
+      "ListConnectors",
+      "DisableConnector",
+      "RegisterConnectorAction",
+      "ListConnectorActions",
+      "DisableConnectorAction",
+      "ExecuteConnectorAction",
+      "GetActionExecution",
+      "PublishCdcEvents",
+      "ListCdcEvents"
+    ]
+  },
+  "ontology": {
+    "service": "medallion.ontology.v1.MedallionOntologyService",
+    "rpcPrefix": "/rpc",
+    "methods": [
+      "RunDiscovery",
+      "ListDataSources",
+      "GetOntologyGraph",
+      "ListOntologyEntities",
+      "ListActions",
+      "Query",
+      "PlanAction",
+      "ExecuteAction",
+      "ListAuditEvents",
+      "GetProjectionFreshness",
+      "RefreshAuditProjection"
+    ],
+    "rest": {
+      "query": "/v1/query",
+      "planAction": "/v1/actions/{action_name}:plan",
+      "executeAction": "/v1/actions/{action_name}:execute"
+    }
+  },
+  "storage": {
+    "service": "medallion.storage.v1.StorageService",
+    "rest": {
+      "upload": "/upload"
+    },
+    "methods": [
+      "Upload",
+      "UploadAsync",
+      "GetUploadStatus",
+      "IngestUrl",
+      "Download",
+      "ListDir",
+      "Search",
+      "Move",
+      "RenameCatalog",
+      "Delete",
+      "Resync",
+      "PruneEmptyDirs",
+      "GetStats"
+    ]
+  }
+}

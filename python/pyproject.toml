@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "medallion"
+version = "0.1.0"
+description = "Public Python SDK for Medallion."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+authors = [
+  { name = "Jim Technologies" }
+]
+keywords = ["medallion", "audit", "sdk"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Typing :: Typed",
+]
+dependencies = [
+  "opentelemetry-api>=1.43.0",
+  "protobuf>=7.35.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/jim-technologies/medallion-sdk"
+Repository = "https://github.com/jim-technologies/medallion-sdk"
+Issues = "https://github.com/jim-technologies/medallion-sdk/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/medallion", "src/buf"]

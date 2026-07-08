@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package buf.validate;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate";
+
+message StringRules {
+  uint64 min_len = 2;
+  string pattern = 6;
+}
+
+message BytesRules {
+  uint64 min_len = 2;
+}
+
+message Int64Rules {
+  int64 gt = 4;
+  int64 gte = 5;
+}
+
+message RepeatedRules {
+  uint64 min_items = 1;
+  uint64 max_items = 2;
+}
+
+message FieldRules {
+  oneof type {
+    Int64Rules int64 = 4;
+    StringRules string = 14;
+    BytesRules bytes = 15;
+    RepeatedRules repeated = 18;
+  }
+
+  bool required = 25;
+}
+
+extend google.protobuf.FieldOptions {
+  FieldRules field = 1159;
+}

@@ -1,0 +1,294 @@
+// MedallionStorage is the public Medallion storage RPC service.
+//
+// Model: `org` is the logical browse root and behaves like an object-store
+// bucket. Within it, `path` is the full visible object key, e.g.
+// "evidence/orders/order_123/cancellation.json". The optional Upload/Ingest
+// `repo` is compatibility input only; it is joined with `path` into the object
+// key before storage.
+syntax = "proto3";
+
+package medallion.storage.v1;
+
+import "buf/validate/validate.proto";
+import "medallion/storage/v1/records.proto";
+
+option go_package = "github.com/jim-technologies/medallion-sdk/go/gen/medallion/storage/v1;storagev1";
+
+// StorageService is the public RPC surface exposed by medallion-storage.
+service StorageService {
+  // Upload writes bytes synchronously and returns the stored object metadata.
+  rpc Upload(UploadRequest) returns (UploadResponse);
+
+  // UploadAsync enqueues the upload and returns a task_id immediately.
+  // Callers poll GetUploadStatus to observe progress.
+  rpc UploadAsync(UploadRequest) returns (UploadAsyncResponse);
+
+  // GetUploadStatus returns the current state of an async upload or IngestUrl
+  // job. Unknown task_ids return TASK_STATUS_UNSPECIFIED.
+  rpc GetUploadStatus(GetUploadStatusRequest) returns (GetUploadStatusResponse);
+
+  // IngestUrl fetches a remote URL server-side, stores it at (org, repo, path),
+  // and returns a task_id immediately. Availability depends on service policy.
+  rpc IngestUrl(IngestUrlRequest) returns (UploadAsyncResponse);
+
+  // Download streams the bytes of one object back to the caller. Concatenate
+  // the `data` fields in sequence order.
+  rpc Download(DownloadRequest) returns (stream DownloadResponse);
+
+  // ListDir returns the entries at one logical path inside a bucket.
+  rpc ListDir(ListDirRequest) returns (ListDirResponse);
+
+  // Search returns files whose path matches the query, optionally filtered by
+  // content-type prefix and path prefix.
+  rpc Search(SearchRequest) returns (SearchResponse);
+
+  // Move renames or relocates an object within the same bucket.
+  rpc Move(MoveRequest) returns (MoveResponse);
+
+  // RenameCatalog renames or relocates a file by updating only the catalog
+  // entry. Use Move when bytes should be rewritten for the destination key.
+  rpc RenameCatalog(RenameCatalogRequest) returns (RenameCatalogResponse);
+
+  // Delete removes an object's catalog entry and stored bytes. It is
+  // idempotent for already-missing objects.
+  rpc Delete(DeleteRequest) returns (DeleteResponse);
+
+  // Resync refreshes the service's catalog view after an external change.
+  rpc Resync(ResyncRequest) returns (ResyncResponse);
+
+  // PruneEmptyDirs removes empty folder links left behind by catalog-only
+  // renames/deletes. Stored bytes are untouched.
+  rpc PruneEmptyDirs(PruneEmptyDirsRequest) returns (PruneEmptyDirsResponse);
+
+  // GetStats returns catalog totals (file_count, size_bytes) for one bucket.
+  rpc GetStats(GetStatsRequest) returns (GetStatsResponse);
+}
+
+// --- Upload / UploadAsync ---
+
+message UploadRequest {
+  // Logical bucket / browse namespace. The field is named `org` for backward
+  // compatibility.
+  string org = 1 [(buf.validate.field).string.min_len = 1];
+
+  // Optional folder prefix. New callers should leave this empty and pass the
+  // full object key in `path`. When set, storage joins repo + "/" + path.
+  string repo = 2;
+
+  // Full object key when repo is empty, or filename/subpath inside the
+  // repo prefix when repo is set. Slash-separated, no leading slash.
+  string path = 3 [(buf.validate.field).string.min_len = 1];
+
+  // Optional MIME type. Defaults to "application/octet-stream".
+  string content_type = 4;
+
+  // Raw object bytes. The maximum request size is controlled by service
+  // configuration.
+  bytes data = 5 [(buf.validate.field).bytes.min_len = 1];
+
+  // Optional caller-generated id used to correlate an active async request.
+  string request_id = 6;
+}
+
+message UploadResponse {
+  // The entry as written. Filename, content type, size, sha, chunk
+  // paths, created_at — echoed so the caller can confirm what landed.
+  CatalogEntry entry = 1;
+  // Echoed back: org + the canonical object path.
+  string org = 2;
+  string path = 3;
+}
+
+message UploadAsyncResponse {
+  // Opaque task identifier. Pass to GetUploadStatus to poll progress.
+  string task_id = 1;
+}
+
+message IngestUrlRequest {
+  // Same destination as Upload: org is the logical bucket, path is the full object key.
+  // repo is an optional prefix and is joined with path when present.
+  string org = 1 [(buf.validate.field).string.min_len = 1];
+  string repo = 2;
+  string path = 3 [(buf.validate.field).string.min_len = 1];
+  // The source URL to ingest. Supported URL types are controlled by service
+  // policy.
+  string url = 4 [(buf.validate.field).string.min_len = 1];
+  // Optional MIME type for the stored entry.
+  string content_type = 5;
+  // Optional caller-generated id used to correlate an active async request.
+  string request_id = 6;
+}
+
+message GetUploadStatusRequest {
+  string task_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message GetUploadStatusResponse {
+  TaskStatus status = 1;
+  // Populated when status == TASK_STATUS_FAILED.
+  string error = 2;
+  // Populated when status == TASK_STATUS_DONE.
+  CatalogEntry entry = 3;
+  // Echoed location, populated on DONE.
+  string org = 4;
+  string path = 5;
+}
+
+enum TaskStatus {
+  TASK_STATUS_UNSPECIFIED = 0;
+  TASK_STATUS_PENDING = 1;
+  TASK_STATUS_RUNNING = 2;
+  TASK_STATUS_DONE = 3;
+  TASK_STATUS_FAILED = 4;
+}
+
+// --- Download ---
+
+message DownloadRequest {
+  // org = logical bucket; path = full object key.
+  string org = 1 [(buf.validate.field).string.min_len = 1];
+  string path = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+message DownloadResponse {
+  // Zero-based sequence number of this wire frame within the download.
+  // Frames may be smaller than storage chunks (re-sharded to fit the
+  // streaming envelope cap); this is NOT the same as a chunk index.
+  int32 sequence = 1;
+  // Set in the FIRST frame only; metadata the caller needs to size
+  // buffers and verify the result.
+  CatalogEntry entry = 2;
+  // Raw bytes for this frame.
+  bytes data = 3;
+}
+
+// --- ListDir ---
+
+message ListDirRequest {
+  // org = logical bucket / browse root. The tree is the set of object-key prefixes
+  // currently present in the catalog.
+  string org = 1 [(buf.validate.field).string.min_len = 1];
+  // Directory inside the bucket's merged tree. Empty = root. No leading
+  // slash; trailing slash ignored. e.g. "username=alice/year=2026".
+  string path = 2;
+  // 1-based page number. 0 is treated as 1.
+  uint32 page = 3;
+  // Entries per page. 0 → server default (25).
+  uint32 page_size = 4;
+}
+
+message ListDirResponse {
+  // Entries in the current page. Folders first, then files, both
+  // alphabetically by name. The same total ordering is paginated
+  // across requests so paging is stable.
+  repeated Entry entries = 1;
+  // Total entries in the directory across all pages.
+  uint32 total = 2;
+  // Echoed back so the client can correlate.
+  uint32 page = 3;
+  uint32 page_size = 4;
+}
+
+message SearchRequest {
+  // org = logical bucket / browse root searched across all cataloged object keys.
+  string org = 1 [(buf.validate.field).string.min_len = 1];
+  // Case-insensitive substring matched against each file's full path.
+  // Empty matches everything (a recursive listing of `path_prefix`).
+  string query = 2;
+  // Optional subtree to search under (e.g. "username=alice"). Empty =
+  // whole bucket. No leading slash.
+  string path_prefix = 3;
+  // Optional content-type prefix filter, e.g. "video/" or "image/jpeg".
+  string content_type_prefix = 4;
+  // Max hits to return. 0 → server default (100). Server caps at 1000.
+  uint32 limit = 5;
+}
+
+message SearchResponse {
+  // Matching files, ordered by path. Capped at `limit`.
+  repeated SearchHit hits = 1;
+  // True when the cap was hit and more matches exist (narrow the query).
+  bool truncated = 2;
+}
+
+// --- Move / Delete ---
+
+message MoveRequest {
+  // org = logical bucket / browse root; from_path/to_path are full object keys within
+  // it. Bytes follow the destination key.
+  string org = 1 [(buf.validate.field).string.min_len = 1];
+  string from_path = 2 [(buf.validate.field).string.min_len = 1];
+  string to_path = 3 [(buf.validate.field).string.min_len = 1];
+}
+
+message MoveResponse {
+  // The entry at its new location.
+  CatalogEntry entry = 1;
+}
+
+message RenameCatalogRequest {
+  // org = logical bucket / browse root; paths are full object keys within it. Byte refs
+  // are preserved, so this is a cheap catalog-only rename.
+  string org = 1 [(buf.validate.field).string.min_len = 1];
+  string from_path = 2 [(buf.validate.field).string.min_len = 1];
+  string to_path = 3 [(buf.validate.field).string.min_len = 1];
+  // When true, from_path/to_path are folder prefixes and every object below
+  // from_path/ is re-keyed below to_path/. Bytes are not moved.
+  bool recursive = 4;
+}
+
+message RenameCatalogResponse {
+  // The entry at its new catalog name. Byte refs are preserved.
+  CatalogEntry entry = 1;
+  // Number of objects re-keyed when recursive=true.
+  uint32 moved_objects = 2;
+}
+
+message DeleteRequest {
+  // org = logical bucket / browse root; path = full object key within it.
+  string org = 1 [(buf.validate.field).string.min_len = 1];
+  string path = 2 [(buf.validate.field).string.min_len = 1];
+  // When true, path is treated as a folder prefix and every object below
+  // path/ is removed. The exact object named path, if any, is left alone.
+  bool recursive = 3;
+}
+
+message DeleteResponse {
+  uint32 deleted_objects = 1;
+}
+
+// --- Resync (multi-machine sync primitive) ---
+
+message ResyncRequest {
+  // Specific bucket to re-read. Empty re-reads every available bucket.
+  string org = 1;
+}
+
+message ResyncResponse {
+  // Number of catalog pages freshly loaded.
+  uint32 pages_loaded = 1;
+  // Buckets actually walked (echo of the request when non-empty, or the
+  // full list when the request was a wildcard).
+  repeated string orgs = 2;
+}
+
+// --- Prune empty folders ---
+
+message PruneEmptyDirsRequest {
+  string org = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message PruneEmptyDirsResponse {
+  string org = 1;
+  uint32 pruned_dirs = 2;
+}
+
+// --- Stats ---
+
+message GetStatsRequest {
+  string org = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message GetStatsResponse {
+  CatalogStats stats = 1;
+}

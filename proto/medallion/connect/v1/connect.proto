@@ -1,0 +1,420 @@
+syntax = "proto3";
+
+package medallion.connect.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/jim-technologies/medallion-sdk/go/gen/medallion/connect/v1;connectv1";
+
+// MedallionConnectService owns low-level connector registration, CDC/audit
+// ingest, connector action registration, and connector-side action execution.
+// It does not make ontology policy decisions or attach semantic meaning.
+service MedallionConnectService {
+  // Registers or reactivates a connector for an organization.
+  rpc RegisterConnector(RegisterConnectorRequest) returns (RegisterConnectorResponse);
+  // Lists connectors visible in an organization.
+  rpc ListConnectors(ListConnectorsRequest) returns (ListConnectorsResponse);
+  // Disables a connector and prevents new ingest/action execution through it.
+  rpc DisableConnector(DisableConnectorRequest) returns (DisableConnectorResponse);
+
+  // Registers or updates a low-level operation supported by a connector.
+  rpc RegisterConnectorAction(RegisterConnectorActionRequest) returns (RegisterConnectorActionResponse);
+  // Lists active operations registered for a connector.
+  rpc ListConnectorActions(ListConnectorActionsRequest) returns (ListConnectorActionsResponse);
+  // Disables a connector operation.
+  rpc DisableConnectorAction(DisableConnectorActionRequest) returns (DisableConnectorActionResponse);
+  // Starts or returns an idempotent connector action execution.
+  rpc ExecuteConnectorAction(ExecuteConnectorActionRequest) returns (ExecuteConnectorActionResponse);
+  // Gets a connector action execution by id.
+  rpc GetActionExecution(GetActionExecutionRequest) returns (GetActionExecutionResponse);
+
+  // Publishes idempotent CDC or audit events for a connector.
+  rpc PublishCdcEvents(PublishCdcEventsRequest) returns (PublishCdcEventsResponse);
+  // Lists durable CDC/audit events with cursor pagination.
+  rpc ListCdcEvents(ListCdcEventsRequest) returns (ListCdcEventsResponse);
+}
+
+// LifecycleStatus is the enabled/disabled state for connectors and actions.
+enum LifecycleStatus {
+  // No status was specified.
+  LIFECYCLE_STATUS_UNSPECIFIED = 0;
+  // The resource accepts new requests.
+  LIFECYCLE_STATUS_ACTIVE = 1;
+  // The resource is retained but no longer accepts new requests.
+  LIFECYCLE_STATUS_DISABLED = 2;
+}
+
+// CdcOperation is the source change operation for CDC events.
+enum CdcOperation {
+  // No operation was specified.
+  CDC_OPERATION_UNSPECIFIED = 0;
+  // A source row/entity was inserted.
+  CDC_OPERATION_INSERT = 1;
+  // A source row/entity was updated.
+  CDC_OPERATION_UPDATE = 2;
+  // A source row/entity was deleted.
+  CDC_OPERATION_DELETE = 3;
+  // A source snapshot emitted the current row/entity state.
+  CDC_OPERATION_SNAPSHOT = 4;
+}
+
+// EventKind splits the stream into change-data-capture and audit-trail events.
+// It selects the lake table suffix (_cdc | _audit). Unspecified is treated as
+// CDC.
+enum EventKind {
+  // Defaults to EVENT_KIND_CDC for writes; means no kind filter for reads.
+  EVENT_KIND_UNSPECIFIED = 0;
+  // Change-data-capture event.
+  EVENT_KIND_CDC = 1;
+  // Audit-trail event.
+  EVENT_KIND_AUDIT = 2;
+}
+
+// ActionExecutionStatus is the durable state of a connector action execution.
+enum ActionExecutionStatus {
+  // No status was specified.
+  ACTION_EXECUTION_STATUS_UNSPECIFIED = 0;
+  // Execution has been recorded but not started.
+  ACTION_EXECUTION_STATUS_PENDING = 1;
+  // Execution has started.
+  ACTION_EXECUTION_STATUS_RUNNING = 2;
+  // Execution completed successfully.
+  ACTION_EXECUTION_STATUS_SUCCEEDED = 3;
+  // Execution completed with an error.
+  ACTION_EXECUTION_STATUS_FAILED = 4;
+}
+
+// Connector is a low-level connection to an external source system.
+message Connector {
+  // Server-assigned prefixed UUIDv7 connector id.
+  string id = 1 [(buf.validate.field).string.min_len = 1];
+  // Tenant/organization that owns the connector.
+  string organization_id = 2 [(buf.validate.field).string.min_len = 1];
+  // Connector class, such as cdc or api.
+  string kind = 3 [(buf.validate.field).string.min_len = 1];
+  // External source system key, such as postgres, salesforce, or netsuite.
+  string source_system = 4 [(buf.validate.field).string.min_len = 1];
+  // Human-readable connector name.
+  string display_name = 5 [(buf.validate.field).string.min_len = 1];
+  // Opaque source-system connector/account/database id. May be any stable
+  // client-native identifier format.
+  string external_id = 6;
+  // Current lifecycle state.
+  LifecycleStatus status = 7;
+  // Time the connector row was created.
+  google.protobuf.Timestamp created_at = 8;
+  // Time the connector row was last updated.
+  google.protobuf.Timestamp updated_at = 9;
+}
+
+// CdcEvent is the durable low-level event shape for both CDC and audit ingest.
+message CdcEvent {
+  // Server-assigned snowflake id: 64-bit, node-tagged, time-sortable, and
+  // coordination-free. Serves as both identity and the stream ordering key.
+  int64 id = 1;
+  // Tenant/organization that owns the event. Derived from the connector on
+  // ingest.
+  string organization_id = 2;
+  // Connector that accepted the event.
+  string connector_id = 3;
+  // Source stream/table/topic name.
+  string stream_name = 4 [(buf.validate.field).string.min_len = 1];
+  // Source entity type. For audit events this is also the resource type.
+  string entity_type = 5 [(buf.validate.field).string.min_len = 1];
+  // Opaque source-system entity id. May be UUID, UUIDv7, ULID, Snowflake,
+  // integer-as-string, compound key, or any other stable source identifier.
+  // For audit events this is also the resource id.
+  string entity_id = 6 [(buf.validate.field).string.min_len = 1];
+  // CDC operation. Required for CDC events and unset for audit events.
+  CdcOperation operation = 7;
+  // Opaque source-system event id, when the source provides one.
+  string source_event_id = 8;
+  // Idempotency key scoped to connector_id.
+  string idempotency_key = 9 [(buf.validate.field).string.min_len = 1];
+  // Source/application actor that performed the source action. This is a
+  // source fact supplied by trusted connector ingestion and is separate from the
+  // authenticated principal that submitted the event.
+  string actor_principal = 10;
+  // Raw low-level event payload as JSON.
+  string payload_json = 11 [(buf.validate.field).string.min_len = 1];
+  // Time the source says the event occurred. Defaults to ingest time if absent.
+  google.protobuf.Timestamp occurred_at = 12;
+  // Time medallion-connect accepted the event.
+  google.protobuf.Timestamp observed_at = 13;
+  // Optional human-readable audit note describing this change — the "text event"
+  // attached at emit time. The audit trail is the CDC stream read by actor plus
+  // this description over time.
+  string description = 15;
+  // Change-capture vs audit-trail. Routes the event to the _cdc or _audit lake
+  // table. Unspecified is treated as CDC.
+  EventKind kind = 16;
+  // Required audit verb for kind = AUDIT (e.g. "approve", "access", "export").
+  // Must be empty for CDC events, which use `operation` instead.
+  string action = 17;
+  // Source system copied from the connector for read routing and lake projection.
+  string source_system = 18;
+  // Stable authenticated principal that submitted this event to
+  // medallion-connect.
+  string ingested_by_principal = 19;
+}
+
+// ConnectorAction describes a low-level operation exposed by a connector.
+message ConnectorAction {
+  // Server-assigned prefixed UUIDv7 action id.
+  string id = 1 [(buf.validate.field).string.min_len = 1];
+  // Tenant/organization that owns the action.
+  string organization_id = 2 [(buf.validate.field).string.min_len = 1];
+  // Connector that owns the action.
+  string connector_id = 3 [(buf.validate.field).string.min_len = 1];
+  // Connector-local operation key.
+  string operation_key = 4 [(buf.validate.field).string.min_len = 1];
+  // Human-readable action name.
+  string display_name = 5 [(buf.validate.field).string.min_len = 1];
+  // Human-readable action description.
+  string description = 6;
+  // JSON schema for request_json, when the connector provides one.
+  string input_schema_json = 7;
+  // JSON schema for response_json, when the connector provides one.
+  string output_schema_json = 8;
+  // Whether the downstream connector operation supports idempotency.
+  bool idempotency_supported = 9;
+  // Action timeout budget in seconds.
+  uint32 timeout_seconds = 10;
+  // Current lifecycle state.
+  LifecycleStatus status = 11;
+  // Time the action row was created.
+  google.protobuf.Timestamp created_at = 12;
+  // Time the action row was last updated.
+  google.protobuf.Timestamp updated_at = 13;
+}
+
+// ActionExecution records one idempotent connector action request and outcome.
+message ActionExecution {
+  // Server-assigned prefixed UUIDv7 execution id.
+  string id = 1 [(buf.validate.field).string.min_len = 1];
+  // Tenant/organization that owns the execution.
+  string organization_id = 2 [(buf.validate.field).string.min_len = 1];
+  // Connector that executed the action.
+  string connector_id = 3 [(buf.validate.field).string.min_len = 1];
+  // Connector action being executed.
+  string connector_action_id = 4 [(buf.validate.field).string.min_len = 1];
+  // Connector-local operation key captured at execution time.
+  string operation_key = 5 [(buf.validate.field).string.min_len = 1];
+  // Idempotency key scoped to connector_action_id.
+  string idempotency_key = 6 [(buf.validate.field).string.min_len = 1];
+  // Stable authenticated principal that requested execution. The server derives
+  // this from auth and ignores caller-supplied values.
+  string actor_principal = 7;
+  // Connector action request JSON.
+  string request_json = 8;
+  // Connector action response JSON.
+  string response_json = 9;
+  // Current execution state.
+  ActionExecutionStatus status = 10;
+  // Error text when status is failed.
+  string error_message = 11;
+  // Time execution started.
+  google.protobuf.Timestamp started_at = 12;
+  // Time execution completed.
+  google.protobuf.Timestamp completed_at = 13;
+}
+
+// RegisterConnectorRequest registers or reactivates one connector.
+message RegisterConnectorRequest {
+  // Tenant/organization that should own the connector. The server authorizes
+  // this against the authenticated principal.
+  string organization_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Connector class, such as cdc or api.
+  string kind = 2 [(buf.validate.field).string.min_len = 1];
+  // External source system key.
+  string source_system = 3 [(buf.validate.field).string.min_len = 1];
+  // Human-readable connector name.
+  string display_name = 4 [(buf.validate.field).string.min_len = 1];
+  // Optional source-native connector/account/database id.
+  string external_id = 5;
+}
+
+// RegisterConnectorResponse returns the registered connector.
+message RegisterConnectorResponse {
+  // Registered connector.
+  Connector connector = 1 [(buf.validate.field).required = true];
+}
+
+// ListConnectorsRequest lists connectors for an organization.
+message ListConnectorsRequest {
+  // Tenant/organization to list. The server authorizes this against the
+  // authenticated principal.
+  string organization_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// ListConnectorsResponse contains matching connectors.
+message ListConnectorsResponse {
+  // Matching connectors.
+  repeated Connector connectors = 1;
+}
+
+// DisableConnectorRequest disables one connector.
+message DisableConnectorRequest {
+  // Connector id to disable.
+  string connector_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// DisableConnectorResponse returns the disabled connector.
+message DisableConnectorResponse {
+  // Disabled connector.
+  Connector connector = 1 [(buf.validate.field).required = true];
+}
+
+// RegisterConnectorActionRequest registers or updates one connector operation.
+message RegisterConnectorActionRequest {
+  // Connector that owns the operation.
+  string connector_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Connector-local operation key.
+  string operation_key = 2 [(buf.validate.field).string.min_len = 1];
+  // Human-readable action name.
+  string display_name = 3 [(buf.validate.field).string.min_len = 1];
+  // Human-readable action description.
+  string description = 4;
+  // JSON schema for request_json, when available.
+  string input_schema_json = 5;
+  // JSON schema for response_json, when available.
+  string output_schema_json = 6;
+  // Whether the downstream operation supports idempotency.
+  bool idempotency_supported = 7;
+  // Action timeout budget in seconds. Defaults to 30.
+  uint32 timeout_seconds = 8;
+}
+
+// RegisterConnectorActionResponse returns the registered action.
+message RegisterConnectorActionResponse {
+  // Registered action.
+  ConnectorAction action = 1 [(buf.validate.field).required = true];
+}
+
+// ListConnectorActionsRequest lists active actions for a connector.
+message ListConnectorActionsRequest {
+  // Connector id to list.
+  string connector_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// ListConnectorActionsResponse contains matching actions.
+message ListConnectorActionsResponse {
+  // Matching active actions.
+  repeated ConnectorAction actions = 1;
+}
+
+// DisableConnectorActionRequest disables one connector action.
+message DisableConnectorActionRequest {
+  // Connector action id to disable.
+  string connector_action_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// DisableConnectorActionResponse returns the disabled action.
+message DisableConnectorActionResponse {
+  // Disabled connector action.
+  ConnectorAction action = 1 [(buf.validate.field).required = true];
+}
+
+// ExecuteConnectorActionRequest starts or returns an idempotent execution.
+message ExecuteConnectorActionRequest {
+  // Connector action id to execute.
+  string connector_action_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Idempotency key scoped to connector_action_id.
+  string idempotency_key = 2 [(buf.validate.field).string.min_len = 1];
+  // Deprecated. The server ignores caller-supplied actor_principal and records
+  // the authenticated principal instead.
+  string actor_principal = 3;
+  // Connector action request JSON.
+  string request_json = 4;
+}
+
+// ExecuteConnectorActionResponse returns the execution ledger row.
+message ExecuteConnectorActionResponse {
+  // Action execution.
+  ActionExecution execution = 1 [(buf.validate.field).required = true];
+}
+
+// GetActionExecutionRequest fetches one action execution.
+message GetActionExecutionRequest {
+  // Action execution id.
+  string action_execution_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// GetActionExecutionResponse returns one action execution.
+message GetActionExecutionResponse {
+  // Action execution.
+  ActionExecution execution = 1 [(buf.validate.field).required = true];
+}
+
+// PublishCdcEventsRequest publishes a batch of CDC or audit events.
+message PublishCdcEventsRequest {
+  // Connector accepting the event batch.
+  string connector_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Events to publish. Each idempotency_key is scoped to connector_id.
+  repeated CdcEvent events = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 1000
+  }];
+}
+
+// PublishedCdcEvent reports one accepted or duplicate event.
+message PublishedCdcEvent {
+  // Idempotency key from the submitted event.
+  string idempotency_key = 1;
+  // Durable event id for the accepted or original event.
+  int64 event_id = 2;
+  // True when this request reused an existing idempotency key.
+  bool duplicate = 3;
+}
+
+// PublishCdcEventsResponse summarizes the publish batch.
+message PublishCdcEventsResponse {
+  // Number of newly accepted events.
+  uint32 accepted_count = 1;
+  // Number of duplicate idempotency keys.
+  uint32 duplicate_count = 2;
+  // Per-event publish results.
+  repeated PublishedCdcEvent events = 3;
+}
+
+// ListCdcEventsRequest filters and pages CDC/audit events.
+message ListCdcEventsRequest {
+  // Tenant/organization to query. The server authorizes this against the
+  // authenticated principal.
+  string organization_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Optional connector id filter.
+  string connector_id = 2;
+  // Optional source entity type or audit resource type filter.
+  string entity_type = 3;
+  // Optional source entity id or audit resource id filter.
+  string entity_id = 4;
+  // Page size. Defaults to 100 and caps at 500.
+  uint32 limit = 5;
+  // Optional event kind filter. Unspecified returns all kinds.
+  EventKind kind = 6;
+  // Optional authenticated actor principal filter.
+  string actor_principal = 7;
+  // Optional audit action filter.
+  string action = 8;
+  // Optional inclusive occurred_at lower bound.
+  google.protobuf.Timestamp occurred_at_from = 9;
+  // Optional exclusive occurred_at upper bound.
+  google.protobuf.Timestamp occurred_at_to = 10;
+  // Optional source system filter.
+  string source_system = 11;
+  // Optional source stream/table/topic filter.
+  string stream_name = 12;
+  // Cursor returned by a previous ListCdcEventsResponse.
+  string page_cursor = 13;
+  // Optional authenticated ingester principal filter.
+  string ingested_by_principal = 14;
+}
+
+// ListCdcEventsResponse contains one page of CDC/audit events.
+message ListCdcEventsResponse {
+  // Matching events ordered by observed_at descending, then id descending.
+  repeated CdcEvent events = 1;
+  // Cursor for the next page, empty when there is no next page.
+  string next_page_cursor = 2;
+}

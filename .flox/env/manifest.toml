@@ -1,0 +1,14 @@
+schema-version = "1.12.0"
+
+[install]
+nodejs.pkg-path = "nodejs_24"
+pnpm.pkg-path = "pnpm"
+typescript-language-server.pkg-path = "typescript-language-server"
+go.pkg-path = "go"
+python.pkg-path = "python313"
+uv.pkg-path = "uv"
+
+[profile]
+common = '''
+  corepack enable >/dev/null 2>&1 || true
+'''
