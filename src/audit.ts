@@ -11,15 +11,15 @@ import {
   jsonString,
   occurredAt,
   optionalId,
-  requiredId,
 } from "./payload.js";
 import type {
   AuditRecordInput,
+  AuditRecordResponse,
   AuditTrailInput,
   AuditTrailResponse,
-  ConnectCdcEvent,
+  ConnectAuditEvent,
+  ConnectPublishAuditEventsResponse,
   ConnectPublishCdcEventsResponse,
-  EventRecordResponse,
   NormalizedActorRef,
   PublishedEventResult,
   RequestOptions,
@@ -42,7 +42,7 @@ export class AuditClient {
   async record(
     input: AuditRecordInput,
     options: RequestOptions = {},
-  ): Promise<EventRecordResponse> {
+  ): Promise<AuditRecordResponse> {
     const connectorId = input.connectorId ?? this.options.defaultConnectorId;
     if (connectorId === undefined || connectorId.trim().length === 0) {
       throw new MedallionError(
@@ -54,31 +54,29 @@ export class AuditClient {
     const resource = normalizeResourceRef(input.resource);
     const actor = normalizeActorRef(input.actor);
     const key = idempotencyKey(input.idempotencyKey);
-    const event: ConnectCdcEvent = compactRecord({
-      stream_name: input.streamName ?? "audit_log",
-      entity_type: resource.type,
-      entity_id: resource.id,
+    const event: ConnectAuditEvent = compactRecord({
+      resource_type: resource.type,
+      resource_id: resource.id,
+      action: input.action,
       idempotency_key: key,
       actor_principal: actorPrincipalFromRef(actor),
       payload_json: jsonString(
         {
           actor,
           resource,
-          before: input.before,
-          after: input.after,
-          metadata: input.metadata,
-          evidenceUrl: input.evidenceUrl,
+          before: input.before ?? null,
+          after: input.after ?? null,
+          metadata: input.metadata ?? null,
+          evidenceUrl: input.evidenceUrl ?? null,
         },
         "audit payload",
       ),
       occurred_at: occurredAt(input.occurredAt),
       description: input.description,
       source_event_id: optionalId(input.sourceEventId, "audit.sourceEventId"),
-      kind: "EVENT_KIND_AUDIT",
-      action: input.action,
     });
 
-    const response = await this.connect.publishCdcEvents(
+    const response = await this.connect.publishAuditEvents(
       {
         connector_id: connectorId,
         events: [event],
@@ -103,15 +101,18 @@ export class AuditClient {
 
     const sourceActor =
       input.actor === undefined ? undefined : normalizeActorRef(input.actor);
+    const resource = normalizeResourceRef({
+      type: input.resourceType,
+      id: input.resourceId,
+    });
     const limit = auditTrailLimit(input.limit ?? input.pageSize);
-    const response = await this.connect.listCdcEvents(
+    const response = await this.connect.listAuditEvents(
       {
         organization_id: organizationId,
         connector_id: input.connectorId ?? this.options.defaultConnectorId,
-        entity_type: input.resourceType,
-        entity_id: requiredId(input.resourceId, "audit.resourceId"),
+        resource_type: resource.type,
+        resource_id: resource.id,
         limit,
-        kind: "EVENT_KIND_AUDIT",
         actor_principal:
           sourceActor === undefined
             ? undefined
@@ -123,7 +124,6 @@ export class AuditClient {
       options,
     );
     const events = (response.body.events ?? [])
-      .filter((event) => isAuditEvent(event))
       .map((event) => auditTrailEventFromConnect(event))
       .filter(
         (event) =>
@@ -139,10 +139,10 @@ export class AuditClient {
 }
 
 export function eventResponse(
-  body: ConnectPublishCdcEventsResponse,
+  body: ConnectPublishCdcEventsResponse | ConnectPublishAuditEventsResponse,
   fallbackIdempotencyKey: string,
   requestId?: string,
-): EventRecordResponse {
+): AuditRecordResponse {
   const events: PublishedEventResult[] = (body.events ?? []).map((event) => ({
     idempotencyKey: event.idempotency_key ?? fallbackIdempotencyKey,
     eventId:
@@ -165,7 +165,7 @@ export function eventResponse(
 }
 
 function auditTrailLimit(value: number | undefined): number {
-  if (value === undefined) {
+  if (value === undefined || value === 0) {
     return DEFAULT_AUDIT_TRAIL_LIMIT;
   }
 
@@ -186,11 +186,7 @@ function auditTrailLimit(value: number | undefined): number {
   return value;
 }
 
-function isAuditEvent(event: ConnectCdcEvent): boolean {
-  return event.kind === "EVENT_KIND_AUDIT" || event.action !== undefined;
-}
-
-function auditTrailEventFromConnect(event: ConnectCdcEvent) {
+function auditTrailEventFromConnect(event: ConnectAuditEvent) {
   const payload = parseEventPayload(event.payload_json);
   const payloadRecord = recordValue(payload);
   const actor =
@@ -211,10 +207,10 @@ function auditTrailEventFromConnect(event: ConnectCdcEvent) {
     ingesterPrincipal: event.ingested_by_principal,
     actorPrincipal: event.actor_principal,
     action: event.action,
-    targetType: event.entity_type,
-    targetId: event.entity_id,
-    entityType: event.entity_type,
-    entityId: event.entity_id,
+    targetType: event.resource_type,
+    targetId: event.resource_id,
+    entityType: event.resource_type,
+    entityId: event.resource_id,
     metadata,
     createdAt: event.observed_at,
     occurredAt: event.occurred_at,

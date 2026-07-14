@@ -14,7 +14,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "opentelemetry-api", specifier = ">=1.43.0" },
-    { name = "protobuf", specifier = ">=7.35.0" },
+    { name = "protobuf", specifier = ">=7.35.1" },
 ]
 
 [[package]]

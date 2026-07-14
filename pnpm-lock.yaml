@@ -12,8 +12,8 @@ importers:
         specifier: ^2.12.1
         version: 2.12.1
       '@jim-technologies/invariant-protocol':
-        specifier: github:jim-technologies/invariantprotocol#v0.4.0
-        version: https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/c84540e8694839f0035ad9c7f90602bfd26b6396
+        specifier: github:jim-technologies/invariantprotocol#7f6acc53f23e405f64f41a2cdb17302e4945eeaf
+        version: https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/7f6acc53f23e405f64f41a2cdb17302e4945eeaf
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1
@@ -429,8 +429,8 @@ packages:
     peerDependencies:
       '@grpc/grpc-js': ^1.8.21
 
-  '@jim-technologies/invariant-protocol@https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/c84540e8694839f0035ad9c7f90602bfd26b6396':
-    resolution: {tarball: https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/c84540e8694839f0035ad9c7f90602bfd26b6396}
+  '@jim-technologies/invariant-protocol@https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/7f6acc53f23e405f64f41a2cdb17302e4945eeaf':
+    resolution: {tarball: https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/7f6acc53f23e405f64f41a2cdb17302e4945eeaf}
     version: 0.4.0
 
   '@jridgewell/gen-mapping@0.3.13':
@@ -1305,7 +1305,7 @@ snapshots:
       '@grpc/proto-loader': 0.7.15
       protobufjs: 7.6.5
 
-  '@jim-technologies/invariant-protocol@https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/c84540e8694839f0035ad9c7f90602bfd26b6396':
+  '@jim-technologies/invariant-protocol@https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/7f6acc53f23e405f64f41a2cdb17302e4945eeaf':
     dependencies:
       '@bufbuild/protobuf': 2.12.1
       '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.1)

@@ -1,18 +1,21 @@
 package medallion
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	connectv1 "github.com/jim-technologies/medallion-sdk/go/gen/medallion/connect/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func eventResponse(body *connectv1.PublishCdcEventsResponse, fallbackKey, requestID string) EventRecordResponse {
+const maxAuditTrailLimit = 500
+
+func cdcEventResponse(body *connectv1.PublishCdcEventsResponse, fallbackKey, requestID string) EventRecordResponse {
 	results := make([]PublishedEventResult, 0, len(body.GetEvents()))
 	for _, item := range body.GetEvents() {
 		eventID := ""
@@ -42,6 +45,40 @@ func eventResponse(body *connectv1.PublishCdcEventsResponse, fallbackKey, reques
 	}
 }
 
+func auditEventResponse(body *connectv1.PublishAuditEventsResponse, fallbackKey, requestID string) AuditRecordResponse {
+	results := make([]PublishedAuditEventResult, 0, len(body.GetEvents()))
+	for _, item := range body.GetEvents() {
+		eventID := ""
+		if item.GetEventId() != 0 {
+			eventID = strconv.FormatInt(item.GetEventId(), 10)
+		}
+		results = append(results, PublishedAuditEventResult{
+			IdempotencyKey: firstNonEmpty(item.GetIdempotencyKey(), fallbackKey),
+			EventID:        eventID,
+			Duplicate:      item.GetDuplicate(),
+			Proto:          item,
+		})
+	}
+	duplicate := body.GetDuplicateCount() > 0 && body.GetAcceptedCount() == 0
+	if len(results) > 0 {
+		duplicate = results[0].Duplicate
+	}
+	key := fallbackKey
+	if len(results) > 0 && results[0].IdempotencyKey != "" {
+		key = results[0].IdempotencyKey
+	}
+	return AuditRecordResponse{
+		RequestID:      requestID,
+		IdempotencyKey: key,
+		Duplicate:      duplicate,
+		Result:         resultString(duplicate),
+		AcceptedCount:  body.GetAcceptedCount(),
+		DuplicateCount: body.GetDuplicateCount(),
+		Events:         results,
+		Proto:          body,
+	}
+}
+
 func firstEventKey(events []PublishedEventResult, fallbackKey string) string {
 	if len(events) == 0 || events[0].IdempotencyKey == "" {
 		return fallbackKey
@@ -56,7 +93,21 @@ func resultString(duplicate bool) string {
 	return "accepted"
 }
 
-func auditEventFromConnect(item *connectv1.CdcEvent) AuditTrailEvent {
+func auditTrailLimit(limit, pageSize int) (uint32, error) {
+	value := limit
+	if value == 0 {
+		value = pageSize
+	}
+	if value < 0 {
+		return 0, &Error{Code: "MEDALLION_INVALID_AUDIT_TRAIL_LIMIT", Message: "audit.trail limit/pageSize must be zero or a positive integer"}
+	}
+	if value > maxAuditTrailLimit {
+		return 0, &Error{Code: "MEDALLION_AUDIT_TRAIL_LIMIT_TOO_LARGE", Message: "audit.trail limit/pageSize must be 500 or less; use cursor pagination for larger reads"}
+	}
+	return uint32(value), nil
+}
+
+func auditEventFromConnect(item *connectv1.AuditEvent) AuditTrailEvent {
 	payload := parsePayload(item.GetPayloadJson())
 	payloadRecord := asMap(payload)
 	actor := actorFromPayload(payloadRecord["actor"])
@@ -76,20 +127,28 @@ func auditEventFromConnect(item *connectv1.CdcEvent) AuditTrailEvent {
 		IngesterPrincipal: item.GetIngestedByPrincipal(),
 		ActorPrincipal:    item.GetActorPrincipal(),
 		Action:            item.GetAction(),
-		TargetType:        item.GetEntityType(),
-		TargetID:          item.GetEntityId(),
-		EntityType:        item.GetEntityType(),
-		EntityID:          item.GetEntityId(),
+		TargetType:        item.GetResourceType(),
+		TargetID:          item.GetResourceId(),
+		EntityType:        item.GetResourceType(),
+		EntityID:          item.GetResourceId(),
 		Metadata:          mapStringAny(payloadRecord["metadata"]),
 		CreatedAt:         timestampString(item.GetObservedAt()),
 		OccurredAt:        timestampString(item.GetOccurredAt()),
 		ObservedAt:        timestampString(item.GetObservedAt()),
 		Before:            payloadRecord["before"],
 		After:             payloadRecord["after"],
+		EvidenceURL:       stringValue(payloadRecord["evidenceUrl"]),
 		SourceEventID:     item.GetSourceEventId(),
 		Payload:           payload,
 		Proto:             item,
 	}
+}
+
+func nullableString(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
 }
 
 func datasourceFromConnector(connector *connectv1.Connector, metadata map[string]any) Datasource {
@@ -131,10 +190,6 @@ func parsePayload(value string) any {
 	return out
 }
 
-func isAuditEvent(item *connectv1.CdcEvent) bool {
-	return item.GetKind() == connectv1.EventKind_EVENT_KIND_AUDIT || item.GetAction() != ""
-}
-
 func jsonString(value map[string]any) (string, error) {
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -159,25 +214,18 @@ func cdcOperation(operation string) connectv1.CdcOperation {
 }
 
 func entityIDFromPrimaryKey(primaryKey map[string]string) string {
-	if id, ok := primaryKey["id"]; ok {
-		return id
-	}
-	keys := make([]string, 0, len(primaryKey))
-	for key := range primaryKey {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	if len(keys) == 1 {
-		return primaryKey[keys[0]]
-	}
-	out := ""
-	for index, key := range keys {
-		if index > 0 {
-			out += "|"
+	if len(primaryKey) == 1 {
+		for _, value := range primaryKey {
+			return value
 		}
-		out += key + "=" + primaryKey[key]
 	}
-	return out
+	// encoding/json emits map keys in lexicographic order. Disabling HTML
+	// escaping keeps the compact projection consistent with the other SDKs.
+	var encoded bytes.Buffer
+	encoder := json.NewEncoder(&encoded)
+	encoder.SetEscapeHTML(false)
+	_ = encoder.Encode(primaryKey)
+	return strings.TrimSuffix(encoded.String(), "\n")
 }
 
 func normalizeOptionalID(value any, path string) (string, error) {

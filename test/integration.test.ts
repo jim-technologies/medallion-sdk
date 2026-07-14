@@ -41,7 +41,11 @@ describe("in-process integration routes", () => {
       evidenceUrl: "https://github.com/jim-technologies/medallion-sdk/tree/v0.1.0",
       idempotencyKey: "audit_1",
     });
-    const trail = await client.audit.trail({ resourceId: "order_123", limit: 10 });
+    const trail = await client.audit.trail({
+      resourceType: "order",
+      resourceId: "order_123",
+      limit: 10,
+    });
     await client.cdc.record({
       source: "primary_postgres",
       table: "orders",
@@ -69,8 +73,8 @@ describe("in-process integration routes", () => {
 
     expect(seen.map((request) => request.path)).toEqual([
       "/medallion.connect.v1.MedallionConnectService/RegisterConnector",
-      "/medallion.connect.v1.MedallionConnectService/PublishCdcEvents",
-      "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+      "/medallion.connect.v1.MedallionConnectService/PublishAuditEvents",
+      "/medallion.connect.v1.MedallionConnectService/ListAuditEvents",
       "/medallion.connect.v1.MedallionConnectService/PublishCdcEvents",
       "/rpc/medallion.ontology.v1.MedallionOntologyService/Query",
       "/rpc/medallion.ontology.v1.MedallionOntologyService/PlanAction",
@@ -85,6 +89,9 @@ describe("in-process integration routes", () => {
           payloadJson: JSON.stringify({
             actor: { type: "user", id: "user_123" },
             resource: { type: "order", id: "order_123" },
+            before: null,
+            after: null,
+            metadata: null,
             evidenceUrl: "https://github.com/jim-technologies/medallion-sdk/tree/v0.1.0",
           }),
         },
@@ -93,9 +100,9 @@ describe("in-process integration routes", () => {
     expect(JSON.parse(seen[2]?.body ?? "{}")).toMatchObject({
       organizationId: "org_123",
       connectorId: "conn_123",
-      entityId: "order_123",
+      resourceType: "order",
+      resourceId: "order_123",
       limit: 10,
-      kind: "EVENT_KIND_AUDIT",
     });
     expect(seen[3]?.headers["idempotency-key"]).toBe("cdc_1");
     expect(seen[6]?.headers["idempotency-key"]).toBe("action_1");
@@ -177,26 +184,24 @@ function writeRouteResponse(path: string, response: ServerResponse): void {
     return;
   }
 
-  if (path.endsWith("/PublishCdcEvents")) {
-    const index = seen.filter((request) => request.path?.endsWith("/PublishCdcEvents")).length;
+  if (path.endsWith("/PublishAuditEvents")) {
     writeJson(response, {
       accepted_count: 1,
       duplicate_count: 0,
-      events: [{ idempotency_key: index === 1 ? "audit_1" : "cdc_1", event_id: String(index) }],
+      events: [{ idempotency_key: "audit_1", event_id: "1" }],
     });
     return;
   }
 
-  if (path.endsWith("/ListCdcEvents")) {
+  if (path.endsWith("/ListAuditEvents")) {
     writeJson(response, {
       events: [
         {
           id: "1",
           organization_id: "org_123",
           connector_id: "conn_123",
-          stream_name: "audit_log",
-          entity_type: "order",
-          entity_id: "order_123",
+          resource_type: "order",
+          resource_id: "order_123",
           idempotency_key: "audit_1",
           payload_json: JSON.stringify({
             actor: { type: "user", id: "user_123" },
@@ -207,11 +212,19 @@ function writeRouteResponse(path: string, response: ServerResponse): void {
           }),
           actor_principal: "user:user_123",
           ingested_by_principal: "service_account:orders-worker",
-          kind: "EVENT_KIND_AUDIT",
           action: "order.cancelled",
           occurred_at: "2026-07-07T00:00:00Z",
         },
       ],
+    });
+    return;
+  }
+
+  if (path.endsWith("/PublishCdcEvents")) {
+    writeJson(response, {
+      accepted_count: 1,
+      duplicate_count: 0,
+      events: [{ idempotency_key: "cdc_1", event_id: "2" }],
     });
     return;
   }

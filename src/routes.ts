@@ -13,6 +13,8 @@ export const CONNECT_ROUTES = {
   getActionExecution: `${CONNECT_SERVICE}/GetActionExecution`,
   publishCdcEvents: `${CONNECT_SERVICE}/PublishCdcEvents`,
   listCdcEvents: `${CONNECT_SERVICE}/ListCdcEvents`,
+  publishAuditEvents: `${CONNECT_SERVICE}/PublishAuditEvents`,
+  listAuditEvents: `${CONNECT_SERVICE}/ListAuditEvents`,
 } as const;
 
 export const ONTOLOGY_ROUTES = {

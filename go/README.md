@@ -12,8 +12,11 @@ The Go SDK currently implements the Connect-backed server integration path:
 - `client.Datasources.Register`
 - `client.Audit.Record`
 - `client.Audit.Trail`
-- `client.Events.Record`
 - `client.CDC.Record`
+
+Audit and CDC use separate typed Connect contracts: audit methods publish
+`AuditEvent` values through `PublishAuditEvents`, while CDC remains on
+`PublishCdcEvents`.
 
 Low-level Connect request/response types are generated from the vendored public protobuf contract and are available from:
 

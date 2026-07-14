@@ -73,6 +73,11 @@ export interface EventRecordResponse extends WriteResultMetadata {
   events: PublishedEventResult[];
 }
 
+// Audit publishes have the same acknowledgement fields as CDC publishes, but
+// the public name keeps the two event families explicit at call sites.
+export type PublishedAuditEventResult = PublishedEventResult;
+export type AuditRecordResponse = EventRecordResponse;
+
 export interface AuditRecordInput {
   connectorId?: string;
   actor: ActorRef;
@@ -85,14 +90,13 @@ export interface AuditRecordInput {
   evidenceUrl?: string;
   idempotencyKey?: string;
   sourceEventId?: IdInput;
-  streamName?: string;
   occurredAt?: string | Date;
 }
 
 export interface AuditTrailInput {
   organizationId?: string;
   connectorId?: string;
-  resourceType?: string;
+  resourceType: string;
   resourceId: IdInput;
   action?: string;
   cursor?: string;
@@ -100,19 +104,6 @@ export interface AuditTrailInput {
   pageSize?: number;
   actor?: ActorRef;
   ingesterPrincipal?: string;
-}
-
-export interface GenericEventInput {
-  connectorId?: string;
-  type: string;
-  actor?: ActorRef;
-  resource?: ResourceRef;
-  payload?: unknown;
-  metadata?: Record<string, unknown>;
-  idempotencyKey?: string;
-  sourceEventId?: IdInput;
-  streamName?: string;
-  occurredAt?: string | Date;
 }
 
 export type CdcOperation = "insert" | "update" | "delete" | "snapshot";
@@ -301,8 +292,6 @@ export interface ConnectCdcEvent {
   occurred_at?: string;
   observed_at?: string;
   description?: string;
-  kind?: string;
-  action?: string;
   source_system?: string;
   ingested_by_principal?: string;
 }
@@ -324,16 +313,73 @@ export interface ConnectPublishCdcEventsResponse {
   events?: ConnectPublishedCdcEvent[];
 }
 
+export interface ConnectAuditEvent {
+  id?: string | number;
+  organization_id?: string;
+  connector_id?: string;
+  resource_type: string;
+  resource_id: string;
+  action: string;
+  source_event_id?: string;
+  idempotency_key: string;
+  actor_principal?: string;
+  payload_json: string;
+  occurred_at?: string;
+  observed_at?: string;
+  description?: string;
+  source_system?: string;
+  ingested_by_principal?: string;
+}
+
+export interface ConnectPublishAuditEventsRequest {
+  connector_id: string;
+  events: ConnectAuditEvent[];
+}
+
+export interface ConnectPublishedAuditEvent {
+  idempotency_key?: string;
+  event_id?: string | number;
+  duplicate?: boolean;
+}
+
+export interface ConnectPublishAuditEventsResponse {
+  accepted_count?: number;
+  duplicate_count?: number;
+  events?: ConnectPublishedAuditEvent[];
+}
+
+export interface ConnectListAuditEventsRequest {
+  organization_id: string;
+  connector_id?: string;
+  resource_type?: string;
+  resource_id?: string;
+  limit?: number;
+  actor_principal?: string;
+  action?: string;
+  occurred_at_from?: string;
+  occurred_at_to?: string;
+  source_system?: string;
+  page_cursor?: string;
+  ingested_by_principal?: string;
+}
+
+export interface ConnectListAuditEventsResponse {
+  events?: ConnectAuditEvent[];
+  next_page_cursor?: string;
+}
+
 export interface ConnectListCdcEventsRequest {
   organization_id: string;
   connector_id?: string;
   entity_type?: string;
   entity_id?: string;
   limit?: number;
-  kind?: "EVENT_KIND_UNSPECIFIED" | "EVENT_KIND_CDC" | "EVENT_KIND_AUDIT";
   actor_principal?: string;
   ingested_by_principal?: string;
-  action?: string;
+  occurred_at_from?: string;
+  occurred_at_to?: string;
+  source_system?: string;
+  stream_name?: string;
   page_cursor?: string;
 }
 

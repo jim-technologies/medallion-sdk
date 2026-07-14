@@ -39,12 +39,17 @@ type TracingConfig struct {
 
 type Connector = connectv1.Connector
 type CdcEvent = connectv1.CdcEvent
+type AuditEvent = connectv1.AuditEvent
 type RegisterConnectorRequest = connectv1.RegisterConnectorRequest
 type RegisterConnectorResponseProto = connectv1.RegisterConnectorResponse
 type PublishCdcEventsRequest = connectv1.PublishCdcEventsRequest
 type PublishCdcEventsResponseProto = connectv1.PublishCdcEventsResponse
 type ListCdcEventsRequest = connectv1.ListCdcEventsRequest
 type ListCdcEventsResponseProto = connectv1.ListCdcEventsResponse
+type PublishAuditEventsRequest = connectv1.PublishAuditEventsRequest
+type PublishAuditEventsResponseProto = connectv1.PublishAuditEventsResponse
+type ListAuditEventsRequest = connectv1.ListAuditEventsRequest
+type ListAuditEventsResponseProto = connectv1.ListAuditEventsResponse
 
 type PublishedEventResult struct {
 	IdempotencyKey string
@@ -64,6 +69,24 @@ type EventRecordResponse struct {
 	Proto          *connectv1.PublishCdcEventsResponse
 }
 
+type PublishedAuditEventResult struct {
+	IdempotencyKey string
+	EventID        string
+	Duplicate      bool
+	Proto          *connectv1.PublishedAuditEvent
+}
+
+type AuditRecordResponse struct {
+	RequestID      string
+	IdempotencyKey string
+	Duplicate      bool
+	Result         string
+	AcceptedCount  uint32
+	DuplicateCount uint32
+	Events         []PublishedAuditEventResult
+	Proto          *connectv1.PublishAuditEventsResponse
+}
+
 type AuditRecord struct {
 	ConnectorID    string
 	Actor          ActorRef
@@ -73,9 +96,9 @@ type AuditRecord struct {
 	After          any
 	Metadata       map[string]any
 	Description    string
+	EvidenceURL    string
 	IdempotencyKey string
 	SourceEventID  IDInput
-	StreamName     string
 	OccurredAt     string
 }
 
@@ -96,7 +119,7 @@ type AuditTrailResponse struct {
 	RequestID  string
 	NextCursor string
 	Events     []AuditTrailEvent
-	Proto      *connectv1.ListCdcEventsResponse
+	Proto      *connectv1.ListAuditEventsResponse
 }
 
 type AuditTrailEvent struct {
@@ -118,22 +141,10 @@ type AuditTrailEvent struct {
 	ObservedAt        string
 	Before            any
 	After             any
+	EvidenceURL       string
 	SourceEventID     string
 	Payload           any
-	Proto             *connectv1.CdcEvent
-}
-
-type GenericEvent struct {
-	ConnectorID    string
-	Type           string
-	Actor          *ActorRef
-	Resource       *ResourceRef
-	Payload        any
-	Metadata       map[string]any
-	IdempotencyKey string
-	SourceEventID  IDInput
-	StreamName     string
-	OccurredAt     string
+	Proto             *connectv1.AuditEvent
 }
 
 type CDCEvent struct {

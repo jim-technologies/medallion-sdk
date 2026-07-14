@@ -20,6 +20,10 @@ message Int64Rules {
   int64 gte = 5;
 }
 
+message UInt32Rules {
+  uint32 lte = 3;
+}
+
 message RepeatedRules {
   uint64 min_items = 1;
   uint64 max_items = 2;
@@ -28,6 +32,7 @@ message RepeatedRules {
 message FieldRules {
   oneof type {
     Int64Rules int64 = 4;
+    UInt32Rules uint32 = 5;
     StringRules string = 14;
     BytesRules bytes = 15;
     RepeatedRules repeated = 18;

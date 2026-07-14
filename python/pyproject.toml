@@ -23,7 +23,7 @@ classifiers = [
 ]
 dependencies = [
   "opentelemetry-api>=1.43.0",
-  "protobuf>=7.35.0",
+  "protobuf>=7.35.1",
 ]
 
 [project.urls]

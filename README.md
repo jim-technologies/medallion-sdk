@@ -1,13 +1,13 @@
 # Medallion SDK
 
-Public multi-language SDK for Medallion. TypeScript is currently the broadest client; Go and Python cover the Connect-backed server integration path for datasource registration, audit, generic events, and CDC.
+Public multi-language SDK for Medallion. TypeScript is currently the broadest client; Go and Python cover the Connect-backed server integration path for datasource registration, audit, and CDC.
 
 Status: pre-1.0 public SDK. Treat pinned tags or SHAs as the stable install boundary, and integration-test the auth path against the target Medallion service environment before using it for production traffic. The TypeScript protocol layer uses the public invariantprotocol TypeScript runtime with vendored Connect, Ontology, and Storage descriptors.
 
 The TypeScript SDK currently includes:
 
 - datasource registration through `medallion-connect`
-- audit and CDC event ingestion through `medallion-connect`
+- dedicated audit and CDC event ingestion through `medallion-connect`
 - audit trail reads through `medallion-connect`
 - ontology queries and action planning/execution through `medallion-ontology`
 - file upload through `medallion-storage`
@@ -157,10 +157,10 @@ await medallion.cdc.record({
 Use a datasource/connector per source namespace, then set event fields consistently:
 
 - Postgres: `type: "postgres"`, `name: "primary_postgres"`, CDC `source: "primary_postgres"`, `table: "orders"`.
-- Application audit logs: `type: "medallion_audit_logs"`, audit `streamName: "audit_log"`, actions like `order.cancelled`.
-- GitHub: `type: "github"`, generic event types like `github.pull_request.merged`, resources like `{ type: "repository", id: "owner/repo" }`.
-- Google Analytics: `type: "google_analytics"`, event types like `ga4.checkout.started`, resources like `{ type: "session", id: sessionId }`.
-- Vercel: `type: "vercel"`, event types like `vercel.deployment.ready`, resources like `{ type: "deployment", id: deploymentId }`.
+- Application audit logs: `type: "medallion_audit_logs"`, resources like `order/order_123`, and actions like `order.cancelled`.
+- GitHub: mirror source-state changes through CDC; record access or mutations through audit actions such as `github.pull_request.merge` on a repository resource.
+- Google Analytics: treat observations as typed metrics rather than CDC or audit events.
+- Vercel: mirror deployment state through CDC; record operator actions through audit on the deployment resource.
 
 ## Who Cancelled Order 123?
 
@@ -194,7 +194,7 @@ console.log(cancellation?.actor);
 console.log(cancellation?.ingesterPrincipal);
 ```
 
-`audit.trail()` reads Connect `ListCdcEvents`, so a just-recorded SDK audit event is readable without waiting for an Ontology projection.
+`audit.trail()` reads Connect `ListAuditEvents`, so a just-recorded SDK audit event is readable without waiting for an Ontology projection. Audit writes use `PublishAuditEvents`; CDC uses its separate `PublishCdcEvents` path.
 
 Connect now separates source actor from server provenance. The SDK sends source actors as `actor_principal`, stores the structured actor in `payload_json.actor` for ergonomic round-tripping, and reads server provenance from `ingested_by_principal`.
 
@@ -341,6 +341,8 @@ The SDK calls the real client-facing backend routes:
 - `POST /medallion.connect.v1.MedallionConnectService/RegisterConnector`
 - `POST /medallion.connect.v1.MedallionConnectService/PublishCdcEvents`
 - `POST /medallion.connect.v1.MedallionConnectService/ListCdcEvents`
+- `POST /medallion.connect.v1.MedallionConnectService/PublishAuditEvents`
+- `POST /medallion.connect.v1.MedallionConnectService/ListAuditEvents`
 - `POST /rpc/medallion.ontology.v1.MedallionOntologyService/Query`
 - `POST /rpc/medallion.ontology.v1.MedallionOntologyService/PlanAction`
 - `POST /rpc/medallion.ontology.v1.MedallionOntologyService/ExecuteAction`
@@ -357,6 +359,8 @@ Canonical IDs sent over the wire are strings. SDK inputs may use `string`, `numb
 The SDK converts safe integer numbers and bigint values to strings. It rejects unsafe numeric IDs and asks callers to pass them as strings, so precision is not lost. String IDs are preserved exactly, including leading zeros.
 
 This applies to actor IDs, resource IDs, datasource external IDs, CDC primary keys, entity IDs, source event IDs, and other ID-bearing fields.
+
+For CDC, a one-field primary key uses that field's value as `entity_id`. A composite primary key uses the JSON encoding of the complete key object with fields sorted lexicographically; no column name receives special treatment. Callers may pass an explicit `entityId` when their source already has a canonical entity identifier.
 
 ## Idempotency
 

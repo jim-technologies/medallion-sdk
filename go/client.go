@@ -10,16 +10,17 @@ import (
 const connectService = "/medallion.connect.v1.MedallionConnectService"
 
 const (
-	registerConnectorPath = connectService + "/RegisterConnector"
-	publishCdcEventsPath  = connectService + "/PublishCdcEvents"
-	listCdcEventsPath     = connectService + "/ListCdcEvents"
+	registerConnectorPath  = connectService + "/RegisterConnector"
+	publishCdcEventsPath   = connectService + "/PublishCdcEvents"
+	listCdcEventsPath      = connectService + "/ListCdcEvents"
+	publishAuditEventsPath = connectService + "/PublishAuditEvents"
+	listAuditEventsPath    = connectService + "/ListAuditEvents"
 )
 
 type Client struct {
 	Connect     *ConnectClient
 	Datasources *DatasourcesClient
 	Audit       *AuditClient
-	Events      *EventsClient
 	CDC         *CDCClient
 }
 
@@ -34,7 +35,6 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 		Connect:     connect,
 		Datasources: &DatasourcesClient{connect: connect},
 		Audit:       &AuditClient{connect: connect, organizationID: org, defaultConnectorID: cfg.DefaultConnectorID},
-		Events:      &EventsClient{connect: connect, defaultConnectorID: cfg.DefaultConnectorID},
 		CDC:         &CDCClient{connect: connect, defaultConnectorID: cfg.DefaultConnectorID},
 	}, nil
 }
@@ -65,6 +65,24 @@ func (c *ConnectClient) PublishCdcEvents(ctx context.Context, request *connectv1
 func (c *ConnectClient) ListCdcEvents(ctx context.Context, request *connectv1.ListCdcEventsRequest) (*connectv1.ListCdcEventsResponse, string, error) {
 	response := &connectv1.ListCdcEventsResponse{}
 	envelope, err := c.requests.postProto(ctx, listCdcEventsPath, request, response, "")
+	if err != nil {
+		return nil, "", err
+	}
+	return response, envelope.requestID, nil
+}
+
+func (c *ConnectClient) PublishAuditEvents(ctx context.Context, request *connectv1.PublishAuditEventsRequest, idempotencyKey string) (*connectv1.PublishAuditEventsResponse, string, error) {
+	response := &connectv1.PublishAuditEventsResponse{}
+	envelope, err := c.requests.postProto(ctx, publishAuditEventsPath, request, response, idempotencyKey)
+	if err != nil {
+		return nil, "", err
+	}
+	return response, envelope.requestID, nil
+}
+
+func (c *ConnectClient) ListAuditEvents(ctx context.Context, request *connectv1.ListAuditEventsRequest) (*connectv1.ListAuditEventsResponse, string, error) {
+	response := &connectv1.ListAuditEventsResponse{}
+	envelope, err := c.requests.postProto(ctx, listAuditEventsPath, request, response, "")
 	if err != nil {
 		return nil, "", err
 	}
@@ -118,59 +136,58 @@ type AuditClient struct {
 	defaultConnectorID string
 }
 
-func (c *AuditClient) Record(ctx context.Context, input AuditRecord) (EventRecordResponse, error) {
+func (c *AuditClient) Record(ctx context.Context, input AuditRecord) (AuditRecordResponse, error) {
 	connectorID := firstNonEmpty(input.ConnectorID, c.defaultConnectorID)
 	if strings.TrimSpace(connectorID) == "" {
-		return EventRecordResponse{}, missingOption("MEDALLION_MISSING_CONNECTOR_ID", "connector ID is required to record an audit event")
+		return AuditRecordResponse{}, missingOption("MEDALLION_MISSING_CONNECTOR_ID", "connector ID is required to record an audit event")
 	}
 	actor, err := normalizeActor(input.Actor)
 	if err != nil {
-		return EventRecordResponse{}, err
+		return AuditRecordResponse{}, err
 	}
 	resource, err := normalizeResource(input.Resource)
 	if err != nil {
-		return EventRecordResponse{}, err
+		return AuditRecordResponse{}, err
 	}
 	payload, err := jsonString(map[string]any{
-		"actor":    actor,
-		"resource": resource,
-		"before":   input.Before,
-		"after":    input.After,
-		"metadata": input.Metadata,
+		"actor":       actor,
+		"resource":    resource,
+		"before":      input.Before,
+		"after":       input.After,
+		"metadata":    input.Metadata,
+		"evidenceUrl": nullableString(input.EvidenceURL),
 	})
 	if err != nil {
-		return EventRecordResponse{}, err
+		return AuditRecordResponse{}, err
 	}
 	sourceEventID, err := normalizeOptionalID(input.SourceEventID, "audit.sourceEventId")
 	if err != nil {
-		return EventRecordResponse{}, err
+		return AuditRecordResponse{}, err
 	}
 	occurredAt, err := timestampFromString(input.OccurredAt, "audit.occurredAt")
 	if err != nil {
-		return EventRecordResponse{}, err
+		return AuditRecordResponse{}, err
 	}
 	key := idempotencyKey(input.IdempotencyKey)
-	event := &connectv1.CdcEvent{
-		StreamName:     firstNonEmpty(input.StreamName, "audit_log"),
-		EntityType:     resource["type"],
-		EntityId:       resource["id"],
+	event := &connectv1.AuditEvent{
+		ResourceType:   resource["type"],
+		ResourceId:     resource["id"],
 		IdempotencyKey: key,
 		ActorPrincipal: actorPrincipalFromRef(actor),
 		PayloadJson:    payload,
 		OccurredAt:     occurredAt,
 		Description:    input.Description,
-		Kind:           connectv1.EventKind_EVENT_KIND_AUDIT,
 		Action:         input.Action,
 		SourceEventId:  sourceEventID,
 	}
-	response, requestID, err := c.connect.PublishCdcEvents(ctx, &connectv1.PublishCdcEventsRequest{
+	response, requestID, err := c.connect.PublishAuditEvents(ctx, &connectv1.PublishAuditEventsRequest{
 		ConnectorId: connectorID,
-		Events:      []*connectv1.CdcEvent{event},
+		Events:      []*connectv1.AuditEvent{event},
 	}, key)
 	if err != nil {
-		return EventRecordResponse{}, err
+		return AuditRecordResponse{}, err
 	}
-	return eventResponse(response, key, requestID), nil
+	return auditEventResponse(response, key, requestID), nil
 }
 
 func (c *AuditClient) Trail(ctx context.Context, input AuditTrailQuery) (AuditTrailResponse, error) {
@@ -178,13 +195,17 @@ func (c *AuditClient) Trail(ctx context.Context, input AuditTrailQuery) (AuditTr
 	if strings.TrimSpace(org) == "" {
 		return AuditTrailResponse{}, missingOption("MEDALLION_MISSING_ORGANIZATION_ID", "organization ID is required to read an audit trail")
 	}
+	resourceType := strings.TrimSpace(input.ResourceType)
+	if resourceType == "" {
+		return AuditTrailResponse{}, missingOption("MEDALLION_MISSING_RESOURCE_TYPE", "resource type is required to read an audit trail")
+	}
 	resourceID, err := normalizeID(input.ResourceID, "audit.resourceId")
 	if err != nil {
 		return AuditTrailResponse{}, err
 	}
-	limit := input.Limit
-	if limit == 0 {
-		limit = input.PageSize
+	limit, err := auditTrailLimit(input.Limit, input.PageSize)
+	if err != nil {
+		return AuditTrailResponse{}, err
 	}
 	var sourceActor map[string]string
 	if input.Actor != nil {
@@ -193,13 +214,12 @@ func (c *AuditClient) Trail(ctx context.Context, input AuditTrailQuery) (AuditTr
 			return AuditTrailResponse{}, err
 		}
 	}
-	request := &connectv1.ListCdcEventsRequest{
+	request := &connectv1.ListAuditEventsRequest{
 		OrganizationId:      org,
 		ConnectorId:         firstNonEmpty(input.ConnectorID, c.defaultConnectorID),
-		EntityType:          input.ResourceType,
-		EntityId:            resourceID,
-		Limit:               uint32(limit),
-		Kind:                connectv1.EventKind_EVENT_KIND_AUDIT,
+		ResourceType:        resourceType,
+		ResourceId:          resourceID,
+		Limit:               limit,
 		Action:              input.Action,
 		PageCursor:          input.Cursor,
 		IngestedByPrincipal: strings.TrimSpace(input.IngesterPrincipal),
@@ -207,89 +227,18 @@ func (c *AuditClient) Trail(ctx context.Context, input AuditTrailQuery) (AuditTr
 	if sourceActor != nil {
 		request.ActorPrincipal = actorPrincipalFromRef(sourceActor)
 	}
-	protoResponse, requestID, err := c.connect.ListCdcEvents(ctx, request)
+	protoResponse, requestID, err := c.connect.ListAuditEvents(ctx, request)
 	if err != nil {
 		return AuditTrailResponse{}, err
 	}
 	events := make([]AuditTrailEvent, 0, len(protoResponse.GetEvents()))
 	for _, item := range protoResponse.GetEvents() {
-		if !isAuditEvent(item) {
-			continue
-		}
 		event := auditEventFromConnect(item)
 		if sourceActor == nil || sameActor(event.Actor, sourceActor) {
 			events = append(events, event)
 		}
 	}
 	return AuditTrailResponse{RequestID: requestID, NextCursor: protoResponse.GetNextPageCursor(), Events: events, Proto: protoResponse}, nil
-}
-
-type EventsClient struct {
-	connect            *ConnectClient
-	defaultConnectorID string
-}
-
-func (c *EventsClient) Record(ctx context.Context, input GenericEvent) (EventRecordResponse, error) {
-	connectorID := firstNonEmpty(input.ConnectorID, c.defaultConnectorID)
-	if strings.TrimSpace(connectorID) == "" {
-		return EventRecordResponse{}, missingOption("MEDALLION_MISSING_CONNECTOR_ID", "connector ID is required to record an event")
-	}
-	key := idempotencyKey(input.IdempotencyKey)
-	var actor map[string]string
-	var actorPrincipal string
-	var err error
-	if input.Actor != nil {
-		actor, err = normalizeActor(*input.Actor)
-		if err != nil {
-			return EventRecordResponse{}, err
-		}
-		actorPrincipal = actorPrincipalFromRef(actor)
-	}
-	resource := map[string]string{"type": "event", "id": firstNonEmpty(input.IdempotencyKey, input.Type)}
-	if input.Resource != nil {
-		resource, err = normalizeResource(*input.Resource)
-		if err != nil {
-			return EventRecordResponse{}, err
-		}
-	}
-	payload, err := jsonString(map[string]any{
-		"type":     input.Type,
-		"actor":    actor,
-		"resource": resource,
-		"payload":  input.Payload,
-		"metadata": input.Metadata,
-	})
-	if err != nil {
-		return EventRecordResponse{}, err
-	}
-	sourceEventID, err := normalizeOptionalID(input.SourceEventID, "event.sourceEventId")
-	if err != nil {
-		return EventRecordResponse{}, err
-	}
-	occurredAt, err := timestampFromString(input.OccurredAt, "event.occurredAt")
-	if err != nil {
-		return EventRecordResponse{}, err
-	}
-	event := &connectv1.CdcEvent{
-		StreamName:     firstNonEmpty(input.StreamName, "events"),
-		EntityType:     resource["type"],
-		EntityId:       resource["id"],
-		IdempotencyKey: key,
-		ActorPrincipal: actorPrincipal,
-		PayloadJson:    payload,
-		OccurredAt:     occurredAt,
-		SourceEventId:  sourceEventID,
-		Kind:           connectv1.EventKind_EVENT_KIND_AUDIT,
-		Action:         input.Type,
-	}
-	response, requestID, err := c.connect.PublishCdcEvents(ctx, &connectv1.PublishCdcEventsRequest{
-		ConnectorId: connectorID,
-		Events:      []*connectv1.CdcEvent{event},
-	}, key)
-	if err != nil {
-		return EventRecordResponse{}, err
-	}
-	return eventResponse(response, key, requestID), nil
 }
 
 type CDCClient struct {
@@ -305,6 +254,9 @@ func (c *CDCClient) Record(ctx context.Context, input CDCEvent) (EventRecordResp
 	primaryKey, err := normalizeIDRecord(input.PrimaryKey, "primaryKey")
 	if err != nil {
 		return EventRecordResponse{}, err
+	}
+	if len(primaryKey) == 0 {
+		return EventRecordResponse{}, &Error{Code: "MEDALLION_EMPTY_CDC_PRIMARY_KEY", Message: "cdc.primaryKey must contain at least one field"}
 	}
 	entityID := ""
 	if input.EntityID != nil {
@@ -355,7 +307,6 @@ func (c *CDCClient) Record(ctx context.Context, input CDCEvent) (EventRecordResp
 		ActorPrincipal: actorPrincipal,
 		PayloadJson:    payload,
 		OccurredAt:     occurredAt,
-		Kind:           connectv1.EventKind_EVENT_KIND_CDC,
 	}
 	if event.Operation == connectv1.CdcOperation_CDC_OPERATION_UNSPECIFIED {
 		return EventRecordResponse{}, &Error{Code: "MEDALLION_INVALID_CDC_OPERATION", Message: "operation must be insert, update, delete, or snapshot"}
@@ -367,5 +318,5 @@ func (c *CDCClient) Record(ctx context.Context, input CDCEvent) (EventRecordResp
 	if err != nil {
 		return EventRecordResponse{}, err
 	}
-	return eventResponse(response, key, requestID), nil
+	return cdcEventResponse(response, key, requestID), nil
 }

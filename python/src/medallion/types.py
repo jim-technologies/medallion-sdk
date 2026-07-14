@@ -26,12 +26,17 @@ ResourceInput: TypeAlias = ResourceRef | Mapping[str, Any]
 
 Connector: TypeAlias = connect_pb2.Connector
 CdcEvent: TypeAlias = connect_pb2.CdcEvent
+AuditEvent: TypeAlias = connect_pb2.AuditEvent
 RegisterConnectorRequest: TypeAlias = connect_pb2.RegisterConnectorRequest
 RegisterConnectorResponseProto: TypeAlias = connect_pb2.RegisterConnectorResponse
 PublishCdcEventsRequest: TypeAlias = connect_pb2.PublishCdcEventsRequest
 PublishCdcEventsResponseProto: TypeAlias = connect_pb2.PublishCdcEventsResponse
 ListCdcEventsRequest: TypeAlias = connect_pb2.ListCdcEventsRequest
 ListCdcEventsResponseProto: TypeAlias = connect_pb2.ListCdcEventsResponse
+PublishAuditEventsRequest: TypeAlias = connect_pb2.PublishAuditEventsRequest
+PublishAuditEventsResponseProto: TypeAlias = connect_pb2.PublishAuditEventsResponse
+ListAuditEventsRequest: TypeAlias = connect_pb2.ListAuditEventsRequest
+ListAuditEventsResponseProto: TypeAlias = connect_pb2.ListAuditEventsResponse
 
 
 @dataclass(frozen=True)
@@ -52,6 +57,26 @@ class EventRecordResponse:
     events: list[PublishedEventResult] = field(default_factory=list)
     request_id: str | None = None
     proto: connect_pb2.PublishCdcEventsResponse | None = None
+
+
+@dataclass(frozen=True)
+class PublishedAuditEventResult:
+    idempotency_key: str
+    event_id: str | None = None
+    duplicate: bool = False
+    proto: connect_pb2.PublishedAuditEvent | None = None
+
+
+@dataclass(frozen=True)
+class AuditRecordResponse:
+    idempotency_key: str
+    duplicate: bool
+    result: str
+    accepted_count: int
+    duplicate_count: int
+    events: list[PublishedAuditEventResult] = field(default_factory=list)
+    request_id: str | None = None
+    proto: connect_pb2.PublishAuditEventsResponse | None = None
 
 
 @dataclass(frozen=True)
@@ -99,9 +124,10 @@ class AuditTrailEvent:
     observed_at: str | None = None
     before: Any = None
     after: Any = None
+    evidence_url: str | None = None
     source_event_id: str | None = None
     payload: Any = None
-    proto: connect_pb2.CdcEvent | None = None
+    proto: connect_pb2.AuditEvent | None = None
 
 
 @dataclass(frozen=True)
@@ -109,4 +135,4 @@ class AuditTrailResponse:
     events: list[AuditTrailEvent]
     next_cursor: str | None = None
     request_id: str | None = None
-    proto: connect_pb2.ListCdcEventsResponse | None = None
+    proto: connect_pb2.ListAuditEventsResponse | None = None

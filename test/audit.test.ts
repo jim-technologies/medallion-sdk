@@ -51,7 +51,7 @@ describe("audit.record", () => {
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
 
     expect(url).toBe(
-      "https://api.example.com/medallion.connect.v1.MedallionConnectService/PublishCdcEvents",
+      "https://api.example.com/medallion.connect.v1.MedallionConnectService/PublishAuditEvents",
     );
     expect(headers.get("idempotency-key")).toBe("order_456_cancelled");
     expect(headers.get("connect-protocol-version")).toBe("1");
@@ -59,9 +59,9 @@ describe("audit.record", () => {
       connectorId: "conn_123",
       events: [
         {
-          streamName: "audit_log",
-          entityType: "order",
-          entityId: "000456",
+          resourceType: "order",
+          resourceId: "000456",
+          action: "order.cancelled",
           idempotencyKey: "order_456_cancelled",
           actorPrincipal: "user:123",
           payloadJson: JSON.stringify({
@@ -70,9 +70,8 @@ describe("audit.record", () => {
             before: { status: "confirmed" },
             after: { status: "cancelled" },
             metadata: { reason: "user_request" },
+            evidenceUrl: null,
           }),
-          kind: "EVENT_KIND_AUDIT",
-          action: "order.cancelled",
         },
       ],
     });
@@ -102,8 +101,8 @@ describe("audit.record", () => {
               id: "1",
               organization_id: "org_123",
               connector_id: "conn_123",
-              entity_type: "order",
-              entity_id: "order_123",
+              resource_type: "order",
+              resource_id: "order_123",
               payload_json: JSON.stringify({
                 actor: { type: "user", provider: "google", id: "user_123" },
                 before: { status: "confirmed" },
@@ -112,7 +111,6 @@ describe("audit.record", () => {
               }),
               actor_principal: "user:google:user_123",
               ingested_by_principal: "service_account:orders-worker",
-              kind: "EVENT_KIND_AUDIT",
               action: "order.cancelled",
               observed_at: "2026-07-07T00:00:00Z",
             },
@@ -147,15 +145,14 @@ describe("audit.record", () => {
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
 
     expect(url).toBe(
-      "https://api.example.com/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+      "https://api.example.com/medallion.connect.v1.MedallionConnectService/ListAuditEvents",
     );
     expect(body).toEqual({
       organizationId: "org_123",
       connectorId: "conn_123",
-      entityType: "order",
-      entityId: "order_123",
+      resourceType: "order",
+      resourceId: "order_123",
       limit: 25,
-      kind: "EVENT_KIND_AUDIT",
       actorPrincipal: "user:google:user_123",
       ingestedByPrincipal: "service_account:orders-worker",
       action: "order.cancelled",
@@ -189,6 +186,7 @@ describe("audit.record", () => {
     });
 
     await client.audit.trail({
+      resourceType: "order",
       resourceId: "order_123",
     });
 
@@ -197,10 +195,35 @@ describe("audit.record", () => {
 
     expect(body).toMatchObject({
       organizationId: "org_123",
-      entityId: "order_123",
+      resourceType: "order",
+      resourceId: "order_123",
       limit: 100,
-      kind: "EVENT_KIND_AUDIT",
     });
+  });
+
+  it("treats zero as the omitted audit trail page size", async () => {
+    const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ events: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const client = new MedallionClient({
+      baseUrl: "https://api.example.com",
+      apiKey: "test_api_key",
+      organizationId: "org_123",
+      fetch,
+    });
+
+    await client.audit.trail({
+      resourceType: "order",
+      resourceId: "order_123",
+      limit: 0,
+    });
+
+    const [, init] = fetch.mock.calls[0]!;
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    expect(body.limit).toBe(100);
   });
 
   it("rejects audit trail page sizes above the backend cap", async () => {
@@ -213,6 +236,7 @@ describe("audit.record", () => {
 
     await expect(
       client.audit.trail({
+        resourceType: "order",
         resourceId: "order_123",
         limit: 501,
       }),

@@ -41,6 +41,11 @@ export class CdcClient {
     }
 
     const primaryKey = normalizeIdRecord(input.primaryKey);
+    if (Object.keys(primaryKey).length === 0) {
+      throw new MedallionError("cdc.primaryKey must contain at least one field.", {
+        code: "MEDALLION_EMPTY_CDC_PRIMARY_KEY",
+      });
+    }
     const entityId =
       input.entityId === undefined
         ? entityIdFromPrimaryKey(primaryKey)
@@ -61,16 +66,15 @@ export class CdcClient {
         {
           source: input.source,
           table: input.table,
-          actor,
+          actor: actor ?? null,
           primaryKey,
-          before: input.before,
-          after: input.after,
-          metadata: input.metadata,
+          before: input.before ?? null,
+          after: input.after ?? null,
+          metadata: input.metadata ?? null,
         },
         "cdc payload",
       ),
       occurred_at: occurredAt(input.occurredAt),
-      kind: "EVENT_KIND_CDC",
     });
 
     const response = await this.connect.publishCdcEvents(
@@ -99,14 +103,12 @@ function cdcOperation(operation: CdcOperation): string {
 }
 
 function entityIdFromPrimaryKey(primaryKey: Record<string, string>): string {
-  if (typeof primaryKey.id === "string") {
-    return primaryKey.id;
-  }
-
   const keys = Object.keys(primaryKey).sort();
   if (keys.length === 1) {
     return primaryKey[keys[0]!]!;
   }
 
-  return keys.map((key) => `${key}=${primaryKey[key]}`).join("|");
+  return `{${keys
+    .map((key) => `${JSON.stringify(key)}:${JSON.stringify(primaryKey[key]!)}`)
+    .join(",")}}`;
 }

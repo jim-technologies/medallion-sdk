@@ -7,7 +7,7 @@ import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/jim-technologies/medallion-sdk/go/gen/medallion/connect/v1;connectv1";
 
-// MedallionConnectService owns low-level connector registration, CDC/audit
+// MedallionConnectService owns low-level connector registration, CDC and audit
 // ingest, connector action registration, and connector-side action execution.
 // It does not make ontology policy decisions or attach semantic meaning.
 service MedallionConnectService {
@@ -29,10 +29,14 @@ service MedallionConnectService {
   // Gets a connector action execution by id.
   rpc GetActionExecution(GetActionExecutionRequest) returns (GetActionExecutionResponse);
 
-  // Publishes idempotent CDC or audit events for a connector.
+  // Publishes idempotent CDC events for a connector.
   rpc PublishCdcEvents(PublishCdcEventsRequest) returns (PublishCdcEventsResponse);
-  // Lists durable CDC/audit events with cursor pagination.
+  // Lists durable CDC events with cursor pagination.
   rpc ListCdcEvents(ListCdcEventsRequest) returns (ListCdcEventsResponse);
+  // Publishes idempotent audit events for a connector.
+  rpc PublishAuditEvents(PublishAuditEventsRequest) returns (PublishAuditEventsResponse);
+  // Lists durable audit events with cursor pagination.
+  rpc ListAuditEvents(ListAuditEventsRequest) returns (ListAuditEventsResponse);
 }
 
 // LifecycleStatus is the enabled/disabled state for connectors and actions.
@@ -59,18 +63,6 @@ enum CdcOperation {
   CDC_OPERATION_SNAPSHOT = 4;
 }
 
-// EventKind splits the stream into change-data-capture and audit-trail events.
-// It selects the lake table suffix (_cdc | _audit). Unspecified is treated as
-// CDC.
-enum EventKind {
-  // Defaults to EVENT_KIND_CDC for writes; means no kind filter for reads.
-  EVENT_KIND_UNSPECIFIED = 0;
-  // Change-data-capture event.
-  EVENT_KIND_CDC = 1;
-  // Audit-trail event.
-  EVENT_KIND_AUDIT = 2;
-}
-
 // ActionExecutionStatus is the durable state of a connector action execution.
 enum ActionExecutionStatus {
   // No status was specified.
@@ -83,6 +75,9 @@ enum ActionExecutionStatus {
   ACTION_EXECUTION_STATUS_SUCCEEDED = 3;
   // Execution completed with an error.
   ACTION_EXECUTION_STATUS_FAILED = 4;
+  // Execution was interrupted after it may have reached the downstream system.
+  // The outcome must be reconciled before a caller attempts a new mutation.
+  ACTION_EXECUTION_STATUS_INDETERMINATE = 5;
 }
 
 // Connector is a low-level connection to an external source system.
@@ -108,10 +103,10 @@ message Connector {
   google.protobuf.Timestamp updated_at = 9;
 }
 
-// CdcEvent is the durable low-level event shape for both CDC and audit ingest.
+// CdcEvent is the durable low-level change-data-capture record.
 message CdcEvent {
-  // Server-assigned snowflake id: 64-bit, node-tagged, time-sortable, and
-  // coordination-free. Serves as both identity and the stream ordering key.
+  // PostgreSQL-assigned 64-bit identity. Serves as the durable ledger identity
+  // and ingestion/checkpoint ordering key; it is not source-event ordering.
   int64 id = 1;
   // Tenant/organization that owns the event. Derived from the connector on
   // ingest.
@@ -120,13 +115,12 @@ message CdcEvent {
   string connector_id = 3;
   // Source stream/table/topic name.
   string stream_name = 4 [(buf.validate.field).string.min_len = 1];
-  // Source entity type. For audit events this is also the resource type.
+  // Source entity type.
   string entity_type = 5 [(buf.validate.field).string.min_len = 1];
   // Opaque source-system entity id. May be UUID, UUIDv7, ULID, Snowflake,
   // integer-as-string, compound key, or any other stable source identifier.
-  // For audit events this is also the resource id.
   string entity_id = 6 [(buf.validate.field).string.min_len = 1];
-  // CDC operation. Required for CDC events and unset for audit events.
+  // CDC operation.
   CdcOperation operation = 7;
   // Opaque source-system event id, when the source provides one.
   string source_event_id = 8;
@@ -136,27 +130,58 @@ message CdcEvent {
   // source fact supplied by trusted connector ingestion and is separate from the
   // authenticated principal that submitted the event.
   string actor_principal = 10;
-  // Raw low-level event payload as JSON.
+  // Compact low-level event payload as JSON. Large before/after evidence should
+  // be stored externally and referenced with fields such as evidence_uri,
+  // before_ref, and after_ref.
   string payload_json = 11 [(buf.validate.field).string.min_len = 1];
   // Time the source says the event occurred. Defaults to ingest time if absent.
   google.protobuf.Timestamp occurred_at = 12;
   // Time medallion-connect accepted the event.
   google.protobuf.Timestamp observed_at = 13;
-  // Optional human-readable audit note describing this change — the "text event"
-  // attached at emit time. The audit trail is the CDC stream read by actor plus
-  // this description over time.
-  string description = 15;
-  // Change-capture vs audit-trail. Routes the event to the _cdc or _audit lake
-  // table. Unspecified is treated as CDC.
-  EventKind kind = 16;
-  // Required audit verb for kind = AUDIT (e.g. "approve", "access", "export").
-  // Must be empty for CDC events, which use `operation` instead.
-  string action = 17;
+  // Optional human-readable note describing this change.
+  string description = 14;
   // Source system copied from the connector for read routing and lake projection.
-  string source_system = 18;
+  string source_system = 15;
   // Stable authenticated principal that submitted this event to
   // medallion-connect.
-  string ingested_by_principal = 19;
+  string ingested_by_principal = 16;
+}
+
+// AuditEvent is the canonical durable audit record. Caller-supplied identity and
+// timing describe the source action; organization, connector, source system,
+// observer identity, and observed time are derived by medallion-connect.
+message AuditEvent {
+  // PostgreSQL-assigned durable 64-bit ledger identity.
+  int64 id = 1;
+  // Tenant/organization derived from the connector on ingest.
+  string organization_id = 2;
+  // Connector that accepted the event.
+  string connector_id = 3;
+  // Type of resource affected by the action.
+  string resource_type = 4 [(buf.validate.field).string.min_len = 1];
+  // Stable provider-local identifier of the affected resource.
+  string resource_id = 5 [(buf.validate.field).string.min_len = 1];
+  // Audit verb, for example "read", "approve", "export", or "delete".
+  string action = 6 [(buf.validate.field).string.min_len = 1];
+  // Opaque source-system event id, when the source provides one.
+  string source_event_id = 7;
+  // Idempotency key scoped to connector_id.
+  string idempotency_key = 8 [(buf.validate.field).string.min_len = 1];
+  // Source/application actor that performed the action. This source fact is
+  // separate from the authenticated principal that submitted the event.
+  string actor_principal = 9;
+  // Compact JSON facts or evidence references for the action.
+  string payload_json = 10 [(buf.validate.field).string.min_len = 1];
+  // Time the source says the action occurred. Defaults to ingest time if absent.
+  google.protobuf.Timestamp occurred_at = 11;
+  // Time medallion-connect accepted the event.
+  google.protobuf.Timestamp observed_at = 12;
+  // Optional human-readable audit note.
+  string description = 13;
+  // Source system copied from the connector.
+  string source_system = 14;
+  // Authenticated principal that submitted the event to medallion-connect.
+  string ingested_by_principal = 15;
 }
 
 // ConnectorAction describes a low-level operation exposed by a connector.
@@ -347,7 +372,7 @@ message GetActionExecutionResponse {
   ActionExecution execution = 1 [(buf.validate.field).required = true];
 }
 
-// PublishCdcEventsRequest publishes a batch of CDC or audit events.
+// PublishCdcEventsRequest publishes a batch of CDC events.
 message PublishCdcEventsRequest {
   // Connector accepting the event batch.
   string connector_id = 1 [(buf.validate.field).string.min_len = 1];
@@ -378,43 +403,108 @@ message PublishCdcEventsResponse {
   repeated PublishedCdcEvent events = 3;
 }
 
-// ListCdcEventsRequest filters and pages CDC/audit events.
+// ListCdcEventsRequest filters and pages CDC events.
 message ListCdcEventsRequest {
   // Tenant/organization to query. The server authorizes this against the
   // authenticated principal.
   string organization_id = 1 [(buf.validate.field).string.min_len = 1];
   // Optional connector id filter.
   string connector_id = 2;
-  // Optional source entity type or audit resource type filter.
+  // Optional source entity type filter.
   string entity_type = 3;
-  // Optional source entity id or audit resource id filter.
+  // Optional source entity id filter.
   string entity_id = 4;
-  // Page size. Defaults to 100 and caps at 500.
-  uint32 limit = 5;
-  // Optional event kind filter. Unspecified returns all kinds.
-  EventKind kind = 6;
-  // Optional authenticated actor principal filter.
-  string actor_principal = 7;
-  // Optional audit action filter.
-  string action = 8;
+  // Page size. Zero defaults to 100; maximum 500.
+  uint32 limit = 5 [(buf.validate.field).uint32.lte = 500];
+  // Optional source/application actor principal filter.
+  string actor_principal = 6;
   // Optional inclusive occurred_at lower bound.
-  google.protobuf.Timestamp occurred_at_from = 9;
+  google.protobuf.Timestamp occurred_at_from = 7;
   // Optional exclusive occurred_at upper bound.
-  google.protobuf.Timestamp occurred_at_to = 10;
+  google.protobuf.Timestamp occurred_at_to = 8;
   // Optional source system filter.
-  string source_system = 11;
+  string source_system = 9;
   // Optional source stream/table/topic filter.
-  string stream_name = 12;
+  string stream_name = 10;
   // Cursor returned by a previous ListCdcEventsResponse.
-  string page_cursor = 13;
+  string page_cursor = 11;
   // Optional authenticated ingester principal filter.
-  string ingested_by_principal = 14;
+  string ingested_by_principal = 12;
 }
 
-// ListCdcEventsResponse contains one page of CDC/audit events.
+// ListCdcEventsResponse contains one page of CDC events.
 message ListCdcEventsResponse {
   // Matching events ordered by observed_at descending, then id descending.
   repeated CdcEvent events = 1;
+  // Cursor for the next page, empty when there is no next page.
+  string next_page_cursor = 2;
+}
+
+// PublishAuditEventsRequest publishes a batch of audit events.
+message PublishAuditEventsRequest {
+  // Connector accepting the event batch.
+  string connector_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Events to publish. Each idempotency_key is scoped to connector_id.
+  repeated AuditEvent events = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 1000
+  }];
+}
+
+// PublishedAuditEvent reports one accepted or duplicate audit event.
+message PublishedAuditEvent {
+  // Idempotency key from the submitted event.
+  string idempotency_key = 1;
+  // Durable event id for the accepted or original event.
+  int64 event_id = 2;
+  // True when this request reused an existing idempotency key.
+  bool duplicate = 3;
+}
+
+// PublishAuditEventsResponse summarizes the publish batch.
+message PublishAuditEventsResponse {
+  // Number of newly accepted events.
+  uint32 accepted_count = 1;
+  // Number of duplicate idempotency keys.
+  uint32 duplicate_count = 2;
+  // Per-event publish results.
+  repeated PublishedAuditEvent events = 3;
+}
+
+// ListAuditEventsRequest filters and pages audit events.
+message ListAuditEventsRequest {
+  // Tenant/organization to query. The server authorizes this against the
+  // authenticated principal.
+  string organization_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Optional connector id filter.
+  string connector_id = 2;
+  // Optional resource type filter. Must be paired with resource_id for an exact
+  // resource-scoped read; omit both for a wildcard-authorized audit read.
+  string resource_type = 3;
+  // Optional resource id filter. Must be paired with resource_type.
+  string resource_id = 4;
+  // Page size. Zero defaults to 100; maximum 500.
+  uint32 limit = 5 [(buf.validate.field).uint32.lte = 500];
+  // Optional source/application actor filter.
+  string actor_principal = 6;
+  // Optional audit action filter.
+  string action = 7;
+  // Optional inclusive occurred_at lower bound.
+  google.protobuf.Timestamp occurred_at_from = 8;
+  // Optional exclusive occurred_at upper bound.
+  google.protobuf.Timestamp occurred_at_to = 9;
+  // Optional source system filter.
+  string source_system = 10;
+  // Cursor returned by a previous ListAuditEventsResponse.
+  string page_cursor = 11;
+  // Optional authenticated ingester principal filter.
+  string ingested_by_principal = 12;
+}
+
+// ListAuditEventsResponse contains one page of audit events.
+message ListAuditEventsResponse {
+  // Matching events ordered by observed_at descending, then id descending.
+  repeated AuditEvent events = 1;
   // Cursor for the next page, empty when there is no next page.
   string next_page_cursor = 2;
 }

@@ -7,8 +7,12 @@ import { ontologyDescriptorBytes } from "./ontology-descriptor.js";
 import type { RequestClient, ResponseEnvelope } from "./request.js";
 import { storageDescriptorBytes } from "./storage-descriptor.js";
 import type {
+  ConnectListAuditEventsRequest,
+  ConnectListAuditEventsResponse,
   ConnectListCdcEventsRequest,
   ConnectListCdcEventsResponse,
+  ConnectPublishAuditEventsRequest,
+  ConnectPublishAuditEventsResponse,
   ConnectPublishCdcEventsRequest,
   ConnectPublishCdcEventsResponse,
   ConnectRegisterConnectorRequest,
@@ -55,6 +59,22 @@ export class ProtocolConnectClient {
     options: RequestOptions = {},
   ): Promise<ResponseEnvelope<ConnectListCdcEventsResponse>> {
     return this.rpc("ListCdcEvents", request, options);
+  }
+
+  publishAuditEvents(
+    request: ConnectPublishAuditEventsRequest,
+    options: RequestOptions = {},
+  ): Promise<ResponseEnvelope<ConnectPublishAuditEventsResponse>> {
+    return this.rpc("PublishAuditEvents", request, options, {
+      idempotencyKey: request.events[0]?.idempotency_key,
+    });
+  }
+
+  listAuditEvents(
+    request: ConnectListAuditEventsRequest,
+    options: RequestOptions = {},
+  ): Promise<ResponseEnvelope<ConnectListAuditEventsResponse>> {
+    return this.rpc("ListAuditEvents", request, options);
   }
 
   executeConnectorAction<TResponse = unknown>(

@@ -12,8 +12,11 @@ The Python SDK currently implements the Connect-backed server integration path:
 - `client.datasources.register(...)`
 - `client.audit.record(...)`
 - `client.audit.trail(...)`
-- `client.events.record(...)`
 - `client.cdc.record(...)`
+
+Audit and CDC use separate typed Connect contracts: audit methods publish
+`AuditEvent` values through `PublishAuditEvents`, while CDC remains on
+`PublishCdcEvents`.
 
 Low-level Connect request/response types are generated from the vendored public protobuf contract and are exported as:
 

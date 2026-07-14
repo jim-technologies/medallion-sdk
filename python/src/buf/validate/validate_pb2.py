@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import descriptor_pb2 as google_dot_protobuf_dot_descriptor__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1b\x62uf/validate/validate.proto\x12\x0c\x62uf.validate\x1a google/protobuf/descriptor.proto\"\x1e\n\x0bStringRules\x12\x0f\n\x07min_len\x18\x02 \x01(\x04\"5\n\rRepeatedRules\x12\x11\n\tmin_items\x18\x01 \x01(\x04\x12\x11\n\tmax_items\x18\x02 \x01(\x04\"\x84\x01\n\nFieldRules\x12+\n\x06string\x18\x0e \x01(\x0b\x32\x19.buf.validate.StringRulesH\x00\x12/\n\x08repeated\x18\x12 \x01(\x0b\x32\x1b.buf.validate.RepeatedRulesH\x00\x12\x10\n\x08required\x18\x19 \x01(\x08\x42\x06\n\x04type:G\n\x05\x66ield\x12\x1d.google.protobuf.FieldOptions\x18\x87\t \x01(\x0b\x32\x18.buf.validate.FieldRulesBIZGbuf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validateb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1b\x62uf/validate/validate.proto\x12\x0c\x62uf.validate\x1a google/protobuf/descriptor.proto\"@\n\x0bStringRules\x12\x17\n\x07min_len\x18\x02 \x01(\x04R\x06minLen\x12\x18\n\x07pattern\x18\x06 \x01(\tR\x07pattern\"%\n\nBytesRules\x12\x17\n\x07min_len\x18\x02 \x01(\x04R\x06minLen\".\n\nInt64Rules\x12\x0e\n\x02gt\x18\x04 \x01(\x03R\x02gt\x12\x10\n\x03gte\x18\x05 \x01(\x03R\x03gte\"\x1f\n\x0bUInt32Rules\x12\x10\n\x03lte\x18\x03 \x01(\rR\x03lte\"I\n\rRepeatedRules\x12\x1b\n\tmin_items\x18\x01 \x01(\x04R\x08minItems\x12\x1b\n\tmax_items\x18\x02 \x01(\x04R\x08maxItems\"\xb9\x02\n\nFieldRules\x12\x30\n\x05int64\x18\x04 \x01(\x0b\x32\x18.buf.validate.Int64RulesH\x00R\x05int64\x12\x33\n\x06uint32\x18\x05 \x01(\x0b\x32\x19.buf.validate.UInt32RulesH\x00R\x06uint32\x12\x33\n\x06string\x18\x0e \x01(\x0b\x32\x19.buf.validate.StringRulesH\x00R\x06string\x12\x30\n\x05\x62ytes\x18\x0f \x01(\x0b\x32\x18.buf.validate.BytesRulesH\x00R\x05\x62ytes\x12\x39\n\x08repeated\x18\x12 \x01(\x0b\x32\x1b.buf.validate.RepeatedRulesH\x00R\x08repeated\x12\x1a\n\x08required\x18\x19 \x01(\x08R\x08requiredB\x06\n\x04type:N\n\x05\x66ield\x12\x1d.google.protobuf.FieldOptions\x18\x87\t \x01(\x0b\x32\x18.buf.validate.FieldRulesR\x05\x66ieldBIZGbuf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validateb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,9 +34,15 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'ZGbuf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate'
   _globals['_STRINGRULES']._serialized_start=79
-  _globals['_STRINGRULES']._serialized_end=109
-  _globals['_REPEATEDRULES']._serialized_start=111
-  _globals['_REPEATEDRULES']._serialized_end=164
-  _globals['_FIELDRULES']._serialized_start=167
-  _globals['_FIELDRULES']._serialized_end=299
+  _globals['_STRINGRULES']._serialized_end=143
+  _globals['_BYTESRULES']._serialized_start=145
+  _globals['_BYTESRULES']._serialized_end=182
+  _globals['_INT64RULES']._serialized_start=184
+  _globals['_INT64RULES']._serialized_end=230
+  _globals['_UINT32RULES']._serialized_start=232
+  _globals['_UINT32RULES']._serialized_end=263
+  _globals['_REPEATEDRULES']._serialized_start=265
+  _globals['_REPEATEDRULES']._serialized_end=338
+  _globals['_FIELDRULES']._serialized_start=341
+  _globals['_FIELDRULES']._serialized_end=654
 # @@protoc_insertion_point(module_scope)

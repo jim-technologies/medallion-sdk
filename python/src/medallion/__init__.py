@@ -4,10 +4,12 @@ from .errors import MedallionAPIError, MedallionError
 from .tracing import TracingConfig
 from .types import (
     ActorRef,
+    AuditRecordResponse,
     AuditTrailEvent,
     AuditTrailResponse,
     Datasource,
     EventRecordResponse,
+    PublishedAuditEventResult,
     PublishedEventResult,
     RegisterDatasourceResponse,
     ResourceRef,
@@ -15,6 +17,7 @@ from .types import (
 
 __all__ = [
     "ActorRef",
+    "AuditRecordResponse",
     "AuditTrailEvent",
     "AuditTrailResponse",
     "Datasource",
@@ -22,6 +25,7 @@ __all__ = [
     "MedallionAPIError",
     "MedallionClient",
     "MedallionError",
+    "PublishedAuditEventResult",
     "PublishedEventResult",
     "RegisterDatasourceResponse",
     "ResourceRef",

@@ -45,7 +45,7 @@
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.12.1",
-    "@jim-technologies/invariant-protocol": "github:jim-technologies/invariantprotocol#v0.4.0",
+    "@jim-technologies/invariant-protocol": "github:jim-technologies/invariantprotocol#7f6acc53f23e405f64f41a2cdb17302e4945eeaf",
     "@opentelemetry/api": "^1.9.1"
   },
   "devDependencies": {

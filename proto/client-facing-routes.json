@@ -11,7 +11,9 @@
       "ExecuteConnectorAction",
       "GetActionExecution",
       "PublishCdcEvents",
-      "ListCdcEvents"
+      "ListCdcEvents",
+      "PublishAuditEvents",
+      "ListAuditEvents"
     ]
   },
   "ontology": {

@@ -63,7 +63,14 @@ describe("client-facing route compatibility", () => {
       `${connectBase}/PublishCdcEvents`,
     );
     expect(CONNECT_ROUTES.listCdcEvents).toBe(`${connectBase}/ListCdcEvents`);
+    expect(CONNECT_ROUTES.publishAuditEvents).toBe(
+      `${connectBase}/PublishAuditEvents`,
+    );
+    expect(CONNECT_ROUTES.listAuditEvents).toBe(
+      `${connectBase}/ListAuditEvents`,
+    );
     expect(manifest.connect.methods).toContain("PublishCdcEvents");
+    expect(manifest.connect.methods).toContain("PublishAuditEvents");
     expect(manifest.connect.methods).toContain("RegisterConnector");
 
     expect(ontologyProtoMethods).toEqual(manifest.ontology.methods);
@@ -90,6 +97,80 @@ describe("client-facing route compatibility", () => {
     expect(storageDescriptorMethods).toEqual(manifest.storage.methods);
     expect(STORAGE_ROUTES.upload).toBe(manifest.storage.rest.upload);
     expect(STORAGE_ROUTES.uploadRpc).toBe(`${storageBase}/Upload`);
+  });
+
+  it("pins the dedicated canonical AuditEvent wire shape", async () => {
+    const descriptor = await readFile(
+      new URL("../proto/medallion-connect.descriptor.binpb", import.meta.url),
+    );
+    const parsed = Server.fromBytes(descriptor).parsed;
+    const auditEvent = parsed.getMessage("medallion.connect.v1.AuditEvent");
+
+    expect(
+      auditEvent?.fields.map((field) => [field.number, field.name]),
+    ).toEqual([
+      [1, "id"],
+      [2, "organization_id"],
+      [3, "connector_id"],
+      [4, "resource_type"],
+      [5, "resource_id"],
+      [6, "action"],
+      [7, "source_event_id"],
+      [8, "idempotency_key"],
+      [9, "actor_principal"],
+      [10, "payload_json"],
+      [11, "occurred_at"],
+      [12, "observed_at"],
+      [13, "description"],
+      [14, "source_system"],
+      [15, "ingested_by_principal"],
+    ]);
+  });
+
+  it("pins the dedicated canonical CDC wire shapes", async () => {
+    const descriptor = await readFile(
+      new URL("../proto/medallion-connect.descriptor.binpb", import.meta.url),
+    );
+    const parsed = Server.fromBytes(descriptor).parsed;
+    const cdcEvent = parsed.getMessage("medallion.connect.v1.CdcEvent");
+    const listRequest = parsed.getMessage(
+      "medallion.connect.v1.ListCdcEventsRequest",
+    );
+
+    expect(cdcEvent?.fields.map((field) => [field.number, field.name])).toEqual([
+      [1, "id"],
+      [2, "organization_id"],
+      [3, "connector_id"],
+      [4, "stream_name"],
+      [5, "entity_type"],
+      [6, "entity_id"],
+      [7, "operation"],
+      [8, "source_event_id"],
+      [9, "idempotency_key"],
+      [10, "actor_principal"],
+      [11, "payload_json"],
+      [12, "occurred_at"],
+      [13, "observed_at"],
+      [14, "description"],
+      [15, "source_system"],
+      [16, "ingested_by_principal"],
+    ]);
+    expect(
+      listRequest?.fields.map((field) => [field.number, field.name]),
+    ).toEqual([
+      [1, "organization_id"],
+      [2, "connector_id"],
+      [3, "entity_type"],
+      [4, "entity_id"],
+      [5, "limit"],
+      [6, "actor_principal"],
+      [7, "occurred_at_from"],
+      [8, "occurred_at_to"],
+      [9, "source_system"],
+      [10, "stream_name"],
+      [11, "page_cursor"],
+      [12, "ingested_by_principal"],
+    ]);
   });
 });
 

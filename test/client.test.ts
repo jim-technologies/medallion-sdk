@@ -10,7 +10,6 @@ describe("MedallionClient", () => {
     });
 
     expect(client.audit.record).toBeTypeOf("function");
-    expect(client.events.record).toBeTypeOf("function");
     expect(client.cdc.record).toBeTypeOf("function");
     expect(client.connect.registerDatasource).toBeTypeOf("function");
     expect(client.datasources.register).toBeTypeOf("function");
@@ -19,7 +18,10 @@ describe("MedallionClient", () => {
     expect(client.ontology.executeAction).toBeTypeOf("function");
     expect(client.storage.upload).toBeTypeOf("function");
     expect(client.protocol.connect.publishCdcEvents).toBeTypeOf("function");
+    expect(client.protocol.connect.publishAuditEvents).toBeTypeOf("function");
+    expect(client.protocol.connect.listAuditEvents).toBeTypeOf("function");
     expect(client.generated.connect.publishCdcEvents).toBeTypeOf("function");
+    expect("events" in client).toBe(false);
   });
 
   it("supports base URLs with a path prefix", async () => {
@@ -36,13 +38,15 @@ describe("MedallionClient", () => {
       fetch,
     });
 
-    await client.events.record({
-      type: "checkout.started",
+    await client.audit.record({
+      actor: { type: "user", id: "user_123" },
+      action: "checkout.started",
+      resource: { type: "checkout", id: "checkout_123" },
       idempotencyKey: "checkout_started_123",
     });
 
     expect(fetch.mock.calls[0]?.[0]).toBe(
-      "https://api.example.com/connect/medallion.connect.v1.MedallionConnectService/PublishCdcEvents",
+      "https://api.example.com/connect/medallion.connect.v1.MedallionConnectService/PublishAuditEvents",
     );
   });
 });

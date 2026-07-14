@@ -2,7 +2,6 @@ import { AuditClient } from "./audit.js";
 import { CdcClient } from "./cdc.js";
 import { ConnectClient } from "./connect.js";
 import { DatasourcesClient } from "./datasources.js";
-import { EventsClient } from "./events.js";
 import {
   ProtocolConnectClient,
   type ProtocolClients,
@@ -16,7 +15,6 @@ import type { MedallionClientOptions } from "./types.js";
 
 export class MedallionClient {
   readonly audit: AuditClient;
-  readonly events: EventsClient;
   readonly cdc: CdcClient;
   readonly connect: ConnectClient;
   readonly datasources: DatasourcesClient;
@@ -56,9 +54,6 @@ export class MedallionClient {
     });
     this.audit = new AuditClient(protocolConnect, {
       organizationId: options.organizationId ?? options.tenantId,
-      defaultConnectorId: options.defaultConnectorId,
-    });
-    this.events = new EventsClient(protocolConnect, {
       defaultConnectorId: options.defaultConnectorId,
     });
     this.cdc = new CdcClient(protocolConnect, {
