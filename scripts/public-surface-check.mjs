@@ -2,16 +2,21 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, relative } from "node:path";
 
 const roots = [
+  ".github",
   "README.md",
   "CONTRIBUTING.md",
   "Makefile",
   "SECURITY.md",
   "NOTICE",
+  "VERSION",
+  "go.mod",
   "package.json",
+  "pnpm-workspace.yaml",
   "examples",
   "go",
   "proto",
   "python",
+  "scripts",
   "src",
   "test",
 ];
@@ -33,8 +38,11 @@ const scannedExtensions = new Set([
   ".mod",
   ".proto",
   ".py",
+  ".sh",
   ".toml",
   ".ts",
+  ".yaml",
+  ".yml",
 ]);
 
 const binaryExtensions = new Set([".binpb", ".gz", ".lock", ".png", ".tgz", ".whl", ".zip"]);
@@ -63,7 +71,7 @@ const checks = [
   {
     name: "private JimTech hostname",
     pattern:
-      /\bhttps?:\/\/(?!(?:github|codeload)\.com\/jim-technologies\/(?:medallion-sdk|invariantprotocol)(?:[/?#.\s"'`)]|$))[^"'\s)]+(?:jimtech|jim-technologies)[^"'\s)]*/i,
+      /\bhttps?:\/\/(?!(?:github\.com|codeload\.github\.com)\/jim-technologies\/(?:medallion-sdk|invariantprotocol)(?:[/?#.\s"'`)]|$))[^"'\s)]+(?:jimtech|jim-technologies)[^"'\s)]*/i,
   },
 ];
 

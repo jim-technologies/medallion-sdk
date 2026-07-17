@@ -26,7 +26,7 @@ describe.skipIf(!smokeEnabled)("deployed SDK smoke", () => {
       const action = "order.cancelled";
       const evidenceUrl =
         process.env.MEDALLION_SMOKE_EVIDENCE_URL ??
-        `https://github.com/jim-technologies/medallion-sdk/tree/${process.env.MEDALLION_SDK_REF ?? "v0.1.0"}`;
+        `https://example.com/deployments/medallion-sdk-smoke/${runId}`;
 
       const client = new MedallionClient({
         baseUrl,

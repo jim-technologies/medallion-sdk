@@ -2,7 +2,7 @@ import { defineConfig } from "tsup";
 
 const common = {
   entry: ["src/index.ts"],
-  target: "es2022",
+  target: "es2024",
   sourcemap: true,
   splitting: false,
   treeshake: true,
@@ -17,7 +17,6 @@ export default defineConfig([
   {
     ...common,
     format: ["esm"],
-    dts: true,
     clean: true,
   },
   {

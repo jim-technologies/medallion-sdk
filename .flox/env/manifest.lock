@@ -4,16 +4,17 @@
     "schema-version": "1.12.0",
     "install": {
       "go": {
-        "pkg-path": "go"
+        "pkg-path": "go",
+        "version": "1.26.4"
       },
       "nodejs": {
-        "pkg-path": "nodejs_24"
+        "pkg-path": "nodejs_26"
       },
       "pnpm": {
         "pkg-path": "pnpm"
       },
       "python": {
-        "pkg-path": "python313"
+        "pkg-path": "python314"
       },
       "typescript-language-server": {
         "pkg-path": "typescript-language-server"
@@ -22,8 +23,8 @@
         "pkg-path": "uv"
       }
     },
-    "profile": {
-      "common": "  corepack enable >/dev/null 2>&1 || true\n"
+    "vars": {
+      "GOTOOLCHAIN": "go1.26.5+auto"
     },
     "options": {}
   },
@@ -43,6 +44,7 @@
       "rev_date": "2026-07-05T04:06:12Z",
       "scrape_date": "2026-07-06T03:12:56.227877Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -73,6 +75,7 @@
       "rev_date": "2026-07-05T04:06:12Z",
       "scrape_date": "2026-07-06T03:41:23.896640Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -102,6 +105,7 @@
       "rev_date": "2026-07-05T04:06:12Z",
       "scrape_date": "2026-07-06T04:09:01.839364Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -131,6 +135,7 @@
       "rev_date": "2026-07-05T04:06:12Z",
       "scrape_date": "2026-07-06T04:40:26.718134Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -146,116 +151,120 @@
       "priority": 5
     },
     {
-      "attr_path": "nodejs_24",
+      "attr_path": "nodejs_26",
       "broken": false,
-      "derivation": "/nix/store/1a0cn85p1mwixhwy16db7v2652pz7l8g-nodejs-24.16.0.drv",
+      "derivation": "/nix/store/z91vk8smy4imxkqgihk3cyyxd15yigk5-nodejs-26.4.0.drv",
       "description": "Event-driven I/O framework for the V8 JavaScript engine",
       "install_id": "nodejs",
       "license": "MIT",
       "locked_url": "https://github.com/flox/nixpkgs?rev=d407951447dcd00442e97087bf374aad70c04cea",
-      "name": "nodejs-24.16.0",
-      "pname": "nodejs_24",
+      "name": "nodejs-26.4.0",
+      "pname": "nodejs_26",
       "rev": "d407951447dcd00442e97087bf374aad70c04cea",
       "rev_count": 1027867,
       "rev_date": "2026-07-05T04:06:12Z",
-      "scrape_date": "2026-07-06T03:13:20.510831Z",
+      "scrape_date": "2026-07-06T03:13:20.512347Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "24.16.0",
+      "version": "26.4.0",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/1zm1xb652wk1kscxbcvbryq8y45b0gy5-nodejs-24.16.0"
+        "out": "/nix/store/dz3nxng3029j1gc570pkwj8ahfdl3sa4-nodejs-26.4.0"
       },
       "system": "aarch64-darwin",
       "group": "toplevel",
       "priority": 5
     },
     {
-      "attr_path": "nodejs_24",
+      "attr_path": "nodejs_26",
       "broken": false,
-      "derivation": "/nix/store/aay2n9r5ljwfvlva807p9f0p1vpwg7mb-nodejs-24.16.0.drv",
+      "derivation": "/nix/store/m55wirr4xn0ymhfy61cnz1ldlf6fqw8g-nodejs-26.4.0.drv",
       "description": "Event-driven I/O framework for the V8 JavaScript engine",
       "install_id": "nodejs",
       "license": "MIT",
       "locked_url": "https://github.com/flox/nixpkgs?rev=d407951447dcd00442e97087bf374aad70c04cea",
-      "name": "nodejs-24.16.0",
-      "pname": "nodejs_24",
+      "name": "nodejs-26.4.0",
+      "pname": "nodejs_26",
       "rev": "d407951447dcd00442e97087bf374aad70c04cea",
       "rev_count": 1027867,
       "rev_date": "2026-07-05T04:06:12Z",
-      "scrape_date": "2026-07-06T03:42:00.480294Z",
+      "scrape_date": "2026-07-06T03:42:00.482066Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "24.16.0",
+      "version": "26.4.0",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/60vys190zxlx4k1jz0kyvk4vydzr7qml-nodejs-24.16.0"
+        "out": "/nix/store/4bv9k994r33svxczpy2wk3lhsrh3kspl-nodejs-26.4.0"
       },
       "system": "aarch64-linux",
       "group": "toplevel",
       "priority": 5
     },
     {
-      "attr_path": "nodejs_24",
+      "attr_path": "nodejs_26",
       "broken": false,
-      "derivation": "/nix/store/yc1bpd21mkkawwxkq2zskmkqjmzwgv54-nodejs-24.16.0.drv",
+      "derivation": "/nix/store/1fpgjk8z29q7vipnwlam7h4i04jxrxby-nodejs-26.4.0.drv",
       "description": "Event-driven I/O framework for the V8 JavaScript engine",
       "install_id": "nodejs",
       "license": "MIT",
       "locked_url": "https://github.com/flox/nixpkgs?rev=d407951447dcd00442e97087bf374aad70c04cea",
-      "name": "nodejs-24.16.0",
-      "pname": "nodejs_24",
+      "name": "nodejs-26.4.0",
+      "pname": "nodejs_26",
       "rev": "d407951447dcd00442e97087bf374aad70c04cea",
       "rev_count": 1027867,
       "rev_date": "2026-07-05T04:06:12Z",
-      "scrape_date": "2026-07-06T04:09:32.263259Z",
+      "scrape_date": "2026-07-06T04:09:32.264854Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "24.16.0",
+      "version": "26.4.0",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/v04l0kjhdvbzkzrnw6ryf43dp8v0qapv-nodejs-24.16.0"
+        "out": "/nix/store/wyxj7d54jggi26lnap66c858mb2l2m2q-nodejs-26.4.0"
       },
       "system": "x86_64-darwin",
       "group": "toplevel",
       "priority": 5
     },
     {
-      "attr_path": "nodejs_24",
+      "attr_path": "nodejs_26",
       "broken": false,
-      "derivation": "/nix/store/k9jn43g1p70zs7l9vgxh57aarg2s2jkv-nodejs-24.16.0.drv",
+      "derivation": "/nix/store/q1cqsprzh8q1pz0jnjybgv6yf859phag-nodejs-26.4.0.drv",
       "description": "Event-driven I/O framework for the V8 JavaScript engine",
       "install_id": "nodejs",
       "license": "MIT",
       "locked_url": "https://github.com/flox/nixpkgs?rev=d407951447dcd00442e97087bf374aad70c04cea",
-      "name": "nodejs-24.16.0",
-      "pname": "nodejs_24",
+      "name": "nodejs-26.4.0",
+      "pname": "nodejs_26",
       "rev": "d407951447dcd00442e97087bf374aad70c04cea",
       "rev_count": 1027867,
       "rev_date": "2026-07-05T04:06:12Z",
-      "scrape_date": "2026-07-06T04:41:05.932913Z",
+      "scrape_date": "2026-07-06T04:41:05.934955Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "24.16.0",
+      "version": "26.4.0",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/zvj0hl7rhh0ccr5vkcg3ijs3xm3sgyac-nodejs-24.16.0"
+        "out": "/nix/store/i2jf2l5lqhy3d7zy3lzx5wjydyzw2hwm-nodejs-26.4.0"
       },
       "system": "x86_64-linux",
       "group": "toplevel",
@@ -276,6 +285,7 @@
       "rev_date": "2026-07-05T04:06:12Z",
       "scrape_date": "2026-07-06T03:13:35.120272Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -305,6 +315,7 @@
       "rev_date": "2026-07-05T04:06:12Z",
       "scrape_date": "2026-07-06T03:42:20.022466Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -334,6 +345,7 @@
       "rev_date": "2026-07-05T04:06:12Z",
       "scrape_date": "2026-07-06T04:09:50.442301Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -363,6 +375,7 @@
       "rev_date": "2026-07-05T04:06:12Z",
       "scrape_date": "2026-07-06T04:41:26.519698Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -378,120 +391,122 @@
       "priority": 5
     },
     {
-      "attr_path": "python313",
+      "attr_path": "python314",
       "broken": false,
-      "derivation": "/nix/store/ffz1bwjdzglryqx0pn3jngal4bz66xfh-python3-3.13.13.drv",
+      "derivation": "/nix/store/mkjidg18y4arcsc09p21wqx1byqmahiy-python3-3.14.4.drv",
       "description": "High-level dynamically-typed programming language",
       "install_id": "python",
       "license": "Python-2.0",
       "locked_url": "https://github.com/flox/nixpkgs?rev=d407951447dcd00442e97087bf374aad70c04cea",
-      "name": "python3-3.13.13",
-      "pname": "python313",
+      "name": "python3-3.14.4",
+      "pname": "python314",
       "rev": "d407951447dcd00442e97087bf374aad70c04cea",
       "rev_count": 1027867,
       "rev_date": "2026-07-05T04:06:12Z",
-      "scrape_date": "2026-07-06T03:13:37.154008Z",
+      "scrape_date": "2026-07-06T03:13:59.978799Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "python3-3.13.13",
+      "version": "python3-3.14.4",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/mfkdmplffnbc0av8r6pknl796a6b1r2n-python3-3.13.13"
+        "out": "/nix/store/bz7r3a1x3xby7ilac2ngzwr0szf3yzxc-python3-3.14.4"
       },
       "system": "aarch64-darwin",
       "group": "toplevel",
       "priority": 5
     },
     {
-      "attr_path": "python313",
+      "attr_path": "python314",
       "broken": false,
-      "derivation": "/nix/store/v13czlpngkramf29nnn8qa0l4svfflwm-python3-3.13.13.drv",
+      "derivation": "/nix/store/xpa4r0315b1v8am1czqd1wgrnnn3xm16-python3-3.14.4.drv",
       "description": "High-level dynamically-typed programming language",
       "install_id": "python",
       "license": "Python-2.0",
       "locked_url": "https://github.com/flox/nixpkgs?rev=d407951447dcd00442e97087bf374aad70c04cea",
-      "name": "python3-3.13.13",
-      "pname": "python313",
+      "name": "python3-3.14.4",
+      "pname": "python314",
       "rev": "d407951447dcd00442e97087bf374aad70c04cea",
       "rev_count": 1027867,
       "rev_date": "2026-07-05T04:06:12Z",
-      "scrape_date": "2026-07-06T03:42:22.930603Z",
+      "scrape_date": "2026-07-06T03:42:50.695713Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "python3-3.13.13",
+      "version": "python3-3.14.4",
       "outputs_to_install": [
-        "out",
         "out"
       ],
       "outputs": {
-        "debug": "/nix/store/qfb6yj603w8qxd86j0cj7w54l1pv3rkz-python3-3.13.13-debug",
-        "out": "/nix/store/smwd56pl54f0pcjdspgh5vnf20c8xwsc-python3-3.13.13"
+        "debug": "/nix/store/8sggbkg072yim06lsbggkiwc84z28cj9-python3-3.14.4-debug",
+        "out": "/nix/store/fj2lkfaqsccpsgwmzrv921asxzsp1iin-python3-3.14.4"
       },
       "system": "aarch64-linux",
       "group": "toplevel",
       "priority": 5
     },
     {
-      "attr_path": "python313",
+      "attr_path": "python314",
       "broken": false,
-      "derivation": "/nix/store/5vh9qfs54q47jybcd5zhxmap7lgk2dhg-python3-3.13.13.drv",
+      "derivation": "/nix/store/421iir12a3alcgp06c2grlh37w3q47s2-python3-3.14.4.drv",
       "description": "High-level dynamically-typed programming language",
       "install_id": "python",
       "license": "Python-2.0",
       "locked_url": "https://github.com/flox/nixpkgs?rev=d407951447dcd00442e97087bf374aad70c04cea",
-      "name": "python3-3.13.13",
-      "pname": "python313",
+      "name": "python3-3.14.4",
+      "pname": "python314",
       "rev": "d407951447dcd00442e97087bf374aad70c04cea",
       "rev_count": 1027867,
       "rev_date": "2026-07-05T04:06:12Z",
-      "scrape_date": "2026-07-06T04:09:53.029554Z",
+      "scrape_date": "2026-07-06T04:10:21.749554Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "python3-3.13.13",
+      "version": "python3-3.14.4",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/1137mc2md1ip5pdslybxl05kysjyh4rg-python3-3.13.13"
+        "out": "/nix/store/dz3vgh7m1dsj9c3ahn1ab6wqpnz9bbww-python3-3.14.4"
       },
       "system": "x86_64-darwin",
       "group": "toplevel",
       "priority": 5
     },
     {
-      "attr_path": "python313",
+      "attr_path": "python314",
       "broken": false,
-      "derivation": "/nix/store/d8rrzn9gg475brqyfpdaa3w76gzwmvx4-python3-3.13.13.drv",
+      "derivation": "/nix/store/xzrcv5rnq48rbxkqb1yx05va45h56295-python3-3.14.4.drv",
       "description": "High-level dynamically-typed programming language",
       "install_id": "python",
       "license": "Python-2.0",
       "locked_url": "https://github.com/flox/nixpkgs?rev=d407951447dcd00442e97087bf374aad70c04cea",
-      "name": "python3-3.13.13",
-      "pname": "python313",
+      "name": "python3-3.14.4",
+      "pname": "python314",
       "rev": "d407951447dcd00442e97087bf374aad70c04cea",
       "rev_count": 1027867,
       "rev_date": "2026-07-05T04:06:12Z",
-      "scrape_date": "2026-07-06T04:41:29.496160Z",
+      "scrape_date": "2026-07-06T04:41:58.254555Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "python3-3.13.13",
+      "version": "python3-3.14.4",
       "outputs_to_install": [
-        "out",
         "out"
       ],
       "outputs": {
-        "debug": "/nix/store/g2pg1an3v5pm2fmwg1g7dw77ddpqirg7-python3-3.13.13-debug",
-        "out": "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13"
+        "debug": "/nix/store/y6nmlnw8360r8lma5bjnp07vl9r4l07g-python3-3.14.4-debug",
+        "out": "/nix/store/fk8c5cqd0npblqv1mcd8swhkcbng84qr-python3-3.14.4"
       },
       "system": "x86_64-linux",
       "group": "toplevel",
@@ -512,6 +527,7 @@
       "rev_date": "2026-07-05T04:06:12Z",
       "scrape_date": "2026-07-06T03:15:19.013062Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -541,6 +557,7 @@
       "rev_date": "2026-07-05T04:06:12Z",
       "scrape_date": "2026-07-06T03:44:26.616512Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -570,6 +587,7 @@
       "rev_date": "2026-07-05T04:06:12Z",
       "scrape_date": "2026-07-06T04:11:58.121364Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -599,6 +617,7 @@
       "rev_date": "2026-07-05T04:06:12Z",
       "scrape_date": "2026-07-06T04:43:45.996319Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -628,6 +647,7 @@
       "rev_date": "2026-07-05T04:06:12Z",
       "scrape_date": "2026-07-06T03:15:39.158658Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -657,6 +677,7 @@
       "rev_date": "2026-07-05T04:06:12Z",
       "scrape_date": "2026-07-06T03:44:48.957401Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -686,6 +707,7 @@
       "rev_date": "2026-07-05T04:06:12Z",
       "scrape_date": "2026-07-06T04:12:23.334560Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -715,6 +737,7 @@
       "rev_date": "2026-07-05T04:06:12Z",
       "scrape_date": "2026-07-06T04:44:10.521793Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,

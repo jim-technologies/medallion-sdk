@@ -3,7 +3,21 @@
 Install directly from Git:
 
 ```sh
-go get github.com/jim-technologies/medallion-sdk/go@go/v0.1.0
+go get github.com/jim-technologies/medallion-sdk/go@vX.Y.Z
+```
+
+The repository-root `VERSION` is shared by every SDK and released through one
+plain root `vX.Y.Z` tag. The `/go` suffix identifies this package inside the
+root module; it is not a separate version or tag namespace. Use a full commit
+SHA instead of the tag when a production build requires commit-level pinning.
+
+If the consumer already pins the pre-unification nested `/go` module, migrate
+it once before installing the shared root tag:
+
+```sh
+go mod edit -droprequire=github.com/jim-technologies/medallion-sdk/go
+go get github.com/jim-technologies/medallion-sdk/go@vX.Y.Z
+go mod tidy
 ```
 
 The Go SDK currently implements the Connect-backed server integration path:

@@ -1,14 +1,15 @@
 schema-version = "1.12.0"
 
 [install]
-nodejs.pkg-path = "nodejs_24"
+nodejs.pkg-path = "nodejs_26"
 pnpm.pkg-path = "pnpm"
 typescript-language-server.pkg-path = "typescript-language-server"
+# Flox supplies the portable bootstrap binary; Go's checksum-verified
+# toolchain selector below provides the patched release declared by go.mod.
 go.pkg-path = "go"
-python.pkg-path = "python313"
+go.version = "1.26.4"
+python.pkg-path = "python314"
 uv.pkg-path = "uv"
 
-[profile]
-common = '''
-  corepack enable >/dev/null 2>&1 || true
-'''
+[vars]
+GOTOOLCHAIN = "go1.26.5+auto"

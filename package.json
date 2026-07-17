@@ -1,6 +1,7 @@
 {
   "name": "@jimtech/medallion",
   "version": "0.1.0",
+  "private": true,
   "description": "Public TypeScript SDK package for the multi-language Medallion SDK.",
   "license": "Apache-2.0",
   "type": "module",
@@ -12,9 +13,9 @@
     "url": "https://github.com/jim-technologies/medallion-sdk/issues"
   },
   "homepage": "https://github.com/jim-technologies/medallion-sdk#readme",
-  "packageManager": "pnpm@10.12.4",
+  "packageManager": "pnpm@11.13.0",
   "engines": {
-    "node": ">=18.18"
+    "node": ">=24"
   },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -30,29 +31,30 @@
     "dist",
     "LICENSE",
     "NOTICE",
-    "README.md"
+    "README.md",
+    "VERSION"
   ],
   "scripts": {
-    "build": "tsup",
-    "check": "node scripts/public-surface-check.mjs && tsc --noEmit && vitest run && tsup",
+    "build": "tsup && tsc -p tsconfig.build.json",
+    "check": "node scripts/public-surface-check.mjs && tsc --noEmit && vitest run && npm run build",
     "check:public": "node scripts/public-surface-check.mjs",
     "clean": "rm -rf dist coverage",
     "lint": "tsc --noEmit",
-    "prepare": "tsup",
+    "prepare": "npm run build",
     "proto:descriptor": "buf build proto --as-file-descriptor-set --path proto/medallion/connect/v1/connect.proto -o proto/medallion-connect.descriptor.binpb && buf build proto --as-file-descriptor-set --path proto/medallion/ontology/v1/ontology.proto -o proto/medallion-ontology.descriptor.binpb && buf build proto --as-file-descriptor-set --path proto/medallion/storage/v1/service.proto -o proto/medallion-storage.descriptor.binpb && node scripts/embed-connect-descriptor.mjs",
     "test": "vitest run",
     "test:deployed": "vitest run test/deployed-smoke.test.ts"
   },
   "dependencies": {
-    "@bufbuild/protobuf": "^2.12.1",
-    "@jim-technologies/invariant-protocol": "github:jim-technologies/invariantprotocol#7f6acc53f23e405f64f41a2cdb17302e4945eeaf",
-    "@opentelemetry/api": "^1.9.1"
+    "@bufbuild/protobuf": "2.12.1",
+    "@jim-technologies/invariant-protocol": "github:jim-technologies/invariantprotocol#aae251a4015380099aa3e66ff4cda2dfa775e02f",
+    "@opentelemetry/api": "1.9.1"
   },
   "devDependencies": {
     "@bufbuild/buf": "1.71.0",
-    "@types/node": "^24.0.0",
-    "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "@types/node": "24.13.3",
+    "tsup": "8.5.1",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
   }
 }

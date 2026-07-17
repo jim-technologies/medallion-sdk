@@ -12,6 +12,22 @@ make check
 
 Consumers do not need Flox. Flox is only contributor tooling.
 
+## Versions and Releases
+
+All language SDKs use the repository-root `VERSION` and ship together from one
+plain `vX.Y.Z` tag. Never create language-prefixed tags such as `go/vX.Y.Z`.
+Prepare a future lockstep version and verify it with:
+
+```sh
+make version-set VERSION=X.Y.Z
+make version-check
+```
+
+The synchronizer updates the TypeScript and Python package metadata and the
+Python lockfile together. Go derives the same version from the root Git tag.
+Before a v2 or later release, migrate the Go module and imports to the required
+`/vN` semantic import path and update the version guard in the same change.
+
 ## Scope
 
 The TypeScript implementation supports the broad public client surface:
@@ -31,7 +47,7 @@ Go and Python currently cover the Connect-backed server integration path. Their 
 When vendored proto contracts change, regenerate the TypeScript descriptors:
 
 ```sh
-corepack pnpm proto:descriptor
+pnpm proto:descriptor
 ```
 
 ## Public Surface Review

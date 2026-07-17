@@ -1,0 +1,10 @@
+packages:
+  - "."
+
+# invariantprotocol is Git-distributed and builds its TypeScript output during
+# installation. Keep this exact commit allowlisted with the dependency pin.
+allowBuilds:
+  "@bufbuild/buf": true
+  "@jim-technologies/invariant-protocol@https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/aae251a4015380099aa3e66ff4cda2dfa775e02f": true
+  "esbuild": true
+  "protobufjs": false

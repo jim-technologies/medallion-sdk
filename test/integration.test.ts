@@ -38,7 +38,7 @@ describe("in-process integration routes", () => {
       actor: { type: "user", id: "user_123" },
       action: "order.cancelled",
       resource: { type: "order", id: "order_123" },
-      evidenceUrl: "https://github.com/jim-technologies/medallion-sdk/tree/v0.1.0",
+      evidenceUrl: "https://example.com/deployments/orders-worker/abc123",
       idempotencyKey: "audit_1",
     });
     const trail = await client.audit.trail({
@@ -92,7 +92,7 @@ describe("in-process integration routes", () => {
             before: null,
             after: null,
             metadata: null,
-            evidenceUrl: "https://github.com/jim-technologies/medallion-sdk/tree/v0.1.0",
+            evidenceUrl: "https://example.com/deployments/orders-worker/abc123",
           }),
         },
       ],
@@ -120,7 +120,7 @@ describe("in-process integration routes", () => {
       targetType: "order",
       targetId: "order_123",
       after: { status: "cancelled" },
-      evidenceUrl: "https://github.com/jim-technologies/medallion-sdk/tree/v0.1.0",
+      evidenceUrl: "https://example.com/deployments/orders-worker/abc123",
     });
   });
 });
@@ -208,7 +208,7 @@ function writeRouteResponse(path: string, response: ServerResponse): void {
             before: { status: "confirmed" },
             after: { status: "cancelled" },
             metadata: { reason: "user_request" },
-            evidenceUrl: "https://github.com/jim-technologies/medallion-sdk/tree/v0.1.0",
+            evidenceUrl: "https://example.com/deployments/orders-worker/abc123",
           }),
           actor_principal: "user:user_123",
           ingested_by_principal: "service_account:orders-worker",

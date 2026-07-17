@@ -2,7 +2,7 @@
 
 Public multi-language SDK for Medallion. TypeScript is currently the broadest client; Go and Python cover the Connect-backed server integration path for datasource registration, audit, and CDC.
 
-Status: pre-1.0 public SDK. Treat pinned tags or SHAs as the stable install boundary, and integration-test the auth path against the target Medallion service environment before using it for production traffic. The TypeScript protocol layer uses the public invariantprotocol TypeScript runtime with vendored Connect, Ontology, and Storage descriptors.
+Status: pre-1.0 public SDK. Treat pinned tags or SHAs as the stable install boundary, and integration-test the auth path against the target Medallion service environment before using it for production traffic. The TypeScript protocol layer uses invariantprotocol v0.7.1 with vendored Connect, Ontology, and Storage descriptors.
 
 The TypeScript SDK currently includes:
 
@@ -18,29 +18,57 @@ Go and Python currently include the Connect-backed server integration path only.
 
 ## Install
 
-Install directly from Git. The SDK is not assumed to be published to npm, PyPI, or a Go proxy-backed release yet.
+Medallion-owned packages are distributed only from Git. They are not published
+to npm, PyPI, crates.io, or another language registry. Third-party dependencies
+still resolve through their normal registries, and Go module proxies may cache
+public Git revisions.
+
+The repository-root `VERSION` is the source of truth for TypeScript, Python,
+and Go. Every SDK ships together from exactly one plain root `vX.Y.Z` tag;
+there are no language-specific versions or tags. Release examples below use
+`vX.Y.Z` as a placeholder. Pin that release tag or, for the strongest
+reproducibility, replace it with a full commit SHA. Never install a production
+build from a branch name.
 
 TypeScript:
 
 ```sh
-export MEDALLION_SDK_REF=v0.1.0
-npm install "github:jim-technologies/medallion-sdk#$MEDALLION_SDK_REF"
-pnpm add "github:jim-technologies/medallion-sdk#$MEDALLION_SDK_REF"
+npm install --allow-git=all "github:jim-technologies/medallion-sdk#vX.Y.Z"
 ```
 
-Use a tag or full commit SHA, never a branch name, for production installs.
+The npm command permits nested Git dependencies because invariantprotocol is
+also Git-distributed and pinned by commit.
 
 Python:
 
 ```sh
-uv add "medallion @ git+https://github.com/jim-technologies/medallion-sdk.git@v0.1.0#subdirectory=python"
+uv add "medallion @ git+https://github.com/jim-technologies/medallion-sdk.git@vX.Y.Z#subdirectory=python"
 ```
 
 Go:
 
 ```sh
-go get github.com/jim-technologies/medallion-sdk/go@go/v0.1.0
+go get github.com/jim-technologies/medallion-sdk/go@vX.Y.Z
 ```
+
+Go code continues to import `github.com/jim-technologies/medallion-sdk/go`.
+The `/go` suffix is a package directory inside the root module, not a separate
+module, version, or tag namespace. This path covers the current v0 release line
+and a future v1. Before v2, Go requires the standard `/v2` semantic-import-path
+migration; the release will still use the same single root `v2.X.Y` tag as the
+other SDKs.
+
+Existing consumers that pinned the historical nested `/go` module by commit
+must remove that old module requirement before adding the root-tagged release;
+otherwise Go sees both modules as providers of the same package:
+
+```sh
+go mod edit -droprequire=github.com/jim-technologies/medallion-sdk/go
+go get github.com/jim-technologies/medallion-sdk/go@vX.Y.Z
+go mod tidy
+```
+
+Current development baselines are Node.js 24+, Python 3.14+, and Go 1.26.5+.
 
 ## Server-Side Only
 
@@ -97,7 +125,7 @@ await medallion.audit.record({
   before: { status: "confirmed" },
   after: { status: "cancelled" },
   metadata: { reason: "user_request" },
-  evidenceUrl: "https://github.com/jim-technologies/medallion-sdk/tree/v0.1.0",
+  evidenceUrl: "https://example.com/deployments/orders-worker/abc123",
   idempotencyKey: "order_123_cancelled",
   sourceEventId: "orders.order_123.cancelled.v1",
 });
@@ -122,7 +150,7 @@ if (event.ingesterPrincipal !== process.env.MEDALLION_EXPECTED_INGESTER_PRINCIPA
 if (event.targetType !== "order" || event.targetId !== "order_123") {
   throw new Error("resource mismatch");
 }
-if (event.evidenceUrl !== "https://github.com/jim-technologies/medallion-sdk/tree/v0.1.0") {
+if (event.evidenceUrl !== "https://example.com/deployments/orders-worker/abc123") {
   throw new Error("evidence URL mismatch");
 }
 ```
@@ -430,10 +458,10 @@ make install
 make check
 ```
 
-Without Flox, install Node.js 18.18 or newer with Corepack, Go, and uv:
+Without Flox, install Node.js 24 or newer, pnpm 11.13, Go 1.26.5,
+Python 3.14, and uv, then run the same targets:
 
 ```sh
-corepack enable
 make install
 make check
 ```
@@ -471,7 +499,7 @@ make build
 When vendored proto contracts change, regenerate TypeScript descriptors with:
 
 ```sh
-corepack pnpm proto:descriptor
+pnpm proto:descriptor
 ```
 
 Go and Python already use generated Connect protobuf bindings for their Connect-backed surface.

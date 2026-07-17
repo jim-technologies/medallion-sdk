@@ -13,6 +13,7 @@ python/.ruff_cache/
 python/.venv/
 
 *.test
+coverage.out
 go/coverage.out
 
 .DS_Store

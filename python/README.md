@@ -3,8 +3,12 @@
 Install directly from Git:
 
 ```sh
-uv add "medallion @ git+https://github.com/jim-technologies/medallion-sdk.git@v0.1.0#subdirectory=python"
+uv add "medallion @ git+https://github.com/jim-technologies/medallion-sdk.git@vX.Y.Z#subdirectory=python"
 ```
+
+The repository-root `VERSION` is shared by every SDK and released through one
+plain root `vX.Y.Z` tag. Use a full commit SHA instead of the tag when a
+production build requires commit-level pinning.
 
 The Python SDK currently implements the Connect-backed server integration path:
 

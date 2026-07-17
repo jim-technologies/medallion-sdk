@@ -5,7 +5,7 @@ This directory contains minimal public client-facing route/spec metadata and ven
 `medallion-*.descriptor.binpb` files are generated from the vendored public proto contracts and embedded into `src/*-descriptor.ts` for TypeScript runtime use:
 
 ```sh
-corepack pnpm proto:descriptor
+pnpm proto:descriptor
 ```
 
 SDK consumers do not need Buf or Flox to install or use the package.

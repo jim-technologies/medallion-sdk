@@ -12,7 +12,7 @@ const resource = { type: "order", id: `order_${runId}` } as const;
 const action = "order.cancelled";
 const evidenceUrl =
   process.env.MEDALLION_EVIDENCE_URL ??
-  `https://github.com/jim-technologies/medallion-sdk/tree/${process.env.MEDALLION_SDK_REF ?? "v0.1.0"}`;
+  `https://example.com/deployments/orders-worker/${runId}`;
 
 const medallion = new MedallionClient({
   baseUrl,
