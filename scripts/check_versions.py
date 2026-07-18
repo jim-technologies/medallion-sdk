@@ -14,8 +14,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 SEMVER_COMPONENT = r"(?:0|[1-9][0-9]*)"
 SEMVER = re.compile(rf"{SEMVER_COMPONENT}\.{SEMVER_COMPONENT}\.{SEMVER_COMPONENT}")
-INVARIANT_PROTOCOL_VERSION = "0.7.1"
-INVARIANT_PROTOCOL_SHA = "aae251a4015380099aa3e66ff4cda2dfa775e02f"
+INVARIANT_PROTOCOL_VERSION = "0.8.3"
+INVARIANT_PROTOCOL_SHA = "e1fb753ae72b0eb33f9de00fe319a1a2ab55dffd"
 INVARIANT_PROTOCOL_PACKAGE = "@jim-technologies/invariant-protocol"
 INVARIANT_PROTOCOL_SPEC = (
     "github:jim-technologies/invariantprotocol#" + INVARIANT_PROTOCOL_SHA
@@ -24,6 +24,7 @@ INVARIANT_PROTOCOL_LOCATOR_PREFIX = (
     "https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/"
 )
 INVARIANT_PROTOCOL_LOCATOR = INVARIANT_PROTOCOL_LOCATOR_PREFIX + INVARIANT_PROTOCOL_SHA
+ESBUILD_VERSION = "0.28.1"
 
 
 def read_json(path: str) -> dict[str, Any]:
@@ -58,6 +59,19 @@ def main() -> int:
     package = read_json("package.json")
     pyproject = read_toml("python/pyproject.toml")
     uv_lock = read_toml("python/uv.lock")
+    package_manager = package.get("packageManager")
+    pnpm_match = (
+        re.fullmatch(r"pnpm@([0-9]+\.[0-9]+\.[0-9]+)", package_manager)
+        if isinstance(package_manager, str)
+        else None
+    )
+    if pnpm_match is None:
+        errors.append(
+            "package.json packageManager must pin an exact pnpm patch version"
+        )
+        pnpm_version = None
+    else:
+        pnpm_version = pnpm_match.group(1)
 
     dependencies = package.get("dependencies", {})
     invariant_spec = (
@@ -72,6 +86,16 @@ def main() -> int:
         )
 
     workspace = (ROOT / "pnpm-workspace.yaml").read_text()
+    workspace_esbuild_versions = re.findall(
+        r"^\s{2}esbuild:\s*[\"']?([0-9]+\.[0-9]+\.[0-9]+)[\"']?\s*$",
+        workspace,
+        re.MULTILINE,
+    )
+    if workspace_esbuild_versions != [ESBUILD_VERSION]:
+        errors.append(
+            "pnpm-workspace.yaml esbuild overrides are "
+            f"{workspace_esbuild_versions!r}; expected only {[ESBUILD_VERSION]!r}"
+        )
     invariant_allow_build = (
         f'"{INVARIANT_PROTOCOL_PACKAGE}@{INVARIANT_PROTOCOL_LOCATOR}": true'
     )
@@ -95,6 +119,29 @@ def main() -> int:
         )
 
     pnpm_lock = (ROOT / "pnpm-lock.yaml").read_text()
+    lock_esbuild_versions = set(
+        re.findall(r"^\s{2}esbuild@([0-9]+\.[0-9]+\.[0-9]+):", pnpm_lock, re.MULTILINE)
+    )
+    if lock_esbuild_versions != {ESBUILD_VERSION}:
+        errors.append(
+            "pnpm-lock.yaml esbuild package versions are "
+            f"{sorted(lock_esbuild_versions)!r}; expected only {[ESBUILD_VERSION]!r}"
+        )
+    lock_platform_esbuild_versions = set(
+        re.findall(
+            r"^\s{2}'?@esbuild/[^@']+@([0-9]+\.[0-9]+\.[0-9]+)'?:",
+            pnpm_lock,
+            re.MULTILINE,
+        )
+    )
+    if lock_platform_esbuild_versions != {ESBUILD_VERSION}:
+        errors.append(
+            "pnpm-lock.yaml platform esbuild versions are "
+            f"{sorted(lock_platform_esbuild_versions)!r}; "
+            f"expected only {[ESBUILD_VERSION]!r}"
+        )
+    if f"  esbuild: {ESBUILD_VERSION}" not in pnpm_lock:
+        errors.append("pnpm-lock.yaml esbuild override does not match pnpm-workspace.yaml")
     if f"specifier: {INVARIANT_PROTOCOL_SPEC}" not in pnpm_lock:
         errors.append("pnpm-lock.yaml invariantprotocol specifier does not match package.json")
     lock_invariant_spec_shas = set(
@@ -147,6 +194,13 @@ def main() -> int:
         errors.append("python/pyproject.toml must prohibit PyPI uploads")
     if not (ROOT / "python/src/medallion/py.typed").is_file():
         errors.append("python package must include src/medallion/py.typed")
+    for license_file in ("LICENSE", "NOTICE"):
+        root_license = ROOT / license_file
+        python_license = ROOT / "python" / license_file
+        if not python_license.is_file():
+            errors.append(f"python/{license_file} must be included for Git builds")
+        elif python_license.read_bytes() != root_license.read_bytes():
+            errors.append(f"python/{license_file} must be byte-identical to {license_file}")
 
     medallion_packages = [
         item for item in uv_lock["package"] if item.get("name") == "medallion"
@@ -236,6 +290,16 @@ def main() -> int:
             errors.append(
                 "README.md Go toolchain versions are "
                 f"{sorted(readme_go_versions)!r}; expected only {[go_version]!r}"
+            )
+    if pnpm_version is not None:
+        readme_pnpm_versions = set(
+            re.findall(r"\bpnpm ([0-9]+\.[0-9]+\.[0-9]+)(?:\+|,)", readme)
+        )
+        if readme_pnpm_versions != {pnpm_version}:
+            errors.append(
+                "README.md pnpm versions are "
+                f"{sorted(readme_pnpm_versions)!r}; "
+                f"expected only {[pnpm_version]!r}"
             )
 
     if os.environ.get("GITHUB_REF_TYPE") == "tag":

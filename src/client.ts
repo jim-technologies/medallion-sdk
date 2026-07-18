@@ -2,13 +2,13 @@ import { AuditClient } from "./audit.js";
 import { CdcClient } from "./cdc.js";
 import { ConnectClient } from "./connect.js";
 import { DatasourcesClient } from "./datasources.js";
+import { OntologyClient } from "./ontology.js";
 import {
-  ProtocolConnectClient,
   type ProtocolClients,
+  ProtocolConnectClient,
   ProtocolOntologyClient,
   ProtocolStorageClient,
 } from "./protocol.js";
-import { OntologyClient } from "./ontology.js";
 import { RequestClient } from "./request.js";
 import { StorageClient } from "./storage.js";
 import type { MedallionClientOptions } from "./types.js";

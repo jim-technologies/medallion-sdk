@@ -1,6 +1,6 @@
 import { MedallionError } from "./errors.js";
+import { optionalId, requiredControlIdempotencyKey } from "./payload.js";
 import type { ProtocolConnectClient } from "./protocol.js";
-import { optionalId } from "./payload.js";
 import type {
   Datasource,
   DatasourceRegistrationInput,
@@ -29,6 +29,10 @@ export class ConnectClient {
         { code: "MEDALLION_MISSING_ORGANIZATION_ID" },
       );
     }
+    const idempotencyKey = requiredControlIdempotencyKey(
+      input.idempotencyKey,
+      "datasource.idempotencyKey",
+    );
 
     const response = await this.protocol.registerConnector(
       {
@@ -37,13 +41,29 @@ export class ConnectClient {
         source_system: input.name,
         display_name: input.displayName ?? input.name,
         external_id: optionalId(input.externalId, "datasource.externalId"),
+        idempotency_key: idempotencyKey,
       },
       options,
     );
+    if (
+      response.body.connector === undefined ||
+      response.body.connector.id.trim().length === 0
+    ) {
+      throw new MedallionError(
+        "Medallion returned a datasource registration without a connector ID.",
+        {
+          code: "MEDALLION_INVALID_DATASOURCE_RESPONSE",
+          requestId: response.requestId,
+        },
+      );
+    }
 
     return {
       requestId: response.requestId,
-      datasource: datasourceFromConnector(response.body.connector, input.metadata),
+      datasource: datasourceFromConnector(
+        response.body.connector,
+        input.metadata,
+      ),
     };
   }
 }

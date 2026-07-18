@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
-import socket
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 from google.protobuf import json_format, message
@@ -44,9 +45,28 @@ class RequestClient:
                 "base_url is required.",
                 code="MEDALLION_INVALID_OPTIONS",
             )
+        parsed_base_url = urlsplit(normalized_base_url)
+        if (
+            parsed_base_url.scheme not in {"http", "https"}
+            or not parsed_base_url.netloc
+            or parsed_base_url.username is not None
+            or parsed_base_url.password is not None
+            or bool(parsed_base_url.query)
+            or bool(parsed_base_url.fragment)
+        ):
+            raise MedallionError(
+                "base_url must be an absolute HTTP(S) URL without credentials, query, or fragment.",
+                code="MEDALLION_INVALID_OPTIONS",
+            )
 
-        token = (access_token if access_token is not None else api_key) or ""
-        token = token.strip()
+        token = next(
+            (
+                value.strip()
+                for value in (access_token, api_key)
+                if value is not None and value.strip()
+            ),
+            "",
+        )
         if not token:
             raise MedallionError(
                 "api_key or access_token is required.",
@@ -108,7 +128,7 @@ class RequestClient:
                     request_id=request_id,
                     response_body=response_body,
                 ) from exc
-            except (TimeoutError, socket.timeout) as exc:
+            except TimeoutError as exc:
                 record_span_exception(span, exc)
                 raise MedallionError(
                     f"Medallion request timed out after {self._timeout} seconds.",
@@ -143,17 +163,25 @@ class RequestClient:
 
             payload = json_format.MessageToJson(
                 body,
-                preserving_proto_field_name=True,
+                preserving_proto_field_name=False,
             ).encode("utf-8")
 
             request = Request(url, data=payload, headers=headers, method="POST")
             try:
                 with urlopen(request, timeout=self._timeout) as http_response:
                     raw = http_response.read()
-                    if raw:
-                        json_format.Parse(raw.decode("utf-8"), response)
                     request_id = http_response.headers.get("x-request-id")
                     set_response_span(span, http_response.status, request_id)
+                    if raw:
+                        try:
+                            json_format.Parse(raw.decode("utf-8"), response)
+                        except (UnicodeDecodeError, json_format.ParseError) as exc:
+                            record_span_exception(span, exc)
+                            raise MedallionError(
+                                "Medallion response was not valid protobuf JSON.",
+                                code="MEDALLION_INVALID_JSON_RESPONSE",
+                                request_id=request_id,
+                            ) from exc
                     return ResponseEnvelope(
                         body={},
                         request_id=request_id,
@@ -170,7 +198,7 @@ class RequestClient:
                     request_id=request_id,
                     response_body=response_body,
                 ) from exc
-            except (TimeoutError, socket.timeout) as exc:
+            except TimeoutError as exc:
                 record_span_exception(span, exc)
                 raise MedallionError(
                     f"Medallion request timed out after {self._timeout} seconds.",
@@ -189,7 +217,7 @@ def _json_body(raw: bytes) -> Mapping[str, Any]:
         return {}
     try:
         value = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
+    except UnicodeDecodeError, json.JSONDecodeError:
         return {"body": raw.decode("utf-8", errors="replace")}
     return value if isinstance(value, Mapping) else {"body": value}
 

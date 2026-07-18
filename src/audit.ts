@@ -1,5 +1,4 @@
 import { MedallionError } from "./errors.js";
-import type { ProtocolConnectClient } from "./protocol.js";
 import {
   actorPrincipalFromRef,
   normalizeActorRef,
@@ -7,12 +6,15 @@ import {
 } from "./ids.js";
 import {
   compactRecord,
-  idempotencyKey,
   jsonString,
   occurredAt,
   optionalId,
+  requiredIdempotencyKey,
 } from "./payload.js";
+import type { ProtocolConnectClient } from "./protocol.js";
 import type {
+  AuditOrigin,
+  AuditOutcome,
   AuditRecordInput,
   AuditRecordResponse,
   AuditTrailInput,
@@ -53,11 +55,16 @@ export class AuditClient {
 
     const resource = normalizeResourceRef(input.resource);
     const actor = normalizeActorRef(input.actor);
-    const key = idempotencyKey(input.idempotencyKey);
+    const key = requiredIdempotencyKey(
+      input.idempotencyKey,
+      "audit.idempotencyKey",
+      512,
+    );
     const event: ConnectAuditEvent = compactRecord({
       resource_type: resource.type,
       resource_id: resource.id,
       action: input.action,
+      outcome: auditOutcome(input.outcome),
       idempotency_key: key,
       actor_principal: actorPrincipalFromRef(actor),
       payload_json: jsonString(
@@ -119,6 +126,10 @@ export class AuditClient {
             : actorPrincipalFromRef(sourceActor),
         ingested_by_principal: optionalString(input.ingesterPrincipal),
         action: input.action,
+        origin:
+          input.origin === undefined ? undefined : auditOrigin(input.origin),
+        outcome:
+          input.outcome === undefined ? undefined : auditOutcome(input.outcome),
         page_cursor: input.cursor,
       },
       options,
@@ -143,23 +154,33 @@ export function eventResponse(
   fallbackIdempotencyKey: string,
   requestId?: string,
 ): AuditRecordResponse {
+  const acceptedCount = body.accepted_count ?? 0;
+  const duplicateCount = body.duplicate_count ?? 0;
   const events: PublishedEventResult[] = (body.events ?? []).map((event) => ({
     idempotencyKey: event.idempotency_key ?? fallbackIdempotencyKey,
-    eventId:
-      event.event_id === undefined ? undefined : String(event.event_id),
+    eventId: event.event_id === undefined ? undefined : String(event.event_id),
     duplicate: event.duplicate ?? false,
   }));
+  if (events.length === 0 && acceptedCount === 0 && duplicateCount === 0) {
+    throw new MedallionError(
+      "Medallion returned an empty event publish acknowledgement.",
+      {
+        code: "MEDALLION_INVALID_PUBLISH_RESPONSE",
+        requestId,
+      },
+    );
+  }
   const first = events[0];
   const duplicate =
-    first?.duplicate ?? ((body.duplicate_count ?? 0) > 0 && (body.accepted_count ?? 0) === 0);
+    first?.duplicate ?? (duplicateCount > 0 && acceptedCount === 0);
 
   return {
     requestId,
     idempotencyKey: first?.idempotencyKey ?? fallbackIdempotencyKey,
     duplicate,
     result: duplicate ? "duplicate" : "accepted",
-    acceptedCount: body.accepted_count ?? 0,
-    duplicateCount: body.duplicate_count ?? 0,
+    acceptedCount,
+    duplicateCount,
     events,
   };
 }
@@ -189,9 +210,13 @@ function auditTrailLimit(value: number | undefined): number {
 function auditTrailEventFromConnect(event: ConnectAuditEvent) {
   const payload = parseEventPayload(event.payload_json);
   const payloadRecord = recordValue(payload);
+  const wireActor = actorFromPrincipal(event.actor_principal);
+  const payloadActor = actorFromPayload(payloadRecord?.actor);
   const actor =
-    actorFromPayload(payloadRecord?.actor) ??
-    actorFromPrincipal(event.actor_principal);
+    payloadActor !== undefined &&
+    actorPrincipalFromRef(payloadActor) === event.actor_principal
+      ? payloadActor
+      : wireActor;
   const before = payloadRecord?.before;
   const after = payloadRecord?.after;
   const metadata = recordValue(payloadRecord?.metadata);
@@ -219,11 +244,74 @@ function auditTrailEventFromConnect(event: ConnectAuditEvent) {
     after,
     evidenceUrl,
     sourceEventId: event.source_event_id,
+    sourceSystem: event.source_system,
+    origin: auditOriginFromConnect(event.origin),
+    outcome: auditOutcomeFromConnect(event.outcome),
     payload,
   };
 }
 
-function actorFromPrincipal(value: string | undefined): NormalizedActorRef | undefined {
+function auditOutcome(outcome: AuditOutcome): string {
+  switch (outcome) {
+    case "succeeded":
+      return "AUDIT_EVENT_OUTCOME_SUCCEEDED";
+    case "failed":
+      return "AUDIT_EVENT_OUTCOME_FAILED";
+    case "indeterminate":
+      return "AUDIT_EVENT_OUTCOME_INDETERMINATE";
+    default:
+      throw new MedallionError(
+        "audit outcome must be succeeded, failed, or indeterminate.",
+        { code: "MEDALLION_INVALID_AUDIT_OUTCOME" },
+      );
+  }
+}
+
+function auditOrigin(origin: AuditOrigin): string {
+  switch (origin) {
+    case "external_provider":
+      return "AUDIT_EVENT_ORIGIN_EXTERNAL_PROVIDER";
+    case "connect":
+      return "AUDIT_EVENT_ORIGIN_CONNECT";
+    default:
+      throw new MedallionError(
+        "audit origin must be external_provider or connect.",
+        { code: "MEDALLION_INVALID_AUDIT_ORIGIN" },
+      );
+  }
+}
+
+function auditOutcomeFromConnect(
+  value: string | undefined,
+): AuditOutcome | undefined {
+  switch (value) {
+    case "AUDIT_EVENT_OUTCOME_SUCCEEDED":
+      return "succeeded";
+    case "AUDIT_EVENT_OUTCOME_FAILED":
+      return "failed";
+    case "AUDIT_EVENT_OUTCOME_INDETERMINATE":
+      return "indeterminate";
+    default:
+      return undefined;
+  }
+}
+
+function auditOriginFromConnect(
+  value: string | undefined,
+): AuditOrigin | undefined {
+  switch (value) {
+    case "AUDIT_EVENT_ORIGIN_EXTERNAL_PROVIDER":
+      return "external_provider";
+    case "AUDIT_EVENT_ORIGIN_CONNECT":
+      return "connect";
+    default:
+      return undefined;
+  }
+}
+
+function actorFromPrincipal(
+  value: string | undefined,
+): NormalizedActorRef | undefined {
   if (value === undefined || value.length === 0) {
     return undefined;
   }
@@ -233,7 +321,10 @@ function actorFromPrincipal(value: string | undefined): NormalizedActorRef | und
     return { id: value };
   }
 
-  const id = parts.pop()!;
+  const id = parts.pop();
+  if (id === undefined) {
+    return { id: value };
+  }
   const type = parts.shift();
   const provider = parts.length > 0 ? parts.join(":") : undefined;
   return { id, type, provider };

@@ -2,6 +2,8 @@ module github.com/jim-technologies/medallion-sdk
 
 go 1.26.5
 
+tool google.golang.org/protobuf/cmd/protoc-gen-go
+
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20260709200747-435963d16310.1
 	go.opentelemetry.io/otel v1.44.0

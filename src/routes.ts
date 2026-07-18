@@ -1,5 +1,6 @@
 export const CONNECT_SERVICE = "/medallion.connect.v1.MedallionConnectService";
-export const ONTOLOGY_RPC_SERVICE = "/rpc/medallion.ontology.v1.MedallionOntologyService";
+export const ONTOLOGY_RPC_SERVICE =
+  "/rpc/medallion.ontology.v1.MedallionOntologyService";
 export const STORAGE_SERVICE = "/medallion.storage.v1.StorageService";
 
 export const CONNECT_ROUTES = {

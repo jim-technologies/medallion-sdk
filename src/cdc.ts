@@ -1,15 +1,19 @@
+import { eventResponse } from "./audit.js";
 import { MedallionError } from "./errors.js";
-import type { ProtocolConnectClient } from "./protocol.js";
-import { actorPrincipalFromRef, normalizeActorRef, normalizeIdRecord } from "./ids.js";
+import {
+  actorPrincipalFromRef,
+  normalizeActorRef,
+  normalizeIdRecord,
+} from "./ids.js";
 import {
   compactRecord,
-  idempotencyKey,
   jsonString,
   occurredAt,
   optionalId,
   requiredId,
+  requiredIdempotencyKey,
 } from "./payload.js";
-import { eventResponse } from "./audit.js";
+import type { ProtocolConnectClient } from "./protocol.js";
 import type {
   CdcEventInput,
   CdcOperation,
@@ -42,9 +46,18 @@ export class CdcClient {
 
     const primaryKey = normalizeIdRecord(input.primaryKey);
     if (Object.keys(primaryKey).length === 0) {
-      throw new MedallionError("cdc.primaryKey must contain at least one field.", {
-        code: "MEDALLION_EMPTY_CDC_PRIMARY_KEY",
-      });
+      throw new MedallionError(
+        "cdc.primaryKey must contain at least one field.",
+        {
+          code: "MEDALLION_EMPTY_CDC_PRIMARY_KEY",
+        },
+      );
+    }
+    if (Object.keys(primaryKey).length > 1 && input.entityId === undefined) {
+      throw new MedallionError(
+        "cdc.entityId is required when cdc.primaryKey contains more than one field.",
+        { code: "MEDALLION_MISSING_CDC_ENTITY_ID" },
+      );
     }
     const entityId =
       input.entityId === undefined
@@ -52,7 +65,11 @@ export class CdcClient {
         : requiredId(input.entityId, "cdc.entityId");
     const actor =
       input.actor === undefined ? undefined : normalizeActorRef(input.actor);
-    const key = idempotencyKey(input.idempotencyKey);
+    const key = requiredIdempotencyKey(
+      input.idempotencyKey,
+      "cdc.idempotencyKey",
+      512,
+    );
     const event: ConnectCdcEvent = compactRecord({
       stream_name: input.table,
       entity_type: input.entityType ?? input.table,
@@ -99,16 +116,14 @@ function cdcOperation(operation: CdcOperation): string {
       return "CDC_OPERATION_DELETE";
     case "snapshot":
       return "CDC_OPERATION_SNAPSHOT";
+    default:
+      throw new MedallionError(
+        "operation must be insert, update, delete, or snapshot.",
+        { code: "MEDALLION_INVALID_CDC_OPERATION" },
+      );
   }
 }
 
 function entityIdFromPrimaryKey(primaryKey: Record<string, string>): string {
-  const keys = Object.keys(primaryKey).sort();
-  if (keys.length === 1) {
-    return primaryKey[keys[0]!]!;
-  }
-
-  return `{${keys
-    .map((key) => `${JSON.stringify(key)}:${JSON.stringify(primaryKey[key]!)}`)
-    .join(",")}}`;
+  return Object.values(primaryKey)[0] ?? "";
 }

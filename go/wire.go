@@ -1,9 +1,6 @@
 package medallion
 
 import (
-	"bytes"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"strconv"
 	"strings"
@@ -15,7 +12,7 @@ import (
 
 const maxAuditTrailLimit = 500
 
-func cdcEventResponse(body *connectv1.PublishCdcEventsResponse, fallbackKey, requestID string) EventRecordResponse {
+func cdcEventResponse(body *connectv1.PublishCdcEventsResponse, fallbackKey, requestID string) (EventRecordResponse, error) {
 	results := make([]PublishedEventResult, 0, len(body.GetEvents()))
 	for _, item := range body.GetEvents() {
 		eventID := ""
@@ -33,6 +30,13 @@ func cdcEventResponse(body *connectv1.PublishCdcEventsResponse, fallbackKey, req
 	if len(results) > 0 {
 		duplicate = results[0].Duplicate
 	}
+	if len(results) == 0 && body.GetAcceptedCount() == 0 && body.GetDuplicateCount() == 0 {
+		return EventRecordResponse{}, &Error{
+			Code:      "MEDALLION_INVALID_PUBLISH_RESPONSE",
+			RequestID: requestID,
+			Message:   "Medallion returned an empty event publish acknowledgement",
+		}
+	}
 	return EventRecordResponse{
 		RequestID:      requestID,
 		IdempotencyKey: firstEventKey(results, fallbackKey),
@@ -42,10 +46,10 @@ func cdcEventResponse(body *connectv1.PublishCdcEventsResponse, fallbackKey, req
 		DuplicateCount: body.GetDuplicateCount(),
 		Events:         results,
 		Proto:          body,
-	}
+	}, nil
 }
 
-func auditEventResponse(body *connectv1.PublishAuditEventsResponse, fallbackKey, requestID string) AuditRecordResponse {
+func auditEventResponse(body *connectv1.PublishAuditEventsResponse, fallbackKey, requestID string) (AuditRecordResponse, error) {
 	results := make([]PublishedAuditEventResult, 0, len(body.GetEvents()))
 	for _, item := range body.GetEvents() {
 		eventID := ""
@@ -67,6 +71,13 @@ func auditEventResponse(body *connectv1.PublishAuditEventsResponse, fallbackKey,
 	if len(results) > 0 && results[0].IdempotencyKey != "" {
 		key = results[0].IdempotencyKey
 	}
+	if len(results) == 0 && body.GetAcceptedCount() == 0 && body.GetDuplicateCount() == 0 {
+		return AuditRecordResponse{}, &Error{
+			Code:      "MEDALLION_INVALID_PUBLISH_RESPONSE",
+			RequestID: requestID,
+			Message:   "Medallion returned an empty event publish acknowledgement",
+		}
+	}
 	return AuditRecordResponse{
 		RequestID:      requestID,
 		IdempotencyKey: key,
@@ -76,7 +87,7 @@ func auditEventResponse(body *connectv1.PublishAuditEventsResponse, fallbackKey,
 		DuplicateCount: body.GetDuplicateCount(),
 		Events:         results,
 		Proto:          body,
-	}
+	}, nil
 }
 
 func firstEventKey(events []PublishedEventResult, fallbackKey string) string {
@@ -110,9 +121,13 @@ func auditTrailLimit(limit, pageSize int) (uint32, error) {
 func auditEventFromConnect(item *connectv1.AuditEvent) AuditTrailEvent {
 	payload := parsePayload(item.GetPayloadJson())
 	payloadRecord := asMap(payload)
-	actor := actorFromPayload(payloadRecord["actor"])
-	if actor == nil {
-		actor = actorFromPrincipal(item.GetActorPrincipal())
+	actor := actorFromPrincipal(item.GetActorPrincipal())
+	payloadActor := actorFromPayload(payloadRecord["actor"])
+	if payloadActor != nil {
+		normalized, err := normalizeActor(*payloadActor)
+		if err == nil && actorPrincipalFromRef(normalized) == item.GetActorPrincipal() {
+			actor = payloadActor
+		}
 	}
 	eventID := ""
 	if item.GetId() != 0 {
@@ -139,8 +154,70 @@ func auditEventFromConnect(item *connectv1.AuditEvent) AuditTrailEvent {
 		After:             payloadRecord["after"],
 		EvidenceURL:       stringValue(payloadRecord["evidenceUrl"]),
 		SourceEventID:     item.GetSourceEventId(),
+		SourceSystem:      item.GetSourceSystem(),
+		Origin:            auditOriginFromProto(item.GetOrigin()),
+		Outcome:           auditOutcomeFromProto(item.GetOutcome()),
 		Payload:           payload,
 		Proto:             item,
+	}
+}
+
+func auditOutcomeProto(value AuditOutcome, optional bool) (connectv1.AuditEventOutcome, error) {
+	switch value {
+	case AuditOutcomeSucceeded:
+		return connectv1.AuditEventOutcome_AUDIT_EVENT_OUTCOME_SUCCEEDED, nil
+	case AuditOutcomeFailed:
+		return connectv1.AuditEventOutcome_AUDIT_EVENT_OUTCOME_FAILED, nil
+	case AuditOutcomeIndeterminate:
+		return connectv1.AuditEventOutcome_AUDIT_EVENT_OUTCOME_INDETERMINATE, nil
+	case "":
+		if optional {
+			return connectv1.AuditEventOutcome_AUDIT_EVENT_OUTCOME_UNSPECIFIED, nil
+		}
+	}
+	return connectv1.AuditEventOutcome_AUDIT_EVENT_OUTCOME_UNSPECIFIED, &Error{
+		Code:    "MEDALLION_INVALID_AUDIT_OUTCOME",
+		Message: "audit outcome must be succeeded, failed, or indeterminate",
+	}
+}
+
+func auditOriginProto(value AuditOrigin) (connectv1.AuditEventOrigin, error) {
+	switch value {
+	case "":
+		return connectv1.AuditEventOrigin_AUDIT_EVENT_ORIGIN_UNSPECIFIED, nil
+	case AuditOriginExternalProvider:
+		return connectv1.AuditEventOrigin_AUDIT_EVENT_ORIGIN_EXTERNAL_PROVIDER, nil
+	case AuditOriginConnect:
+		return connectv1.AuditEventOrigin_AUDIT_EVENT_ORIGIN_CONNECT, nil
+	default:
+		return connectv1.AuditEventOrigin_AUDIT_EVENT_ORIGIN_UNSPECIFIED, &Error{
+			Code:    "MEDALLION_INVALID_AUDIT_ORIGIN",
+			Message: "audit origin must be external_provider or connect",
+		}
+	}
+}
+
+func auditOutcomeFromProto(value connectv1.AuditEventOutcome) AuditOutcome {
+	switch value {
+	case connectv1.AuditEventOutcome_AUDIT_EVENT_OUTCOME_SUCCEEDED:
+		return AuditOutcomeSucceeded
+	case connectv1.AuditEventOutcome_AUDIT_EVENT_OUTCOME_FAILED:
+		return AuditOutcomeFailed
+	case connectv1.AuditEventOutcome_AUDIT_EVENT_OUTCOME_INDETERMINATE:
+		return AuditOutcomeIndeterminate
+	default:
+		return ""
+	}
+}
+
+func auditOriginFromProto(value connectv1.AuditEventOrigin) AuditOrigin {
+	switch value {
+	case connectv1.AuditEventOrigin_AUDIT_EVENT_ORIGIN_EXTERNAL_PROVIDER:
+		return AuditOriginExternalProvider
+	case connectv1.AuditEventOrigin_AUDIT_EVENT_ORIGIN_CONNECT:
+		return AuditOriginConnect
+	default:
+		return ""
 	}
 }
 
@@ -214,18 +291,10 @@ func cdcOperation(operation string) connectv1.CdcOperation {
 }
 
 func entityIDFromPrimaryKey(primaryKey map[string]string) string {
-	if len(primaryKey) == 1 {
-		for _, value := range primaryKey {
-			return value
-		}
+	for _, value := range primaryKey {
+		return value
 	}
-	// encoding/json emits map keys in lexicographic order. Disabling HTML
-	// escaping keeps the compact projection consistent with the other SDKs.
-	var encoded bytes.Buffer
-	encoder := json.NewEncoder(&encoded)
-	encoder.SetEscapeHTML(false)
-	_ = encoder.Encode(primaryKey)
-	return strings.TrimSuffix(encoded.String(), "\n")
+	return ""
 }
 
 func normalizeOptionalID(value any, path string) (string, error) {
@@ -274,13 +343,43 @@ func stringValue(value any) string {
 	return ""
 }
 
-func idempotencyKey(value string) string {
-	if value != "" {
-		return value
+func requiredEventIdempotencyKey(value, field string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", &Error{
+			Code:    "MEDALLION_MISSING_IDEMPOTENCY_KEY",
+			Message: field + " is required for retry-safe delivery",
+		}
 	}
-	var raw [16]byte
-	if _, err := rand.Read(raw[:]); err != nil {
-		return "idem"
+	if len(value) > 512 {
+		return "", &Error{
+			Code:    "MEDALLION_INVALID_IDEMPOTENCY_KEY",
+			Message: field + " must not exceed 512 bytes",
+		}
 	}
-	return hex.EncodeToString(raw[:])
+	return value, nil
+}
+
+func requiredControlIdempotencyKey(value, field string) (string, error) {
+	if value == "" {
+		return "", &Error{
+			Code:    "MEDALLION_MISSING_IDEMPOTENCY_KEY",
+			Message: field + " is required for retry-safe mutation",
+		}
+	}
+	if len(value) > 256 {
+		return "", &Error{
+			Code:    "MEDALLION_INVALID_IDEMPOTENCY_KEY",
+			Message: field + " must be at most 256 bytes of visible ASCII without spaces",
+		}
+	}
+	for index := 0; index < len(value); index++ {
+		if value[index] < '!' || value[index] > '~' {
+			return "", &Error{
+				Code:    "MEDALLION_INVALID_IDEMPOTENCY_KEY",
+				Message: field + " must be at most 256 bytes of visible ASCII without spaces",
+			}
+		}
+	}
+	return value, nil
 }

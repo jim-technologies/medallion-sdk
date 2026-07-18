@@ -2,7 +2,7 @@
 
 Public multi-language SDK for Medallion. TypeScript is currently the broadest client; Go and Python cover the Connect-backed server integration path for datasource registration, audit, and CDC.
 
-Status: pre-1.0 public SDK. Treat pinned tags or SHAs as the stable install boundary, and integration-test the auth path against the target Medallion service environment before using it for production traffic. The TypeScript protocol layer uses invariantprotocol v0.7.1 with vendored Connect, Ontology, and Storage descriptors.
+Status: pre-1.0 public SDK. Treat pinned tags or SHAs as the stable install boundary, and integration-test the auth path against the target Medallion service environment before using it for production traffic. The TypeScript protocol layer uses invariantprotocol v0.8.3 with vendored Connect, Ontology, and Storage descriptors.
 
 The TypeScript SDK currently includes:
 
@@ -14,7 +14,12 @@ The TypeScript SDK currently includes:
 
 Ontology writes, storage catalog management beyond upload, and broad action administration are intentionally not part of this first SDK surface.
 
-Go and Python currently include the Connect-backed server integration path only. Their low-level Connect message types are generated from the vendored public protobuf contract under `proto/medallion/connect/v1/connect.proto`.
+Go and Python currently include the Connect-backed server integration path
+only. Their low-level Connect message types are generated from the bounded
+initial client subset under `proto/medallion/connect/v1/connect.proto`. Shared
+types and RPCs are wire- and validation-identical to the canonical Connect
+contract; connector installation, secret, authorization, and broad connection
+administration APIs are outside this initial SDK surface.
 
 ## Install
 
@@ -117,7 +122,8 @@ await medallion.audit.record({
     type: "user",
     id: "user_123",
   },
-  action: "order.cancelled",
+  action: "cancel",
+  outcome: "succeeded",
   resource: {
     type: "order",
     id: "order_123",
@@ -134,7 +140,9 @@ const trail = await medallion.audit.trail({
   actor: { type: "user", id: "user_123" },
   resourceType: "order",
   resourceId: "order_123",
-  action: "order.cancelled",
+  action: "cancel",
+  origin: "external_provider",
+  outcome: "succeeded",
   limit: 25,
 });
 
@@ -155,13 +163,20 @@ if (event.evidenceUrl !== "https://example.com/deployments/orders-worker/abc123"
 }
 ```
 
-The bearer credential identifies the ingester service account. `audit.record({ actor })` is the source application actor, such as the user who cancelled an order. The SDK maps that source actor to Connect `actor_principal`. Connect records the authenticated ingester as `ingested_by_principal`; `audit.trail()` exposes it as `ingesterPrincipal`.
+The bearer credential identifies the ingester service account. `audit.record({ actor })` is the source application actor, such as the user who cancelled an order. Every audit and CDC publish requires a stable, source-derived idempotency key; reuse that key for retries of the same source event and never generate a new one per attempt. Control-plane mutations such as datasource registration likewise require a stable idempotency key for the logical mutation. Every audit publish also requires the explicit typed `outcome`; keep `action` as one stable source-operation key rather than encoding the outcome in the verb. The SDK maps the source actor to Connect `actor_principal`. Connect records the authenticated ingester as `ingested_by_principal`; `audit.trail()` exposes it as `ingesterPrincipal`, plus server-derived `origin` and the authoritative `outcome`.
 
 The same flow is available as [examples/audit-trail.ts](./examples/audit-trail.ts).
 
 ## CDC Events
 
 ```ts
+const registered = await medallion.datasources.register({
+  name: "primary_postgres",
+  type: "postgres",
+  idempotencyKey: "register_primary_postgres",
+  displayName: "Primary Postgres",
+});
+
 await medallion.cdc.record({
   connectorId: registered.datasource.id,
   source: "primary_postgres",
@@ -180,12 +195,16 @@ await medallion.cdc.record({
 });
 ```
 
+Datasource `metadata` is an optional caller-side annotation copied into the
+returned ergonomic object; the current Connect `RegisterConnector` contract
+does not persist it.
+
 ## Event Source Examples
 
 Use a datasource/connector per source namespace, then set event fields consistently:
 
 - Postgres: `type: "postgres"`, `name: "primary_postgres"`, CDC `source: "primary_postgres"`, `table: "orders"`.
-- Application audit logs: `type: "medallion_audit_logs"`, resources like `order/order_123`, and actions like `order.cancelled`.
+- Application audit logs: `type: "medallion_audit_logs"`, resources like `order/order_123`, stable action keys like `cancel`, and an explicit outcome.
 - GitHub: mirror source-state changes through CDC; record access or mutations through audit actions such as `github.pull_request.merge` on a repository resource.
 - Google Analytics: treat observations as typed metrics rather than CDC or audit events.
 - Vercel: mirror deployment state through CDC; record operator actions through audit on the deployment resource.
@@ -204,7 +223,8 @@ const medallion = new MedallionClient({
 
 await medallion.audit.record({
   actor: { type: "user", id: "user_123" },
-  action: "order.cancelled",
+  action: "cancel",
+  outcome: "succeeded",
   resource: { type: "order", id: "order_123" },
   after: { status: "cancelled" },
   idempotencyKey: "order_123_cancelled",
@@ -214,10 +234,15 @@ const trail = await medallion.audit.trail({
   resourceType: "order",
   resourceId: "order_123",
   actor: { type: "user", id: "user_123" },
+  action: "cancel",
+  origin: "external_provider",
+  outcome: "succeeded",
   limit: 10,
 });
 
-const cancellation = trail.events.find((event) => event.action === "order.cancelled");
+const cancellation = trail.events.find(
+  (event) => event.action === "cancel" && event.outcome === "succeeded",
+);
 console.log(cancellation?.actor);
 console.log(cancellation?.ingesterPrincipal);
 ```
@@ -260,13 +285,15 @@ medallion = MedallionClient(
 registered = medallion.connect.register_datasource(
     name="primary_postgres",
     type="postgres",
+    idempotency_key="register_primary_postgres",
     display_name="Primary Postgres",
 )
 
 medallion.audit.record(
     connector_id=registered.datasource.id,
     actor={"type": "user", "id": "user_123"},
-    action="order.cancelled",
+    action="cancel",
+    outcome="succeeded",
     resource={"type": "order", "id": "order_123"},
     after={"status": "cancelled"},
     idempotency_key="order_123_cancelled",
@@ -292,9 +319,10 @@ if err != nil {
 }
 
 registered, err := client.Connect.RegisterDatasource(ctx, medallion.DatasourceRegistration{
-	Name:        "primary_postgres",
-	Type:        "postgres",
-	DisplayName: "Primary Postgres",
+	Name:           "primary_postgres",
+	Type:           "postgres",
+	IdempotencyKey: "register_primary_postgres",
+	DisplayName:    "Primary Postgres",
 })
 if err != nil {
 	return err
@@ -303,9 +331,11 @@ if err != nil {
 _, err = client.Audit.Record(ctx, medallion.AuditRecord{
 	ConnectorID: registered.Datasource.ID,
 	Actor:      medallion.ActorRef{Type: "user", ID: "user_123"},
-	Action:     "order.cancelled",
+	Action:     "cancel",
+	Outcome:    medallion.AuditOutcomeSucceeded,
 	Resource:   medallion.ResourceRef{Type: "order", ID: "order_123"},
 	After:      map[string]any{"status": "cancelled"},
+	IdempotencyKey: "order_123_cancelled",
 })
 ```
 
@@ -333,6 +363,11 @@ const execution = await medallion.ontology.executeAction({
   idempotencyKey: "order_123_cancel_action",
 });
 ```
+
+`executeAction()` reports the persisted invocation status. It intentionally
+does not invent a `duplicate` flag because the current Ontology response does
+not expose replay metadata. Its idempotency key is also required and must be
+reused for retries of the same intended action.
 
 ## Storage Upload
 
@@ -388,13 +423,16 @@ The SDK converts safe integer numbers and bigint values to strings. It rejects u
 
 This applies to actor IDs, resource IDs, datasource external IDs, CDC primary keys, entity IDs, source event IDs, and other ID-bearing fields.
 
-For CDC, a one-field primary key uses that field's value as `entity_id`. A composite primary key uses the JSON encoding of the complete key object with fields sorted lexicographically; no column name receives special treatment. Callers may pass an explicit `entityId` when their source already has a canonical entity identifier.
+For CDC, a one-field primary key uses that field's value as `entity_id`. A composite primary key must include an explicit, source-canonical `entityId` (`entity_id` in Python) so identity does not depend on language-specific object serialization. The complete primary key remains in `payload_json`.
 
 ## Idempotency
 
-Write helpers accept `idempotencyKey`. The SDK sends it in the request body where the backend contract requires it and as the `Idempotency-Key` HTTP header.
-
-If omitted, the SDK generates a request idempotency key so the backend contract can be satisfied. Pass an explicit stable key for retryable application writes.
+Write helpers accept `idempotencyKey`. The SDK sends it in the request body
+where the backend contract requires it and as the `Idempotency-Key` HTTP
+header. Datasource registration, audit, CDC, and action execution require a caller-supplied stable key;
+reuse the same key for every retry of one logical operation. Storage upload
+currently leaves the key optional, but callers should provide one whenever the
+write may be retried. The SDK never invents a new event or action key.
 
 ## Tracing
 
@@ -448,25 +486,21 @@ new MedallionClient({
 
 ## Contributor Setup
 
-Consumers do not need Flox to install or use the package.
-
-For repository development:
-
-```sh
-flox activate
-make install
-make check
-```
-
-Without Flox, install Node.js 24 or newer, pnpm 11.13, Go 1.26.5,
-Python 3.14, and uv, then run the same targets:
+Git consumers do not need Flox to install or use an SDK. For repository
+development and CI, Flox is the only toolchain bootstrap:
 
 ```sh
-make install
-make check
+flox activate -- make install
+flox activate -- make check
+flox activate -- make audit
 ```
 
-Root `make` targets run TypeScript, Go, and Python checks.
+The root Flox lock supplies every language runtime, package manager, formatter,
+linter, schema checker, secret scanner, and shell/workflow checker. It also
+runs version-pinned Go and Python dependency scanners through the locked Go and
+uv toolchains. Flox resolves the project-pinned pnpm 11.13.1, while GitHub
+Actions uses the same lock plus the small `.ci/node-24` Flox lock to verify the
+oldest supported Node runtime.
 
 ## Deployed Smoke
 
@@ -480,26 +514,33 @@ export MEDALLION_SMOKE_CONNECTOR_ID="conn_123" # optional; omitted means the tes
 export MEDALLION_SMOKE_EXPECTED_INGESTER_PRINCIPAL="service_account:orders-worker"
 export MEDALLION_SMOKE_DENIED_ORGANIZATION_ID="org_denied" # optional cross-tenant denial check
 
-make test-deployed
+flox activate -- make test-deployed
 ```
 
 The smoke registers a datasource when needed, records an audit event, reads it back through `audit.trail()`, and asserts source actor, ingester, resource, action, before/after, and evidence URL fields.
 
+GitHub Actions exposes the same check through the manual `deployed_smoke`
+workflow input. Configure the protected `sdk-smoke` environment with the four
+required variables above as environment secrets; the connector, denied
+organization, and evidence URL variables remain optional.
+
 ## Validation
 
 ```sh
-make help
-make check
-make test
-make build
+flox activate -- make help
+flox activate -- make format
+flox activate -- make check
+flox activate -- make audit
+flox activate -- make git-install-check
 ```
 
 `test/compatibility.test.ts` fails if SDK route constants drift from the vendored public client-facing route manifest in `proto/client-facing-routes.json` or the generated Connect, Ontology, and Storage descriptors. `test/integration.test.ts` runs the SDK against an in-process HTTP server and verifies the public client methods hit actual backend route shapes with auth and idempotency headers.
 
-When vendored proto contracts change, regenerate TypeScript descriptors with:
+When vendored proto contracts change, regenerate every checked-in binding and
+descriptor, then verify there is no drift:
 
 ```sh
-pnpm proto:descriptor
+flox activate -- make proto-bindings proto-descriptor generated-check
 ```
 
 Go and Python already use generated Connect protobuf bindings for their Connect-backed surface.

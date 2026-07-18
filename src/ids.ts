@@ -47,7 +47,9 @@ export function actorPrincipalFromRef(actor: NormalizedActorRef): string {
   return parts.join(":");
 }
 
-export function normalizeResourceRef(resource: ResourceRef): NormalizedResourceRef {
+export function normalizeResourceRef(
+  resource: ResourceRef,
+): NormalizedResourceRef {
   return {
     ...resource,
     id: normalizeId(resource.id, "resource.id"),

@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -34,7 +37,16 @@ func newRequestClient(cfg ClientConfig) (*requestClient, error) {
 	if baseURL == "" {
 		return nil, invalidOptions("base URL is required")
 	}
-	token := strings.TrimSpace(firstNonEmpty(cfg.AccessToken, cfg.APIKey))
+	parsedBaseURL, err := url.Parse(baseURL)
+	if err != nil ||
+		(parsedBaseURL.Scheme != "http" && parsedBaseURL.Scheme != "https") ||
+		parsedBaseURL.Host == "" ||
+		parsedBaseURL.User != nil ||
+		parsedBaseURL.RawQuery != "" ||
+		parsedBaseURL.Fragment != "" {
+		return nil, invalidOptions("base URL must be an absolute HTTP(S) URL without credentials, query, or fragment")
+	}
+	token := firstNonBlank(cfg.AccessToken, cfg.APIKey)
 	if token == "" {
 		return nil, invalidOptions("API key or access token is required")
 	}
@@ -52,7 +64,6 @@ func (c *requestClient) postProto(ctx context.Context, path string, req proto.Me
 	}
 
 	raw, err := protojson.MarshalOptions{
-		UseProtoNames:   true,
 		EmitUnpopulated: false,
 	}.Marshal(req)
 	if err != nil {
@@ -64,7 +75,11 @@ func (c *requestClient) postProto(ctx context.Context, path string, req proto.Me
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
 	if err != nil {
 		recordRequestSpanError(span, err)
-		return protoEnvelope{}, err
+		return protoEnvelope{}, &Error{
+			Code:    "MEDALLION_INVALID_OPTIONS",
+			Message: "Medallion base URL is invalid",
+			Cause:   err,
+		}
 	}
 	httpReq.Header.Set("Accept", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+c.token)
@@ -78,14 +93,29 @@ func (c *requestClient) postProto(ctx context.Context, path string, req proto.Me
 	httpResp, err := c.http.Do(httpReq)
 	if err != nil {
 		recordRequestSpanError(span, err)
-		return protoEnvelope{}, &Error{Code: "MEDALLION_NETWORK_ERROR", Message: "Medallion request failed"}
+		code := "MEDALLION_NETWORK_ERROR"
+		message := "Medallion request failed"
+		var netErr net.Error
+		switch {
+		case errors.Is(err, context.Canceled):
+			code = "MEDALLION_ABORTED"
+			message = "Medallion request was aborted"
+		case errors.Is(err, context.DeadlineExceeded), errors.As(err, &netErr) && netErr.Timeout():
+			code = "MEDALLION_TIMEOUT"
+			message = "Medallion request timed out"
+		}
+		return protoEnvelope{}, &Error{Code: code, Message: message, Cause: err}
 	}
 	defer httpResp.Body.Close()
 
 	responseRaw, readErr := io.ReadAll(httpResp.Body)
 	if readErr != nil {
 		recordRequestSpanError(span, readErr)
-		return protoEnvelope{}, readErr
+		return protoEnvelope{}, &Error{
+			Code:    "MEDALLION_NETWORK_ERROR",
+			Message: "Medallion response body could not be read",
+			Cause:   readErr,
+		}
 	}
 	requestID := httpResp.Header.Get("x-request-id")
 	setRequestSpanResponse(span, httpResp.StatusCode, requestID)
@@ -101,7 +131,12 @@ func (c *requestClient) postProto(ctx context.Context, path string, req proto.Me
 	if len(responseRaw) > 0 && resp != nil {
 		if err := (protojson.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(responseRaw, resp); err != nil {
 			recordRequestSpanError(span, err)
-			return protoEnvelope{}, &Error{Code: "MEDALLION_INVALID_JSON_RESPONSE", Message: "Medallion response was not valid protobuf JSON"}
+			return protoEnvelope{}, &Error{
+				Code:      "MEDALLION_INVALID_JSON_RESPONSE",
+				RequestID: requestID,
+				Message:   "Medallion response was not valid protobuf JSON",
+				Cause:     err,
+			}
 		}
 	}
 	setRequestSpanOK(span)
@@ -134,6 +169,15 @@ func firstNonEmpty(values ...string) string {
 	for _, value := range values {
 		if value != "" {
 			return value
+		}
+	}
+	return ""
+}
+
+func firstNonBlank(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
 		}
 	}
 	return ""

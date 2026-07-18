@@ -46,7 +46,7 @@ type ConnectClient struct {
 
 func (c *ConnectClient) RegisterConnector(ctx context.Context, request *connectv1.RegisterConnectorRequest) (*connectv1.RegisterConnectorResponse, string, error) {
 	response := &connectv1.RegisterConnectorResponse{}
-	envelope, err := c.requests.postProto(ctx, registerConnectorPath, request, response, "")
+	envelope, err := c.requests.postProto(ctx, registerConnectorPath, request, response, request.GetIdempotencyKey())
 	if err != nil {
 		return nil, "", err
 	}
@@ -94,6 +94,10 @@ func (c *ConnectClient) RegisterDatasource(ctx context.Context, input Datasource
 	if strings.TrimSpace(org) == "" {
 		return RegisterDatasourceResponse{}, missingOption("MEDALLION_MISSING_ORGANIZATION_ID", "organization ID is required to register a datasource")
 	}
+	idempotencyKey, err := requiredControlIdempotencyKey(input.IdempotencyKey, "datasource.idempotencyKey")
+	if err != nil {
+		return RegisterDatasourceResponse{}, err
+	}
 	displayName := input.DisplayName
 	if displayName == "" {
 		displayName = input.Name
@@ -108,11 +112,19 @@ func (c *ConnectClient) RegisterDatasource(ctx context.Context, input Datasource
 		SourceSystem:   input.Name,
 		DisplayName:    displayName,
 		ExternalId:     externalID,
+		IdempotencyKey: idempotencyKey,
 	})
 	if err != nil {
 		return RegisterDatasourceResponse{}, err
 	}
 	connector := protoResponse.GetConnector()
+	if connector == nil || strings.TrimSpace(connector.GetId()) == "" {
+		return RegisterDatasourceResponse{}, &Error{
+			Code:      "MEDALLION_INVALID_DATASOURCE_RESPONSE",
+			RequestID: requestID,
+			Message:   "Medallion returned a datasource registration without a connector ID",
+		}
+	}
 	datasource := datasourceFromConnector(connector, input.Metadata)
 	return RegisterDatasourceResponse{
 		RequestID:  requestID,
@@ -168,7 +180,14 @@ func (c *AuditClient) Record(ctx context.Context, input AuditRecord) (AuditRecor
 	if err != nil {
 		return AuditRecordResponse{}, err
 	}
-	key := idempotencyKey(input.IdempotencyKey)
+	outcome, err := auditOutcomeProto(input.Outcome, false)
+	if err != nil {
+		return AuditRecordResponse{}, err
+	}
+	key, err := requiredEventIdempotencyKey(input.IdempotencyKey, "audit.idempotencyKey")
+	if err != nil {
+		return AuditRecordResponse{}, err
+	}
 	event := &connectv1.AuditEvent{
 		ResourceType:   resource["type"],
 		ResourceId:     resource["id"],
@@ -179,6 +198,7 @@ func (c *AuditClient) Record(ctx context.Context, input AuditRecord) (AuditRecor
 		Description:    input.Description,
 		Action:         input.Action,
 		SourceEventId:  sourceEventID,
+		Outcome:        outcome,
 	}
 	response, requestID, err := c.connect.PublishAuditEvents(ctx, &connectv1.PublishAuditEventsRequest{
 		ConnectorId: connectorID,
@@ -187,7 +207,7 @@ func (c *AuditClient) Record(ctx context.Context, input AuditRecord) (AuditRecor
 	if err != nil {
 		return AuditRecordResponse{}, err
 	}
-	return auditEventResponse(response, key, requestID), nil
+	return auditEventResponse(response, key, requestID)
 }
 
 func (c *AuditClient) Trail(ctx context.Context, input AuditTrailQuery) (AuditTrailResponse, error) {
@@ -224,6 +244,14 @@ func (c *AuditClient) Trail(ctx context.Context, input AuditTrailQuery) (AuditTr
 		PageCursor:          input.Cursor,
 		IngestedByPrincipal: strings.TrimSpace(input.IngesterPrincipal),
 	}
+	request.Origin, err = auditOriginProto(input.Origin)
+	if err != nil {
+		return AuditTrailResponse{}, err
+	}
+	request.Outcome, err = auditOutcomeProto(input.Outcome, true)
+	if err != nil {
+		return AuditTrailResponse{}, err
+	}
 	if sourceActor != nil {
 		request.ActorPrincipal = actorPrincipalFromRef(sourceActor)
 	}
@@ -257,6 +285,9 @@ func (c *CDCClient) Record(ctx context.Context, input CDCEvent) (EventRecordResp
 	}
 	if len(primaryKey) == 0 {
 		return EventRecordResponse{}, &Error{Code: "MEDALLION_EMPTY_CDC_PRIMARY_KEY", Message: "cdc.primaryKey must contain at least one field"}
+	}
+	if len(primaryKey) > 1 && input.EntityID == nil {
+		return EventRecordResponse{}, &Error{Code: "MEDALLION_MISSING_CDC_ENTITY_ID", Message: "cdc.entityId is required when cdc.primaryKey contains more than one field"}
 	}
 	entityID := ""
 	if input.EntityID != nil {
@@ -296,7 +327,10 @@ func (c *CDCClient) Record(ctx context.Context, input CDCEvent) (EventRecordResp
 	if err != nil {
 		return EventRecordResponse{}, err
 	}
-	key := idempotencyKey(input.IdempotencyKey)
+	key, err := requiredEventIdempotencyKey(input.IdempotencyKey, "cdc.idempotencyKey")
+	if err != nil {
+		return EventRecordResponse{}, err
+	}
 	event := &connectv1.CdcEvent{
 		StreamName:     input.Table,
 		EntityType:     firstNonEmpty(input.EntityType, input.Table),
@@ -318,5 +352,5 @@ func (c *CDCClient) Record(ctx context.Context, input CDCEvent) (EventRecordResp
 	if err != nil {
 		return EventRecordResponse{}, err
 	}
-	return cdcEventResponse(response, key, requestID), nil
+	return cdcEventResponse(response, key, requestID)
 }

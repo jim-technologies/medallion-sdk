@@ -25,12 +25,14 @@ describe("MedallionClient", () => {
   });
 
   it("supports base URLs with a path prefix", async () => {
-    const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
-      return new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    });
+    const fetch = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) => {
+        return new Response(JSON.stringify({ accepted_count: 1 }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    );
     const client = new MedallionClient({
       baseUrl: "https://api.example.com/connect",
       apiKey: "test_api_key",
@@ -40,7 +42,8 @@ describe("MedallionClient", () => {
 
     await client.audit.record({
       actor: { type: "user", id: "user_123" },
-      action: "checkout.started",
+      action: "start",
+      outcome: "succeeded",
       resource: { type: "checkout", id: "checkout_123" },
       idempotencyKey: "checkout_started_123",
     });

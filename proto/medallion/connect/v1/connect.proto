@@ -63,6 +63,23 @@ enum CdcOperation {
   CDC_OPERATION_SNAPSHOT = 4;
 }
 
+// AuditEventOrigin identifies who authored an audit fact. The server derives
+// this value; audit publishers must leave it unspecified.
+enum AuditEventOrigin {
+  AUDIT_EVENT_ORIGIN_UNSPECIFIED = 0;
+  AUDIT_EVENT_ORIGIN_EXTERNAL_PROVIDER = 1;
+  AUDIT_EVENT_ORIGIN_CONNECT = 2;
+}
+
+// AuditEventOutcome is Connect's authoritative classification of the audited
+// action result. Audit publishers must provide a concrete value.
+enum AuditEventOutcome {
+  AUDIT_EVENT_OUTCOME_UNSPECIFIED = 0;
+  AUDIT_EVENT_OUTCOME_SUCCEEDED = 1;
+  AUDIT_EVENT_OUTCOME_FAILED = 2;
+  AUDIT_EVENT_OUTCOME_INDETERMINATE = 3;
+}
+
 // ActionExecutionStatus is the durable state of a connector action execution.
 enum ActionExecutionStatus {
   // No status was specified.
@@ -85,11 +102,20 @@ message Connector {
   // Server-assigned prefixed UUIDv7 connector id.
   string id = 1 [(buf.validate.field).string.min_len = 1];
   // Tenant/organization that owns the connector.
-  string organization_id = 2 [(buf.validate.field).string.min_len = 1];
+  string organization_id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 128
+  }];
   // Connector class, such as cdc or api.
-  string kind = 3 [(buf.validate.field).string.min_len = 1];
+  string kind = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 64
+  }];
   // External source system key, such as postgres, salesforce, or netsuite.
-  string source_system = 4 [(buf.validate.field).string.min_len = 1];
+  string source_system = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 256
+  }];
   // Human-readable connector name.
   string display_name = 5 [(buf.validate.field).string.min_len = 1];
   // Opaque source-system connector/account/database id. May be any stable
@@ -110,26 +136,38 @@ message CdcEvent {
   int64 id = 1;
   // Tenant/organization that owns the event. Derived from the connector on
   // ingest.
-  string organization_id = 2;
+  string organization_id = 2 [(buf.validate.field).string.max_bytes = 128];
   // Connector that accepted the event.
-  string connector_id = 3;
+  string connector_id = 3 [(buf.validate.field).string.max_bytes = 128];
   // Source stream/table/topic name.
-  string stream_name = 4 [(buf.validate.field).string.min_len = 1];
+  string stream_name = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 256
+  }];
   // Source entity type.
-  string entity_type = 5 [(buf.validate.field).string.min_len = 1];
+  string entity_type = 5 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 256
+  }];
   // Opaque source-system entity id. May be UUID, UUIDv7, ULID, Snowflake,
   // integer-as-string, compound key, or any other stable source identifier.
-  string entity_id = 6 [(buf.validate.field).string.min_len = 1];
+  string entity_id = 6 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 1024
+  }];
   // CDC operation.
   CdcOperation operation = 7;
   // Opaque source-system event id, when the source provides one.
-  string source_event_id = 8;
-  // Idempotency key scoped to connector_id.
-  string idempotency_key = 9 [(buf.validate.field).string.min_len = 1];
+  string source_event_id = 8 [(buf.validate.field).string.max_bytes = 1024];
+  // Idempotency key scoped to connector_id and stream_name.
+  string idempotency_key = 9 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 512
+  }];
   // Source/application actor that performed the source action. This is a
   // source fact supplied by trusted connector ingestion and is separate from the
   // authenticated principal that submitted the event.
-  string actor_principal = 10;
+  string actor_principal = 10 [(buf.validate.field).string.max_bytes = 512];
   // Compact low-level event payload as JSON. Large before/after evidence should
   // be stored externally and referenced with fields such as evidence_uri,
   // before_ref, and after_ref.
@@ -139,12 +177,12 @@ message CdcEvent {
   // Time medallion-connect accepted the event.
   google.protobuf.Timestamp observed_at = 13;
   // Optional human-readable note describing this change.
-  string description = 14;
+  string description = 14 [(buf.validate.field).string.max_bytes = 4096];
   // Source system copied from the connector for read routing and lake projection.
-  string source_system = 15;
+  string source_system = 15 [(buf.validate.field).string.max_bytes = 256];
   // Stable authenticated principal that submitted this event to
   // medallion-connect.
-  string ingested_by_principal = 16;
+  string ingested_by_principal = 16 [(buf.validate.field).string.max_bytes = 512];
 }
 
 // AuditEvent is the canonical durable audit record. Caller-supplied identity and
@@ -154,22 +192,35 @@ message AuditEvent {
   // PostgreSQL-assigned durable 64-bit ledger identity.
   int64 id = 1;
   // Tenant/organization derived from the connector on ingest.
-  string organization_id = 2;
+  string organization_id = 2 [(buf.validate.field).string.max_bytes = 128];
   // Connector that accepted the event.
-  string connector_id = 3;
+  string connector_id = 3 [(buf.validate.field).string.max_bytes = 128];
   // Type of resource affected by the action.
-  string resource_type = 4 [(buf.validate.field).string.min_len = 1];
+  string resource_type = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 256
+  }];
   // Stable provider-local identifier of the affected resource.
-  string resource_id = 5 [(buf.validate.field).string.min_len = 1];
+  string resource_id = 5 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 1024
+  }];
   // Audit verb, for example "read", "approve", "export", or "delete".
-  string action = 6 [(buf.validate.field).string.min_len = 1];
+  string action = 6 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 256
+  }];
   // Opaque source-system event id, when the source provides one.
-  string source_event_id = 7;
-  // Idempotency key scoped to connector_id.
-  string idempotency_key = 8 [(buf.validate.field).string.min_len = 1];
+  string source_event_id = 7 [(buf.validate.field).string.max_bytes = 1024];
+  // Idempotency key scoped to connector_id and the server-selected audit
+  // stream. External and Connect-authored records have isolated namespaces.
+  string idempotency_key = 8 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 512
+  }];
   // Source/application actor that performed the action. This source fact is
   // separate from the authenticated principal that submitted the event.
-  string actor_principal = 9;
+  string actor_principal = 9 [(buf.validate.field).string.max_bytes = 512];
   // Compact JSON facts or evidence references for the action.
   string payload_json = 10 [(buf.validate.field).string.min_len = 1];
   // Time the source says the action occurred. Defaults to ingest time if absent.
@@ -177,11 +228,17 @@ message AuditEvent {
   // Time medallion-connect accepted the event.
   google.protobuf.Timestamp observed_at = 12;
   // Optional human-readable audit note.
-  string description = 13;
+  string description = 13 [(buf.validate.field).string.max_bytes = 4096];
   // Source system copied from the connector.
-  string source_system = 14;
+  string source_system = 14 [(buf.validate.field).string.max_bytes = 256];
   // Authenticated principal that submitted the event to medallion-connect.
-  string ingested_by_principal = 15;
+  string ingested_by_principal = 15 [(buf.validate.field).string.max_bytes = 512];
+  // Server-derived provenance. Publish requests must leave this unspecified;
+  // ListAuditEvents always returns a concrete value.
+  AuditEventOrigin origin = 16;
+  // Authoritative result of the audited action. Publish requests must provide
+  // a concrete value; ListAuditEvents always returns a concrete value.
+  AuditEventOutcome outcome = 17;
 }
 
 // ConnectorAction describes a low-level operation exposed by a connector.
@@ -189,11 +246,17 @@ message ConnectorAction {
   // Server-assigned prefixed UUIDv7 action id.
   string id = 1 [(buf.validate.field).string.min_len = 1];
   // Tenant/organization that owns the action.
-  string organization_id = 2 [(buf.validate.field).string.min_len = 1];
+  string organization_id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 128
+  }];
   // Connector that owns the action.
   string connector_id = 3 [(buf.validate.field).string.min_len = 1];
   // Connector-local operation key.
-  string operation_key = 4 [(buf.validate.field).string.min_len = 1];
+  string operation_key = 4 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_bytes = 256
+  ];
   // Human-readable action name.
   string display_name = 5 [(buf.validate.field).string.min_len = 1];
   // Human-readable action description.
@@ -204,8 +267,8 @@ message ConnectorAction {
   string output_schema_json = 8;
   // Whether the downstream connector operation supports idempotency.
   bool idempotency_supported = 9;
-  // Action timeout budget in seconds.
-  uint32 timeout_seconds = 10;
+  // Action timeout budget in seconds. The platform maximum is five minutes.
+  uint32 timeout_seconds = 10 [(buf.validate.field).uint32.lte = 300];
   // Current lifecycle state.
   LifecycleStatus status = 11;
   // Time the action row was created.
@@ -219,7 +282,10 @@ message ActionExecution {
   // Server-assigned prefixed UUIDv7 execution id.
   string id = 1 [(buf.validate.field).string.min_len = 1];
   // Tenant/organization that owns the execution.
-  string organization_id = 2 [(buf.validate.field).string.min_len = 1];
+  string organization_id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 128
+  }];
   // Connector that executed the action.
   string connector_id = 3 [(buf.validate.field).string.min_len = 1];
   // Connector action being executed.
@@ -237,7 +303,7 @@ message ActionExecution {
   string response_json = 9;
   // Current execution state.
   ActionExecutionStatus status = 10;
-  // Error text when status is failed.
+  // Error or reconciliation text when status is failed or indeterminate.
   string error_message = 11;
   // Time execution started.
   google.protobuf.Timestamp started_at = 12;
@@ -249,15 +315,34 @@ message ActionExecution {
 message RegisterConnectorRequest {
   // Tenant/organization that should own the connector. The server authorizes
   // this against the authenticated principal.
-  string organization_id = 1 [(buf.validate.field).string.min_len = 1];
+  string organization_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 128
+  }];
   // Connector class, such as cdc or api.
-  string kind = 2 [(buf.validate.field).string.min_len = 1];
+  string kind = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 64
+  }];
   // External source system key.
-  string source_system = 3 [(buf.validate.field).string.min_len = 1];
+  string source_system = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 256
+  }];
   // Human-readable connector name.
-  string display_name = 4 [(buf.validate.field).string.min_len = 1];
+  string display_name = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 512
+  }];
   // Optional source-native connector/account/database id.
-  string external_id = 5;
+  string external_id = 5 [(buf.validate.field).string.max_bytes = 2048];
+  // Caller-stable key for retrying this logical mutation. Reusing the key with
+  // different request fields is rejected.
+  string idempotency_key = 6 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 256
+    pattern: "^[!-~]+$"
+  }];
 }
 
 // RegisterConnectorResponse returns the registered connector.
@@ -270,7 +355,10 @@ message RegisterConnectorResponse {
 message ListConnectorsRequest {
   // Tenant/organization to list. The server authorizes this against the
   // authenticated principal.
-  string organization_id = 1 [(buf.validate.field).string.min_len = 1];
+  string organization_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 128
+  }];
 }
 
 // ListConnectorsResponse contains matching connectors.
@@ -283,6 +371,12 @@ message ListConnectorsResponse {
 message DisableConnectorRequest {
   // Connector id to disable.
   string connector_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Caller-stable key for retrying this logical mutation.
+  string idempotency_key = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 256
+    pattern: "^[!-~]+$"
+  }];
 }
 
 // DisableConnectorResponse returns the disabled connector.
@@ -296,19 +390,39 @@ message RegisterConnectorActionRequest {
   // Connector that owns the operation.
   string connector_id = 1 [(buf.validate.field).string.min_len = 1];
   // Connector-local operation key.
-  string operation_key = 2 [(buf.validate.field).string.min_len = 1];
+  string operation_key = 2 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_bytes = 256
+  ];
   // Human-readable action name.
-  string display_name = 3 [(buf.validate.field).string.min_len = 1];
+  string display_name = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 512
+  }];
   // Human-readable action description.
-  string description = 4;
+  string description = 4 [(buf.validate.field).string.max_bytes = 32768];
   // JSON schema for request_json, when available.
-  string input_schema_json = 5;
+  string input_schema_json = 5 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 262144
+  }];
   // JSON schema for response_json, when available.
-  string output_schema_json = 6;
+  string output_schema_json = 6 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 262144
+  }];
   // Whether the downstream operation supports idempotency.
   bool idempotency_supported = 7;
-  // Action timeout budget in seconds. Defaults to 30.
-  uint32 timeout_seconds = 8;
+  // Action timeout budget in seconds. Defaults to 30 and cannot exceed five
+  // minutes.
+  uint32 timeout_seconds = 8 [(buf.validate.field).uint32.lte = 300];
+  // Caller-stable key for retrying this logical control-plane mutation. This
+  // is separate from an action execution's idempotency key.
+  string idempotency_key = 9 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 256
+    pattern: "^[!-~]+$"
+  }];
 }
 
 // RegisterConnectorActionResponse returns the registered action.
@@ -333,6 +447,12 @@ message ListConnectorActionsResponse {
 message DisableConnectorActionRequest {
   // Connector action id to disable.
   string connector_action_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Caller-stable key for retrying this logical mutation.
+  string idempotency_key = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 256
+    pattern: "^[!-~]+$"
+  }];
 }
 
 // DisableConnectorActionResponse returns the disabled action.
@@ -342,11 +462,15 @@ message DisableConnectorActionResponse {
 }
 
 // ExecuteConnectorActionRequest starts or returns an idempotent execution.
+// Reusing an idempotency key with different request_json is rejected.
 message ExecuteConnectorActionRequest {
   // Connector action id to execute.
   string connector_action_id = 1 [(buf.validate.field).string.min_len = 1];
   // Idempotency key scoped to connector_action_id.
-  string idempotency_key = 2 [(buf.validate.field).string.min_len = 1];
+  string idempotency_key = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 1024
+  }];
   // Deprecated. The server ignores caller-supplied actor_principal and records
   // the authenticated principal instead.
   string actor_principal = 3;
@@ -375,8 +499,12 @@ message GetActionExecutionResponse {
 // PublishCdcEventsRequest publishes a batch of CDC events.
 message PublishCdcEventsRequest {
   // Connector accepting the event batch.
-  string connector_id = 1 [(buf.validate.field).string.min_len = 1];
-  // Events to publish. Each idempotency_key is scoped to connector_id.
+  string connector_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 128
+  }];
+  // Events to publish. Each idempotency_key is scoped to connector_id and the
+  // event's stream_name.
   repeated CdcEvent events = 2 [(buf.validate.field).repeated = {
     min_items: 1
     max_items: 1000
@@ -407,29 +535,32 @@ message PublishCdcEventsResponse {
 message ListCdcEventsRequest {
   // Tenant/organization to query. The server authorizes this against the
   // authenticated principal.
-  string organization_id = 1 [(buf.validate.field).string.min_len = 1];
+  string organization_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 128
+  }];
   // Optional connector id filter.
-  string connector_id = 2;
+  string connector_id = 2 [(buf.validate.field).string.max_bytes = 128];
   // Optional source entity type filter.
-  string entity_type = 3;
+  string entity_type = 3 [(buf.validate.field).string.max_bytes = 256];
   // Optional source entity id filter.
-  string entity_id = 4;
+  string entity_id = 4 [(buf.validate.field).string.max_bytes = 1024];
   // Page size. Zero defaults to 100; maximum 500.
   uint32 limit = 5 [(buf.validate.field).uint32.lte = 500];
   // Optional source/application actor principal filter.
-  string actor_principal = 6;
+  string actor_principal = 6 [(buf.validate.field).string.max_bytes = 512];
   // Optional inclusive occurred_at lower bound.
   google.protobuf.Timestamp occurred_at_from = 7;
   // Optional exclusive occurred_at upper bound.
   google.protobuf.Timestamp occurred_at_to = 8;
   // Optional source system filter.
-  string source_system = 9;
+  string source_system = 9 [(buf.validate.field).string.max_bytes = 256];
   // Optional source stream/table/topic filter.
-  string stream_name = 10;
+  string stream_name = 10 [(buf.validate.field).string.max_bytes = 256];
   // Cursor returned by a previous ListCdcEventsResponse.
-  string page_cursor = 11;
+  string page_cursor = 11 [(buf.validate.field).string.max_bytes = 2048];
   // Optional authenticated ingester principal filter.
-  string ingested_by_principal = 12;
+  string ingested_by_principal = 12 [(buf.validate.field).string.max_bytes = 512];
 }
 
 // ListCdcEventsResponse contains one page of CDC events.
@@ -443,8 +574,12 @@ message ListCdcEventsResponse {
 // PublishAuditEventsRequest publishes a batch of audit events.
 message PublishAuditEventsRequest {
   // Connector accepting the event batch.
-  string connector_id = 1 [(buf.validate.field).string.min_len = 1];
-  // Events to publish. Each idempotency_key is scoped to connector_id.
+  string connector_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 128
+  }];
+  // Events to publish. Each idempotency_key is scoped to connector_id and the
+  // server-selected external audit stream.
   repeated AuditEvent events = 2 [(buf.validate.field).repeated = {
     min_items: 1
     max_items: 1000
@@ -475,30 +610,37 @@ message PublishAuditEventsResponse {
 message ListAuditEventsRequest {
   // Tenant/organization to query. The server authorizes this against the
   // authenticated principal.
-  string organization_id = 1 [(buf.validate.field).string.min_len = 1];
+  string organization_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 128
+  }];
   // Optional connector id filter.
-  string connector_id = 2;
+  string connector_id = 2 [(buf.validate.field).string.max_bytes = 128];
   // Optional resource type filter. Must be paired with resource_id for an exact
   // resource-scoped read; omit both for a wildcard-authorized audit read.
-  string resource_type = 3;
+  string resource_type = 3 [(buf.validate.field).string.max_bytes = 256];
   // Optional resource id filter. Must be paired with resource_type.
-  string resource_id = 4;
+  string resource_id = 4 [(buf.validate.field).string.max_bytes = 1024];
   // Page size. Zero defaults to 100; maximum 500.
   uint32 limit = 5 [(buf.validate.field).uint32.lte = 500];
   // Optional source/application actor filter.
-  string actor_principal = 6;
+  string actor_principal = 6 [(buf.validate.field).string.max_bytes = 512];
   // Optional audit action filter.
-  string action = 7;
+  string action = 7 [(buf.validate.field).string.max_bytes = 256];
   // Optional inclusive occurred_at lower bound.
   google.protobuf.Timestamp occurred_at_from = 8;
   // Optional exclusive occurred_at upper bound.
   google.protobuf.Timestamp occurred_at_to = 9;
   // Optional source system filter.
-  string source_system = 10;
+  string source_system = 10 [(buf.validate.field).string.max_bytes = 256];
   // Cursor returned by a previous ListAuditEventsResponse.
-  string page_cursor = 11;
+  string page_cursor = 11 [(buf.validate.field).string.max_bytes = 2048];
   // Optional authenticated ingester principal filter.
-  string ingested_by_principal = 12;
+  string ingested_by_principal = 12 [(buf.validate.field).string.max_bytes = 512];
+  // Optional server-derived origin filter. Unspecified returns all origins.
+  AuditEventOrigin origin = 13;
+  // Optional authoritative outcome filter. Unspecified returns all outcomes.
+  AuditEventOutcome outcome = 14;
 }
 
 // ListAuditEventsResponse contains one page of audit events.

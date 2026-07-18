@@ -2,7 +2,10 @@ import { MedallionError } from "./errors.js";
 import { normalizeId } from "./ids.js";
 import type { IdInput } from "./types.js";
 
-export function optionalId(value: IdInput | undefined, path: string): string | undefined {
+export function optionalId(
+  value: IdInput | undefined,
+  path: string,
+): string | undefined {
   return value === undefined ? undefined : normalizeId(value, path);
 }
 
@@ -21,19 +24,54 @@ export function jsonString(value: unknown, path: string): string {
   }
 }
 
-export function idempotencyKey(input?: string): string {
-  if (input !== undefined && input.trim().length > 0) {
-    return input;
+export function requiredIdempotencyKey(
+  input: unknown,
+  path: string,
+  maxBytes?: number,
+): string {
+  if (typeof input !== "string") {
+    throw new MedallionError(`${path} is required for retry-safe delivery.`, {
+      code: "MEDALLION_MISSING_IDEMPOTENCY_KEY",
+    });
   }
-
-  if (globalThis.crypto?.randomUUID !== undefined) {
-    return globalThis.crypto.randomUUID();
+  const value = input.trim();
+  if (value.length === 0) {
+    throw new MedallionError(`${path} is required for retry-safe delivery.`, {
+      code: "MEDALLION_MISSING_IDEMPOTENCY_KEY",
+    });
   }
-
-  return `idem_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+  if (
+    maxBytes !== undefined &&
+    new TextEncoder().encode(value).length > maxBytes
+  ) {
+    throw new MedallionError(`${path} must not exceed ${maxBytes} bytes.`, {
+      code: "MEDALLION_INVALID_IDEMPOTENCY_KEY",
+    });
+  }
+  return value;
 }
 
-export function occurredAt(value: string | Date | undefined): string | undefined {
+export function requiredControlIdempotencyKey(
+  input: unknown,
+  path: string,
+): string {
+  if (typeof input !== "string" || input.length === 0) {
+    throw new MedallionError(`${path} is required for retry-safe mutation.`, {
+      code: "MEDALLION_MISSING_IDEMPOTENCY_KEY",
+    });
+  }
+  if (new TextEncoder().encode(input).length > 256 || !/^[!-~]+$/.test(input)) {
+    throw new MedallionError(
+      `${path} must be at most 256 bytes of visible ASCII without spaces.`,
+      { code: "MEDALLION_INVALID_IDEMPOTENCY_KEY" },
+    );
+  }
+  return input;
+}
+
+export function occurredAt(
+  value: string | Date | undefined,
+): string | undefined {
   if (value === undefined) {
     return undefined;
   }

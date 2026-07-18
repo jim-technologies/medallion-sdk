@@ -5,12 +5,13 @@ This is a public SDK repository. Keep contributions free of secrets, private rep
 ## Development
 
 ```sh
-flox activate
-make install
-make check
+flox activate -- make install
+flox activate -- make check
+flox activate -- make audit
 ```
 
-Consumers do not need Flox. Flox is only contributor tooling.
+Consumers do not need Flox. Flox is the sole contributor and CI toolchain
+bootstrap; do not add language setup actions or host-installed quality tools.
 
 ## Versions and Releases
 
@@ -19,8 +20,8 @@ plain `vX.Y.Z` tag. Never create language-prefixed tags such as `go/vX.Y.Z`.
 Prepare a future lockstep version and verify it with:
 
 ```sh
-make version-set VERSION=X.Y.Z
-make version-check
+flox activate -- make version-set VERSION=X.Y.Z
+flox activate -- make version-check
 ```
 
 The synchronizer updates the TypeScript and Python package metadata and the
@@ -47,8 +48,13 @@ Go and Python currently cover the Connect-backed server integration path. Their 
 When vendored proto contracts change, regenerate the TypeScript descriptors:
 
 ```sh
-pnpm proto:descriptor
+flox activate -- make proto-bindings proto-descriptor generated-check
 ```
+
+The vendored protos are deliberately bounded initial client subsets, not the
+entire administration or internal APIs. Every shared message, field, enum, RPC
+signature, and validation constraint must remain identical to its canonical
+service contract, including additive response fields used by an included RPC.
 
 ## Public Surface Review
 
@@ -57,7 +63,7 @@ Public docs, examples, package metadata, vendored proto comments, and tests must
 Run the public-surface check before changing those files:
 
 ```sh
-make check-public
+flox activate -- make check-public
 ```
 
 ## Checks
@@ -65,5 +71,27 @@ make check-public
 Before opening a change, run:
 
 ```sh
-make check
+flox activate -- make format
+flox activate -- make check
+flox activate -- make audit
 ```
+
+## Release Checklist
+
+Before creating the one root `vX.Y.Z` release tag:
+
+1. Run `flox activate -- make version-set VERSION=X.Y.Z` and review every
+   version mirror.
+2. Regenerate protocol bindings and descriptors with
+   `flox activate -- make proto-bindings proto-descriptor`.
+3. Run `flox activate -- make check`.
+4. Run `flox activate -- make git-install-check`; this installs the exact tree
+   by both full commit SHA and the synthetic root release tag in clean Go,
+   Python, and TypeScript consumers.
+5. Run `flox activate -- make audit` to scan the locked Node, Go, and Python
+   dependencies and the source tree.
+6. Confirm the tree contains no secrets or unrelated generated output, commit
+   it, and push it.
+7. Create exactly one annotated root tag, `vX.Y.Z`, on that reviewed commit.
+   Do not create language-prefixed tags and do not publish to npm, PyPI,
+   crates.io, or another language registry.

@@ -9,7 +9,7 @@ const expectedIngester = process.env.MEDALLION_EXPECTED_INGESTER_PRINCIPAL;
 const runId = `example_${Date.now()}`;
 const actor = { type: "user", id: `user_${runId}` } as const;
 const resource = { type: "order", id: `order_${runId}` } as const;
-const action = "order.cancelled";
+const action = "cancel";
 const evidenceUrl =
   process.env.MEDALLION_EVIDENCE_URL ??
   `https://example.com/deployments/orders-worker/${runId}`;
@@ -24,6 +24,7 @@ const medallion = new MedallionClient({
 await medallion.audit.record({
   actor,
   action,
+  outcome: "succeeded",
   resource,
   before: { status: "confirmed" },
   after: { status: "cancelled" },
@@ -37,6 +38,8 @@ const trail = await medallion.audit.trail({
   resourceType: resource.type,
   resourceId: resource.id,
   action,
+  origin: "external_provider",
+  outcome: "succeeded",
   limit: 25,
 });
 
@@ -47,14 +50,28 @@ const event = trail.events.find((candidate) => {
   );
 });
 
-assert(event !== undefined, "recorded audit event was not returned by audit.trail()");
-assert(event.actor?.type === actor.type, "source actor type did not round-trip");
+assert(
+  event !== undefined,
+  "recorded audit event was not returned by audit.trail()",
+);
+assert(
+  event.actor?.type === actor.type,
+  "source actor type did not round-trip",
+);
 assert(event.actor?.id === actor.id, "source actor id did not round-trip");
 assert(event.action === action, "action did not round-trip");
+assert(event.origin === "external_provider", "origin did not round-trip");
+assert(event.outcome === "succeeded", "outcome did not round-trip");
 assert(event.targetType === resource.type, "resource type did not round-trip");
 assert(event.targetId === resource.id, "resource id did not round-trip");
-assert(recordValue(event.before)?.status === "confirmed", "before state did not round-trip");
-assert(recordValue(event.after)?.status === "cancelled", "after state did not round-trip");
+assert(
+  recordValue(event.before)?.status === "confirmed",
+  "before state did not round-trip",
+);
+assert(
+  recordValue(event.after)?.status === "cancelled",
+  "after state did not round-trip",
+);
 assert(event.evidenceUrl === evidenceUrl, "evidence URL did not round-trip");
 
 if (expectedIngester !== undefined && expectedIngester.trim().length > 0) {

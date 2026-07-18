@@ -76,6 +76,21 @@ type PublishedAuditEventResult struct {
 	Proto          *connectv1.PublishedAuditEvent
 }
 
+type AuditOutcome string
+
+const (
+	AuditOutcomeSucceeded     AuditOutcome = "succeeded"
+	AuditOutcomeFailed        AuditOutcome = "failed"
+	AuditOutcomeIndeterminate AuditOutcome = "indeterminate"
+)
+
+type AuditOrigin string
+
+const (
+	AuditOriginExternalProvider AuditOrigin = "external_provider"
+	AuditOriginConnect          AuditOrigin = "connect"
+)
+
 type AuditRecordResponse struct {
 	RequestID      string
 	IdempotencyKey string
@@ -91,6 +106,7 @@ type AuditRecord struct {
 	ConnectorID    string
 	Actor          ActorRef
 	Action         string
+	Outcome        AuditOutcome
 	Resource       ResourceRef
 	Before         any
 	After          any
@@ -113,6 +129,8 @@ type AuditTrailQuery struct {
 	PageSize          int
 	Actor             *ActorRef
 	IngesterPrincipal string
+	Origin            AuditOrigin
+	Outcome           AuditOutcome
 }
 
 type AuditTrailResponse struct {
@@ -143,6 +161,9 @@ type AuditTrailEvent struct {
 	After             any
 	EvidenceURL       string
 	SourceEventID     string
+	SourceSystem      string
+	Origin            AuditOrigin
+	Outcome           AuditOutcome
 	Payload           any
 	Proto             *connectv1.AuditEvent
 }
@@ -168,6 +189,7 @@ type DatasourceRegistration struct {
 	OrganizationID string
 	Name           string
 	Type           string
+	IdempotencyKey string
 	DisplayName    string
 	ExternalID     IDInput
 	Metadata       map[string]any

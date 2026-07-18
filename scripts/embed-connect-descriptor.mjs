@@ -1,5 +1,8 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
+const checkOnly = process.argv.includes("--check");
+let stale = false;
+
 const descriptors = [
   {
     descriptor: "../proto/medallion-connect.descriptor.binpb",
@@ -39,5 +42,16 @@ export function ${item.functionName}(): Uint8Array {
 }
 `;
 
-  writeFileSync(outputUrl, source);
+  if (checkOnly) {
+    if (readFileSync(outputUrl, "utf8") !== source) {
+      console.error(`${item.output.replace("../", "")} is stale`);
+      stale = true;
+    }
+  } else {
+    writeFileSync(outputUrl, source);
+  }
+}
+
+if (stale) {
+  process.exitCode = 1;
 }

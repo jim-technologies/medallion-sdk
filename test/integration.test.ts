@@ -1,4 +1,8 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import { MedallionClient } from "../src/index.js";
 
@@ -32,11 +36,13 @@ describe("in-process integration routes", () => {
     await client.connect.registerDatasource({
       name: "primary_postgres",
       type: "postgres",
+      idempotencyKey: "register_primary_postgres",
       displayName: "Primary Postgres",
     });
     await client.audit.record({
       actor: { type: "user", id: "user_123" },
-      action: "order.cancelled",
+      action: "cancel",
+      outcome: "succeeded",
       resource: { type: "order", id: "order_123" },
       evidenceUrl: "https://example.com/deployments/orders-worker/abc123",
       idempotencyKey: "audit_1",
@@ -44,6 +50,9 @@ describe("in-process integration routes", () => {
     const trail = await client.audit.trail({
       resourceType: "order",
       resourceId: "order_123",
+      action: "cancel",
+      origin: "external_provider",
+      outcome: "succeeded",
       limit: 10,
     });
     await client.cdc.record({
@@ -81,7 +90,14 @@ describe("in-process integration routes", () => {
       "/rpc/medallion.ontology.v1.MedallionOntologyService/ExecuteAction",
       "/medallion.storage.v1.StorageService/Upload",
     ]);
-    expect(seen.every((request) => request.headers.authorization === "Bearer server_test_key")).toBe(true);
+    expect(
+      seen.every(
+        (request) => request.headers.authorization === "Bearer server_test_key",
+      ),
+    ).toBe(true);
+    expect(seen[0]?.headers["idempotency-key"]).toBe(
+      "register_primary_postgres",
+    );
     expect(seen[1]?.headers["idempotency-key"]).toBe("audit_1");
     expect(JSON.parse(seen[1]?.body ?? "{}")).toMatchObject({
       events: [
@@ -116,7 +132,10 @@ describe("in-process integration routes", () => {
     expect(trail.events[0]).toMatchObject({
       actor: { type: "user", id: "user_123" },
       ingesterPrincipal: "service_account:orders-worker",
-      action: "order.cancelled",
+      action: "cancel",
+      sourceSystem: "orders",
+      origin: "external_provider",
+      outcome: "succeeded",
       targetType: "order",
       targetId: "order_123",
       after: { status: "cancelled" },
@@ -212,7 +231,10 @@ function writeRouteResponse(path: string, response: ServerResponse): void {
           }),
           actor_principal: "user:user_123",
           ingested_by_principal: "service_account:orders-worker",
-          action: "order.cancelled",
+          action: "cancel",
+          source_system: "orders",
+          origin: "AUDIT_EVENT_ORIGIN_EXTERNAL_PROVIDER",
+          outcome: "AUDIT_EVENT_OUTCOME_SUCCEEDED",
           occurred_at: "2026-07-07T00:00:00Z",
         },
       ],
@@ -230,7 +252,10 @@ function writeRouteResponse(path: string, response: ServerResponse): void {
   }
 
   if (path.endsWith("/Query")) {
-    writeJson(response, { answer: "Order was cancelled.", resource_ids: ["order_123"] });
+    writeJson(response, {
+      answer: "Order was cancelled.",
+      resource_ids: ["order_123"],
+    });
     return;
   }
 
@@ -238,7 +263,9 @@ function writeRouteResponse(path: string, response: ServerResponse): void {
     writeJson(response, {
       plan: {
         id: "plan_1",
+        tenant_id: "org_123",
         action_name: "order.cancel",
+        actor_principal: "user:google:user_123",
         status: "ACTION_INVOCATION_STATUS_PLANNED",
       },
     });
@@ -249,7 +276,9 @@ function writeRouteResponse(path: string, response: ServerResponse): void {
     writeJson(response, {
       invocation: {
         id: "invoke_1",
+        tenant_id: "org_123",
         action_name: "order.cancel",
+        actor_principal: "user:google:user_123",
         idempotency_key: "action_1",
         status: "ACTION_INVOCATION_STATUS_SUCCEEDED",
       },
@@ -273,7 +302,11 @@ function writeRouteResponse(path: string, response: ServerResponse): void {
   writeJson(response, { error: `unexpected path ${path}` }, 404);
 }
 
-function writeJson(response: ServerResponse, body: unknown, status = 200): void {
+function writeJson(
+  response: ServerResponse,
+  body: unknown,
+  status = 200,
+): void {
   response.statusCode = status;
   response.setHeader("content-type", "application/json");
   response.setHeader("x-request-id", "req_test");

@@ -13,7 +13,7 @@
     "url": "https://github.com/jim-technologies/medallion-sdk/issues"
   },
   "homepage": "https://github.com/jim-technologies/medallion-sdk#readme",
-  "packageManager": "pnpm@11.13.0",
+  "packageManager": "pnpm@11.13.1",
   "engines": {
     "node": ">=24"
   },
@@ -39,7 +39,8 @@
     "check": "node scripts/public-surface-check.mjs && tsc --noEmit && vitest run && npm run build",
     "check:public": "node scripts/public-surface-check.mjs",
     "clean": "rm -rf dist coverage",
-    "lint": "tsc --noEmit",
+    "format": "biome check --write .",
+    "lint": "tsc --noEmit && biome ci .",
     "prepare": "npm run build",
     "proto:descriptor": "buf build proto --as-file-descriptor-set --path proto/medallion/connect/v1/connect.proto -o proto/medallion-connect.descriptor.binpb && buf build proto --as-file-descriptor-set --path proto/medallion/ontology/v1/ontology.proto -o proto/medallion-ontology.descriptor.binpb && buf build proto --as-file-descriptor-set --path proto/medallion/storage/v1/service.proto -o proto/medallion-storage.descriptor.binpb && node scripts/embed-connect-descriptor.mjs",
     "test": "vitest run",
@@ -47,10 +48,11 @@
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1",
-    "@jim-technologies/invariant-protocol": "github:jim-technologies/invariantprotocol#aae251a4015380099aa3e66ff4cda2dfa775e02f",
+    "@jim-technologies/invariant-protocol": "github:jim-technologies/invariantprotocol#e1fb753ae72b0eb33f9de00fe319a1a2ab55dffd",
     "@opentelemetry/api": "1.9.1"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.4",
     "@bufbuild/buf": "1.71.0",
     "@types/node": "24.13.3",
     "tsup": "8.5.1",

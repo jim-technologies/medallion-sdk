@@ -1,6 +1,9 @@
+import { MedallionError } from "./errors.js";
+import { requiredIdempotencyKey } from "./payload.js";
 import type { ProtocolOntologyClient } from "./protocol.js";
-import { idempotencyKey } from "./payload.js";
 import type {
+  ActionInvocation,
+  AuditTrailEvent,
   ExecuteActionInput,
   ExecuteActionResponse,
   PlanActionInput,
@@ -35,9 +38,7 @@ export class OntologyClient {
       answer: response.body.answer,
       resourceIds: response.body.resource_ids ?? [],
       explanations: response.body.explanations ?? [],
-      events: (response.body.events ?? []).map((event) => ({
-        ...(event as Record<string, unknown>),
-      })),
+      events: (response.body.events ?? []).map(auditEventFromWire),
     };
   }
 
@@ -56,9 +57,15 @@ export class OntologyClient {
       options,
     );
 
+    const plan = requiredActionInvocation(
+      response.body.plan,
+      "plan",
+      response.requestId,
+    );
+
     return {
       requestId: response.requestId,
-      plan: actionInvocationFromWire(response.body.plan),
+      plan,
       requiredApprovals: response.body.required_approvals ?? [],
     };
   }
@@ -67,7 +74,10 @@ export class OntologyClient {
     input: ExecuteActionInput,
     options: RequestOptions = {},
   ): Promise<ExecuteActionResponse> {
-    const key = idempotencyKey(input.idempotencyKey);
+    const key = requiredIdempotencyKey(
+      input.idempotencyKey,
+      "ontology.executeAction.idempotencyKey",
+    );
     const response = await this.protocol.executeAction<{
       invocation?: Record<string, unknown>;
     }>(
@@ -78,20 +88,75 @@ export class OntologyClient {
       },
       options,
     );
-    const invocation = actionInvocationFromWire(response.body.invocation);
-    const status = invocation?.status ?? "";
+    const invocation = requiredActionInvocation(
+      response.body.invocation,
+      "execution",
+      response.requestId,
+    );
+    if (
+      invocation.actionName !== input.actionName ||
+      invocation.idempotencyKey !== key
+    ) {
+      throw new MedallionError(
+        "Medallion returned an action execution for a different action or idempotency key.",
+        {
+          code: "MEDALLION_INVALID_ACTION_RESPONSE",
+          requestId: response.requestId,
+        },
+      );
+    }
+    const status = invocation.status;
 
     return {
       requestId: response.requestId,
-      idempotencyKey: invocation?.idempotencyKey ?? key,
-      duplicate: false,
+      idempotencyKey: invocation.idempotencyKey,
       result: actionResult(status),
       invocation,
     };
   }
 }
 
-function actionInvocationFromWire(value: unknown) {
+function requiredActionInvocation(
+  value: unknown,
+  kind: "plan" | "execution",
+  requestId: string | undefined,
+): ActionInvocation & {
+  id: string;
+  tenantId: string;
+  actionName: string;
+  actorPrincipal: string;
+  status: string;
+} {
+  const invocation = actionInvocationFromWire(value);
+  if (
+    invocation === undefined ||
+    !nonEmptyString(invocation.id) ||
+    !nonEmptyString(invocation.tenantId) ||
+    !nonEmptyString(invocation.actionName) ||
+    !nonEmptyString(invocation.actorPrincipal) ||
+    !nonEmptyString(invocation.status) ||
+    invocation.status === "ACTION_INVOCATION_STATUS_UNSPECIFIED"
+  ) {
+    throw new MedallionError(
+      `Medallion returned an incomplete action ${kind}.`,
+      {
+        code: "MEDALLION_INVALID_ACTION_RESPONSE",
+        requestId,
+      },
+    );
+  }
+  return invocation as ActionInvocation & {
+    id: string;
+    tenantId: string;
+    actionName: string;
+    actorPrincipal: string;
+    status: string;
+  };
+}
+
+function actionInvocationFromWire(
+  value: unknown,
+): ActionInvocation | undefined {
   if (value === undefined || value === null || typeof value !== "object") {
     return undefined;
   }
@@ -114,9 +179,67 @@ function actionInvocationFromWire(value: unknown) {
   };
 }
 
-function actionResult(
-  status: string,
-): ExecuteActionResponse["result"] {
+function auditEventFromWire(value: unknown): AuditTrailEvent {
+  const item = recordValue(value);
+  const actorPrincipal = stringValue(item.actor_principal);
+  const eventId = stringValue(item.id);
+
+  return {
+    id: eventId,
+    eventId,
+    tenantId: stringValue(item.tenant_id),
+    actor: actorFromPrincipal(actorPrincipal),
+    actorPrincipal,
+    action: stringValue(item.action),
+    targetType: stringValue(item.target_type),
+    targetId: stringValue(item.target_id),
+    entityType: stringValue(item.target_type),
+    entityId: stringValue(item.target_id),
+    requestId: stringValue(item.request_id),
+    metadata: optionalRecordValue(item.metadata),
+    createdAt: stringValue(item.created_at),
+    before: item.before,
+    after: item.after,
+    evidenceUrl: stringValue(item.evidence_url),
+    sourceEventId: stringValue(item.source_event_id),
+  };
+}
+
+function actorFromPrincipal(
+  value: string | undefined,
+): AuditTrailEvent["actor"] {
+  if (value === undefined || value.length === 0) {
+    return undefined;
+  }
+
+  const parts = value.split(":");
+  if (parts.length < 2) {
+    return { id: value };
+  }
+  const type = parts.shift();
+  if (parts.length === 1) {
+    return { type, id: parts.join(":") };
+  }
+  const provider = parts.shift();
+  return { type, provider, id: parts.join(":") };
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function optionalRecordValue(
+  value: unknown,
+): Record<string, unknown> | undefined {
+  const record = recordValue(value);
+  return Object.keys(record).length === 0 && value === undefined
+    ? undefined
+    : record;
+}
+
+function actionResult(status: string): ExecuteActionResponse["result"] {
   switch (status) {
     case "ACTION_INVOCATION_STATUS_SUCCEEDED":
       return "succeeded";
@@ -131,4 +254,8 @@ function actionResult(
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function nonEmptyString(value: string | undefined): value is string {
+  return value !== undefined && value.trim().length > 0;
 }

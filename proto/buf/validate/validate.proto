@@ -1,4 +1,4 @@
-syntax = "proto3";
+syntax = "proto2";
 
 package buf.validate;
 
@@ -7,26 +7,29 @@ import "google/protobuf/descriptor.proto";
 option go_package = "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate";
 
 message StringRules {
-  uint64 min_len = 2;
-  string pattern = 6;
+  optional uint64 min_len = 2;
+  optional uint64 max_bytes = 5;
+  optional string pattern = 6;
 }
 
 message BytesRules {
-  uint64 min_len = 2;
+  optional uint64 min_len = 2;
 }
 
 message Int64Rules {
-  int64 gt = 4;
-  int64 gte = 5;
+  oneof greater_than {
+    int64 gt = 4;
+    int64 gte = 5;
+  }
 }
 
 message UInt32Rules {
-  uint32 lte = 3;
+  optional uint32 lte = 3;
 }
 
 message RepeatedRules {
-  uint64 min_items = 1;
-  uint64 max_items = 2;
+  optional uint64 min_items = 1;
+  optional uint64 max_items = 2;
 }
 
 message FieldRules {
@@ -38,9 +41,9 @@ message FieldRules {
     RepeatedRules repeated = 18;
   }
 
-  bool required = 25;
+  optional bool required = 25;
 }
 
 extend google.protobuf.FieldOptions {
-  FieldRules field = 1159;
+  optional FieldRules field = 1159;
 }

@@ -1,0 +1,10 @@
+schema-version = "1.12.0"
+
+[install]
+# This small secondary environment verifies the oldest Node release declared
+# in package.json. The primary environment intentionally tracks modern Node.
+nodejs.pkg-path = "nodejs_24"
+pnpm.pkg-path = "pnpm"
+git = { pkg-path = "git", pkg-group = "node-tools" }
+bash = { pkg-path = "bash", pkg-group = "node-tools" }
+coreutils = { pkg-path = "coreutils", pkg-group = "node-tools" }

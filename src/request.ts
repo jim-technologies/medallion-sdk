@@ -1,12 +1,12 @@
 import { MedallionApiError, MedallionError } from "./errors.js";
-import type { FetchLike } from "./types.js";
 import {
+  type NormalizedTracing,
   normalizeTracing,
   setResponseSpanAttributes,
-  traceRequest,
-  type NormalizedTracing,
   type TracingConfig,
+  traceRequest,
 } from "./tracing.js";
+import type { FetchLike } from "./types.js";
 
 export interface RequestClientOptions {
   baseUrl: string;
@@ -67,8 +67,33 @@ export class RequestClient {
         code: "MEDALLION_INVALID_OPTIONS",
       });
     }
+    let parsedBaseUrl: URL;
+    try {
+      parsedBaseUrl = new URL(baseUrl);
+    } catch (error) {
+      throw new MedallionError("baseUrl must be an absolute HTTP(S) URL.", {
+        code: "MEDALLION_INVALID_OPTIONS",
+        cause: error,
+      });
+    }
+    if (
+      (parsedBaseUrl.protocol !== "http:" &&
+        parsedBaseUrl.protocol !== "https:") ||
+      parsedBaseUrl.host.length === 0 ||
+      parsedBaseUrl.username.length > 0 ||
+      parsedBaseUrl.password.length > 0 ||
+      parsedBaseUrl.search.length > 0 ||
+      parsedBaseUrl.hash.length > 0
+    ) {
+      throw new MedallionError(
+        "baseUrl must be an absolute HTTP(S) URL without credentials, query, or fragment.",
+        { code: "MEDALLION_INVALID_OPTIONS" },
+      );
+    }
 
-    const bearerToken = (options.accessToken ?? options.apiKey)?.trim();
+    const bearerToken = [options.accessToken, options.apiKey]
+      .map((value) => value?.trim())
+      .find((value) => value !== undefined && value.length > 0);
     if (bearerToken === undefined || bearerToken.length === 0) {
       throw new MedallionError("apiKey or accessToken is required.", {
         code: "MEDALLION_INVALID_OPTIONS",
@@ -84,7 +109,7 @@ export class RequestClient {
       );
     }
 
-    this.baseUrl = baseUrl.replace(/\/+$/, "");
+    this.baseUrl = parsedBaseUrl.toString().replace(/\/+$/, "");
     this.bearerToken = bearerToken;
     this.fetchImpl = fetchImpl;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -101,7 +126,10 @@ export class RequestClient {
   async requestJson<TResponse = unknown>(
     options: JsonRequestOptions,
   ): Promise<ResponseEnvelope<TResponse>> {
-    const headers = this.defaultHeaders(options.idempotencyKey, options.headers);
+    const headers = this.defaultHeaders(
+      options.idempotencyKey,
+      options.headers,
+    );
     headers.set("Accept", "application/json");
 
     let body: string | undefined;
@@ -132,7 +160,10 @@ export class RequestClient {
   async requestRaw<TResponse = unknown>(
     options: RawRequestOptions,
   ): Promise<ResponseEnvelope<TResponse>> {
-    const headers = this.defaultHeaders(options.idempotencyKey, options.headers);
+    const headers = this.defaultHeaders(
+      options.idempotencyKey,
+      options.headers,
+    );
     headers.set("Accept", "application/json");
 
     return this.dispatch<TResponse>({
@@ -176,8 +207,31 @@ export class RequestClient {
             signal,
           });
 
-          const responseBody = await options.parseBody(response);
           const requestId = readRequestId(response.headers);
+          let responseBody: unknown;
+          try {
+            responseBody = await options.parseBody(response);
+          } catch (error) {
+            setResponseSpanAttributes(span, response.status, requestId);
+            if (error instanceof InvalidJsonResponseError) {
+              if (!response.ok) {
+                throw new MedallionApiError(
+                  buildApiErrorMessage(response.status, requestId, error.body),
+                  {
+                    status: response.status,
+                    requestId,
+                    responseBody: error.body,
+                  },
+                );
+              }
+              throw new MedallionError("Medallion returned invalid JSON.", {
+                code: "MEDALLION_INVALID_JSON_RESPONSE",
+                requestId,
+                cause: error,
+              });
+            }
+            throw error;
+          }
           setResponseSpanAttributes(span, response.status, requestId);
 
           if (!response.ok) {
@@ -326,14 +380,20 @@ async function readResponseBody(response: Response): Promise<unknown> {
     try {
       return JSON.parse(text) as unknown;
     } catch (error) {
-      throw new MedallionError("Medallion returned invalid JSON.", {
-        code: "MEDALLION_INVALID_JSON",
-        cause: error,
-      });
+      throw new InvalidJsonResponseError(text, error);
     }
   }
 
   return text;
+}
+
+class InvalidJsonResponseError extends Error {
+  constructor(
+    readonly body: string,
+    options: unknown,
+  ) {
+    super("Medallion returned invalid JSON.", { cause: options });
+  }
 }
 
 function isJsonResponse(headers: Headers): boolean {
@@ -355,7 +415,8 @@ function buildApiErrorMessage(
   responseBody: unknown,
 ): string {
   const detail = extractErrorDetail(responseBody);
-  const requestPart = requestId === undefined ? "" : `, request id ${requestId}`;
+  const requestPart =
+    requestId === undefined ? "" : `, request id ${requestId}`;
 
   return `${detail ?? "Medallion API request failed"} (HTTP ${status}${requestPart}).`;
 }
@@ -390,9 +451,8 @@ function extractErrorDetail(responseBody: unknown): string | undefined {
 
 function isAbortLikeError(error: unknown): boolean {
   return (
-    error instanceof DOMException && error.name === "AbortError"
-  ) || (
-    error instanceof Error &&
-    (error.name === "AbortError" || error.name === "TimeoutError")
+    (error instanceof DOMException && error.name === "AbortError") ||
+    (error instanceof Error &&
+      (error.name === "AbortError" || error.name === "TimeoutError"))
   );
 }

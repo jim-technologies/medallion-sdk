@@ -1,16 +1,18 @@
-import { describe, expect, it, vi } from "vitest";
 import type { Tracer } from "@opentelemetry/api";
-import { MedallionApiError, MedallionError } from "../src/errors.js";
+import { describe, expect, it, vi } from "vitest";
+import type { MedallionApiError, MedallionError } from "../src/errors.js";
 import { RequestClient } from "../src/request.js";
 
 describe("RequestClient", () => {
   it("sends JSON, bearer auth, and idempotency headers", async () => {
-    const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
-      return new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    });
+    const fetch = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) => {
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    );
     const client = new RequestClient({
       baseUrl: "https://api.example.com/",
       apiKey: "test_api_key",
@@ -38,15 +40,17 @@ describe("RequestClient", () => {
   });
 
   it("throws API errors with status and request ID", async () => {
-    const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
-      return new Response(JSON.stringify({ message: "invalid event" }), {
-        status: 400,
-        headers: {
-          "content-type": "application/json",
-          "x-request-id": "req_123",
-        },
-      });
-    });
+    const fetch = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) => {
+        return new Response(JSON.stringify({ message: "invalid event" }), {
+          status: 400,
+          headers: {
+            "content-type": "application/json",
+            "x-request-id": "req_123",
+          },
+        });
+      },
+    );
     const client = new RequestClient({
       baseUrl: "https://api.example.com",
       apiKey: "test_api_key",
@@ -72,6 +76,83 @@ describe("RequestClient", () => {
           fetch: vi.fn(),
         }),
     ).toThrowError(/apiKey or accessToken is required/);
+  });
+
+  it("falls back to a non-blank API key and rejects unsafe base URLs", async () => {
+    const fetch = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const client = new RequestClient({
+      baseUrl: "https://api.example.com",
+      accessToken: "   ",
+      apiKey: "fallback_key",
+      fetch,
+    });
+
+    await client.request({ method: "POST", path: "/v1/query" });
+    const headers = fetch.mock.calls[0]?.[1]?.headers as Headers;
+    expect(headers.get("authorization")).toBe("Bearer fallback_key");
+
+    expect(
+      () =>
+        new RequestClient({
+          baseUrl: "https://user:secret@api.example.com?unexpected=true",
+          apiKey: "test_api_key",
+          fetch,
+        }),
+    ).toThrowError(/without credentials, query, or fragment/);
+  });
+
+  it("classifies malformed success and error JSON consistently", async () => {
+    const successClient = new RequestClient({
+      baseUrl: "https://api.example.com",
+      apiKey: "test_api_key",
+      fetch: vi.fn(
+        async () =>
+          new Response("{", {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+              "x-request-id": "req_bad_success",
+            },
+          }),
+      ),
+    });
+
+    await expect(
+      successClient.request({ method: "POST", path: "/v1/query" }),
+    ).rejects.toMatchObject({
+      code: "MEDALLION_INVALID_JSON_RESPONSE",
+      requestId: "req_bad_success",
+    });
+
+    const errorClient = new RequestClient({
+      baseUrl: "https://api.example.com",
+      apiKey: "test_api_key",
+      fetch: vi.fn(
+        async () =>
+          new Response("not-json", {
+            status: 502,
+            headers: {
+              "content-type": "application/json",
+              "x-request-id": "req_bad_error",
+            },
+          }),
+      ),
+    });
+
+    await expect(
+      errorClient.request({ method: "POST", path: "/v1/query" }),
+    ).rejects.toMatchObject({
+      name: "MedallionApiError",
+      status: 502,
+      requestId: "req_bad_error",
+      responseBody: "not-json",
+    });
   });
 
   it("converts fetch aborts caused by timeout into timeout errors", async () => {
@@ -111,7 +192,10 @@ describe("RequestClient", () => {
       ended: boolean;
     }> = [];
     const tracer = {
-      startSpan(name: string, options: { attributes?: Record<string, unknown> }) {
+      startSpan(
+        name: string,
+        options: { attributes?: Record<string, unknown> },
+      ) {
         const span = {
           name,
           attributes: { ...options.attributes },

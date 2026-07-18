@@ -7,6 +7,12 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      deployed_smoke:
+        description: "Run the protected deployed SDK smoke test"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -23,9 +29,13 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Install Flox
         uses: flox/install-flox-action@3b80351ae97bbe063f264dc88fbd505507054963 # v2.5.3
+        with:
+          disable-metrics: "true"
 
       - run: flox activate -- make check
 
@@ -35,29 +45,84 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 24
+          persist-credentials: false
 
-      - name: Enable pinned pnpm
-        run: corepack enable
+      - name: Install Flox
+        uses: flox/install-flox-action@3b80351ae97bbe063f264dc88fbd505507054963 # v2.5.3
+        with:
+          disable-metrics: "true"
 
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      - run: pnpm test
-      - run: pnpm build
+      - name: Check the minimum Node runtime
+        run: |
+          flox activate -d .ci/node-24 -- bash -c '
+            set -euo pipefail
+            node --version
+            pnpm --version
+            pnpm install --frozen-lockfile
+            pnpm lint
+            pnpm test
+            pnpm build
+          '
+
+  security:
+    name: Dependency and secret audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install Flox
+        uses: flox/install-flox-action@3b80351ae97bbe063f264dc88fbd505507054963 # v2.5.3
+        with:
+          disable-metrics: "true"
+
+      - run: flox activate -- make audit
 
   git-install:
-    name: Git SHA install
+    name: Git tag and SHA install
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install Flox
         uses: flox/install-flox-action@3b80351ae97bbe063f264dc88fbd505507054963 # v2.5.3
+        with:
+          disable-metrics: "true"
 
       - run: flox activate -- make git-install-check
+
+  deployed-smoke:
+    name: Protected deployed smoke
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deployed_smoke }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: sdk-smoke
+    env:
+      MEDALLION_SMOKE_BASE_URL: ${{ secrets.MEDALLION_SMOKE_BASE_URL }}
+      MEDALLION_SMOKE_ACCESS_TOKEN: ${{ secrets.MEDALLION_SMOKE_ACCESS_TOKEN }}
+      MEDALLION_SMOKE_ORGANIZATION_ID: ${{ secrets.MEDALLION_SMOKE_ORGANIZATION_ID }}
+      MEDALLION_SMOKE_EXPECTED_INGESTER_PRINCIPAL: ${{ secrets.MEDALLION_SMOKE_EXPECTED_INGESTER_PRINCIPAL }}
+      MEDALLION_SMOKE_CONNECTOR_ID: ${{ secrets.MEDALLION_SMOKE_CONNECTOR_ID }}
+      MEDALLION_SMOKE_DENIED_ORGANIZATION_ID: ${{ secrets.MEDALLION_SMOKE_DENIED_ORGANIZATION_ID }}
+      MEDALLION_SMOKE_EVIDENCE_URL: ${{ secrets.MEDALLION_SMOKE_EVIDENCE_URL }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install Flox
+        uses: flox/install-flox-action@3b80351ae97bbe063f264dc88fbd505507054963 # v2.5.3
+        with:
+          disable-metrics: "true"
+
+      - name: Validate smoke-test secrets
+        run: flox activate -- bash scripts/check_smoke_env.sh
+
+      - run: flox activate -- make test-deployed

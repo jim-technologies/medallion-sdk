@@ -10,6 +10,26 @@ go.pkg-path = "go"
 go.version = "1.26.4"
 python.pkg-path = "python314"
 uv.pkg-path = "uv"
+protobuf.pkg-path = "protobuf"
+
+# Repository and quality tooling lives in Flox as well, so local checks and CI
+# use the same binaries instead of inheriting them from the host runner.
+gnumake = { pkg-path = "gnumake", pkg-group = "repo-tools" }
+bash = { pkg-path = "bash", pkg-group = "repo-tools" }
+git = { pkg-path = "git", pkg-group = "repo-tools" }
+coreutils = { pkg-path = "coreutils", pkg-group = "repo-tools" }
+diffutils = { pkg-path = "diffutils", pkg-group = "repo-tools" }
+findutils = { pkg-path = "findutils", pkg-group = "repo-tools" }
+gawk = { pkg-path = "gawk", pkg-group = "repo-tools" }
+gnused = { pkg-path = "gnused", pkg-group = "repo-tools" }
+gnugrep = { pkg-path = "gnugrep", pkg-group = "repo-tools" }
+ruff = { pkg-path = "ruff", pkg-group = "repo-tools" }
+shellcheck = { pkg-path = "shellcheck", pkg-group = "repo-tools" }
+shfmt = { pkg-path = "shfmt", pkg-group = "repo-tools" }
+actionlint = { pkg-path = "actionlint", pkg-group = "repo-tools" }
+gitleaks = { pkg-path = "gitleaks", pkg-group = "repo-tools" }
 
 [vars]
 GOTOOLCHAIN = "go1.26.5+auto"
+GOFLAGS = "-mod=readonly"
+GOENV = "off"

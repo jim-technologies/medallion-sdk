@@ -1,4 +1,4 @@
-import { toJson, type DescField, type DescMessage } from "@bufbuild/protobuf";
+import { type DescField, type DescMessage, toJson } from "@bufbuild/protobuf";
 import { Server, type Tool } from "@jim-technologies/invariant-protocol";
 
 import { connectDescriptorBytes } from "./connect-descriptor.js";
@@ -42,7 +42,9 @@ export class ProtocolConnectClient {
     request: ConnectRegisterConnectorRequest,
     options: RequestOptions = {},
   ): Promise<ResponseEnvelope<ConnectRegisterConnectorResponse>> {
-    return this.rpc("RegisterConnector", request, options);
+    return this.rpc("RegisterConnector", request, options, {
+      idempotencyKey: request.idempotency_key,
+    });
   }
 
   publishCdcEvents(
@@ -291,7 +293,11 @@ export class ProtocolOntologyClient {
     request: Record<string, unknown>,
     options: RequestOptions = {},
   ): Promise<ResponseEnvelope<TResponse>> {
-    return this.rpc("PlanAction", { ...request, action_name: actionName }, options);
+    return this.rpc(
+      "PlanAction",
+      { ...request, action_name: actionName },
+      options,
+    );
   }
 
   executeAction<TResponse = unknown>(

@@ -31,6 +31,20 @@ message CatalogEntry {
   // Optional manifest reference for objects whose chunk list is stored
   // separately.
   ManifestRef manifest = 7;
+
+  // Representation metadata preserved by object protocols.
+  ObjectMetadata metadata = 8;
+}
+
+// ObjectMetadata is protocol-neutral representation metadata. User-defined
+// metadata keys are normalized to lowercase without a protocol-specific
+// prefix.
+message ObjectMetadata {
+  string cache_control = 1;
+  string content_disposition = 2;
+  string content_encoding = 3;
+  string content_language = 4;
+  map<string, string> user = 5;
 }
 
 // ManifestRef locates a ChunkManifest blob in byte storage.
@@ -93,6 +107,7 @@ message ChunkRef {
 message ObjectBytes {
   repeated ChunkRef chunks = 1;
   ManifestRef manifest = 2;
+  ObjectMetadata metadata = 3;
 }
 
 // CatalogAuditRecord records request-level storage mutation facts.
@@ -179,6 +194,8 @@ message Entry {
   optional string content_type = 4;
   // RFC 3339 — creation timestamp for files; absent for folders.
   optional string modified_at = 5;
+  // Stable object ETag; absent for folders.
+  optional string etag = 6;
 }
 
 // SearchHit is one match from Search: a file, with its FULL path inside the

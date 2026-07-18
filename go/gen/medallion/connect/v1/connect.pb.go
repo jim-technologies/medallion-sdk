@@ -137,6 +137,111 @@ func (CdcOperation) EnumDescriptor() ([]byte, []int) {
 	return file_medallion_connect_v1_connect_proto_rawDescGZIP(), []int{1}
 }
 
+// AuditEventOrigin identifies who authored an audit fact. The server derives
+// this value; audit publishers must leave it unspecified.
+type AuditEventOrigin int32
+
+const (
+	AuditEventOrigin_AUDIT_EVENT_ORIGIN_UNSPECIFIED       AuditEventOrigin = 0
+	AuditEventOrigin_AUDIT_EVENT_ORIGIN_EXTERNAL_PROVIDER AuditEventOrigin = 1
+	AuditEventOrigin_AUDIT_EVENT_ORIGIN_CONNECT           AuditEventOrigin = 2
+)
+
+// Enum value maps for AuditEventOrigin.
+var (
+	AuditEventOrigin_name = map[int32]string{
+		0: "AUDIT_EVENT_ORIGIN_UNSPECIFIED",
+		1: "AUDIT_EVENT_ORIGIN_EXTERNAL_PROVIDER",
+		2: "AUDIT_EVENT_ORIGIN_CONNECT",
+	}
+	AuditEventOrigin_value = map[string]int32{
+		"AUDIT_EVENT_ORIGIN_UNSPECIFIED":       0,
+		"AUDIT_EVENT_ORIGIN_EXTERNAL_PROVIDER": 1,
+		"AUDIT_EVENT_ORIGIN_CONNECT":           2,
+	}
+)
+
+func (x AuditEventOrigin) Enum() *AuditEventOrigin {
+	p := new(AuditEventOrigin)
+	*p = x
+	return p
+}
+
+func (x AuditEventOrigin) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AuditEventOrigin) Descriptor() protoreflect.EnumDescriptor {
+	return file_medallion_connect_v1_connect_proto_enumTypes[2].Descriptor()
+}
+
+func (AuditEventOrigin) Type() protoreflect.EnumType {
+	return &file_medallion_connect_v1_connect_proto_enumTypes[2]
+}
+
+func (x AuditEventOrigin) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AuditEventOrigin.Descriptor instead.
+func (AuditEventOrigin) EnumDescriptor() ([]byte, []int) {
+	return file_medallion_connect_v1_connect_proto_rawDescGZIP(), []int{2}
+}
+
+// AuditEventOutcome is Connect's authoritative classification of the audited
+// action result. Audit publishers must provide a concrete value.
+type AuditEventOutcome int32
+
+const (
+	AuditEventOutcome_AUDIT_EVENT_OUTCOME_UNSPECIFIED   AuditEventOutcome = 0
+	AuditEventOutcome_AUDIT_EVENT_OUTCOME_SUCCEEDED     AuditEventOutcome = 1
+	AuditEventOutcome_AUDIT_EVENT_OUTCOME_FAILED        AuditEventOutcome = 2
+	AuditEventOutcome_AUDIT_EVENT_OUTCOME_INDETERMINATE AuditEventOutcome = 3
+)
+
+// Enum value maps for AuditEventOutcome.
+var (
+	AuditEventOutcome_name = map[int32]string{
+		0: "AUDIT_EVENT_OUTCOME_UNSPECIFIED",
+		1: "AUDIT_EVENT_OUTCOME_SUCCEEDED",
+		2: "AUDIT_EVENT_OUTCOME_FAILED",
+		3: "AUDIT_EVENT_OUTCOME_INDETERMINATE",
+	}
+	AuditEventOutcome_value = map[string]int32{
+		"AUDIT_EVENT_OUTCOME_UNSPECIFIED":   0,
+		"AUDIT_EVENT_OUTCOME_SUCCEEDED":     1,
+		"AUDIT_EVENT_OUTCOME_FAILED":        2,
+		"AUDIT_EVENT_OUTCOME_INDETERMINATE": 3,
+	}
+)
+
+func (x AuditEventOutcome) Enum() *AuditEventOutcome {
+	p := new(AuditEventOutcome)
+	*p = x
+	return p
+}
+
+func (x AuditEventOutcome) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AuditEventOutcome) Descriptor() protoreflect.EnumDescriptor {
+	return file_medallion_connect_v1_connect_proto_enumTypes[3].Descriptor()
+}
+
+func (AuditEventOutcome) Type() protoreflect.EnumType {
+	return &file_medallion_connect_v1_connect_proto_enumTypes[3]
+}
+
+func (x AuditEventOutcome) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AuditEventOutcome.Descriptor instead.
+func (AuditEventOutcome) EnumDescriptor() ([]byte, []int) {
+	return file_medallion_connect_v1_connect_proto_rawDescGZIP(), []int{3}
+}
+
 // ActionExecutionStatus is the durable state of a connector action execution.
 type ActionExecutionStatus int32
 
@@ -187,11 +292,11 @@ func (x ActionExecutionStatus) String() string {
 }
 
 func (ActionExecutionStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_medallion_connect_v1_connect_proto_enumTypes[2].Descriptor()
+	return file_medallion_connect_v1_connect_proto_enumTypes[4].Descriptor()
 }
 
 func (ActionExecutionStatus) Type() protoreflect.EnumType {
-	return &file_medallion_connect_v1_connect_proto_enumTypes[2]
+	return &file_medallion_connect_v1_connect_proto_enumTypes[4]
 }
 
 func (x ActionExecutionStatus) Number() protoreflect.EnumNumber {
@@ -200,7 +305,7 @@ func (x ActionExecutionStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ActionExecutionStatus.Descriptor instead.
 func (ActionExecutionStatus) EnumDescriptor() ([]byte, []int) {
-	return file_medallion_connect_v1_connect_proto_rawDescGZIP(), []int{2}
+	return file_medallion_connect_v1_connect_proto_rawDescGZIP(), []int{4}
 }
 
 // Connector is a low-level connection to an external source system.
@@ -344,7 +449,7 @@ type CdcEvent struct {
 	Operation CdcOperation `protobuf:"varint,7,opt,name=operation,proto3,enum=medallion.connect.v1.CdcOperation" json:"operation,omitempty"`
 	// Opaque source-system event id, when the source provides one.
 	SourceEventId string `protobuf:"bytes,8,opt,name=source_event_id,json=sourceEventId,proto3" json:"source_event_id,omitempty"`
-	// Idempotency key scoped to connector_id.
+	// Idempotency key scoped to connector_id and stream_name.
 	IdempotencyKey string `protobuf:"bytes,9,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// Source/application actor that performed the source action. This is a
 	// source fact supplied by trusted connector ingestion and is separate from the
@@ -530,7 +635,8 @@ type AuditEvent struct {
 	Action string `protobuf:"bytes,6,opt,name=action,proto3" json:"action,omitempty"`
 	// Opaque source-system event id, when the source provides one.
 	SourceEventId string `protobuf:"bytes,7,opt,name=source_event_id,json=sourceEventId,proto3" json:"source_event_id,omitempty"`
-	// Idempotency key scoped to connector_id.
+	// Idempotency key scoped to connector_id and the server-selected audit
+	// stream. External and Connect-authored records have isolated namespaces.
 	IdempotencyKey string `protobuf:"bytes,8,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// Source/application actor that performed the action. This source fact is
 	// separate from the authenticated principal that submitted the event.
@@ -547,8 +653,14 @@ type AuditEvent struct {
 	SourceSystem string `protobuf:"bytes,14,opt,name=source_system,json=sourceSystem,proto3" json:"source_system,omitempty"`
 	// Authenticated principal that submitted the event to medallion-connect.
 	IngestedByPrincipal string `protobuf:"bytes,15,opt,name=ingested_by_principal,json=ingestedByPrincipal,proto3" json:"ingested_by_principal,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Server-derived provenance. Publish requests must leave this unspecified;
+	// ListAuditEvents always returns a concrete value.
+	Origin AuditEventOrigin `protobuf:"varint,16,opt,name=origin,proto3,enum=medallion.connect.v1.AuditEventOrigin" json:"origin,omitempty"`
+	// Authoritative result of the audited action. Publish requests must provide
+	// a concrete value; ListAuditEvents always returns a concrete value.
+	Outcome       AuditEventOutcome `protobuf:"varint,17,opt,name=outcome,proto3,enum=medallion.connect.v1.AuditEventOutcome" json:"outcome,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AuditEvent) Reset() {
@@ -686,6 +798,20 @@ func (x *AuditEvent) GetIngestedByPrincipal() string {
 	return ""
 }
 
+func (x *AuditEvent) GetOrigin() AuditEventOrigin {
+	if x != nil {
+		return x.Origin
+	}
+	return AuditEventOrigin_AUDIT_EVENT_ORIGIN_UNSPECIFIED
+}
+
+func (x *AuditEvent) GetOutcome() AuditEventOutcome {
+	if x != nil {
+		return x.Outcome
+	}
+	return AuditEventOutcome_AUDIT_EVENT_OUTCOME_UNSPECIFIED
+}
+
 // ConnectorAction describes a low-level operation exposed by a connector.
 type ConnectorAction struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -707,7 +833,7 @@ type ConnectorAction struct {
 	OutputSchemaJson string `protobuf:"bytes,8,opt,name=output_schema_json,json=outputSchemaJson,proto3" json:"output_schema_json,omitempty"`
 	// Whether the downstream connector operation supports idempotency.
 	IdempotencySupported bool `protobuf:"varint,9,opt,name=idempotency_supported,json=idempotencySupported,proto3" json:"idempotency_supported,omitempty"`
-	// Action timeout budget in seconds.
+	// Action timeout budget in seconds. The platform maximum is five minutes.
 	TimeoutSeconds uint32 `protobuf:"varint,10,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
 	// Current lifecycle state.
 	Status LifecycleStatus `protobuf:"varint,11,opt,name=status,proto3,enum=medallion.connect.v1.LifecycleStatus" json:"status,omitempty"`
@@ -864,7 +990,7 @@ type ActionExecution struct {
 	ResponseJson string `protobuf:"bytes,9,opt,name=response_json,json=responseJson,proto3" json:"response_json,omitempty"`
 	// Current execution state.
 	Status ActionExecutionStatus `protobuf:"varint,10,opt,name=status,proto3,enum=medallion.connect.v1.ActionExecutionStatus" json:"status,omitempty"`
-	// Error text when status is failed.
+	// Error or reconciliation text when status is failed or indeterminate.
 	ErrorMessage string `protobuf:"bytes,11,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
 	// Time execution started.
 	StartedAt *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
@@ -1008,9 +1134,12 @@ type RegisterConnectorRequest struct {
 	// Human-readable connector name.
 	DisplayName string `protobuf:"bytes,4,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	// Optional source-native connector/account/database id.
-	ExternalId    string `protobuf:"bytes,5,opt,name=external_id,json=externalId,proto3" json:"external_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ExternalId string `protobuf:"bytes,5,opt,name=external_id,json=externalId,proto3" json:"external_id,omitempty"`
+	// Caller-stable key for retrying this logical mutation. Reusing the key with
+	// different request fields is rejected.
+	IdempotencyKey string `protobuf:"bytes,6,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *RegisterConnectorRequest) Reset() {
@@ -1074,6 +1203,13 @@ func (x *RegisterConnectorRequest) GetDisplayName() string {
 func (x *RegisterConnectorRequest) GetExternalId() string {
 	if x != nil {
 		return x.ExternalId
+	}
+	return ""
+}
+
+func (x *RegisterConnectorRequest) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
 	}
 	return ""
 }
@@ -1221,9 +1357,11 @@ func (x *ListConnectorsResponse) GetConnectors() []*Connector {
 type DisableConnectorRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Connector id to disable.
-	ConnectorId   string `protobuf:"bytes,1,opt,name=connector_id,json=connectorId,proto3" json:"connector_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ConnectorId string `protobuf:"bytes,1,opt,name=connector_id,json=connectorId,proto3" json:"connector_id,omitempty"`
+	// Caller-stable key for retrying this logical mutation.
+	IdempotencyKey string `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *DisableConnectorRequest) Reset() {
@@ -1259,6 +1397,13 @@ func (*DisableConnectorRequest) Descriptor() ([]byte, []int) {
 func (x *DisableConnectorRequest) GetConnectorId() string {
 	if x != nil {
 		return x.ConnectorId
+	}
+	return ""
+}
+
+func (x *DisableConnectorRequest) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
 	}
 	return ""
 }
@@ -1326,8 +1471,12 @@ type RegisterConnectorActionRequest struct {
 	OutputSchemaJson string `protobuf:"bytes,6,opt,name=output_schema_json,json=outputSchemaJson,proto3" json:"output_schema_json,omitempty"`
 	// Whether the downstream operation supports idempotency.
 	IdempotencySupported bool `protobuf:"varint,7,opt,name=idempotency_supported,json=idempotencySupported,proto3" json:"idempotency_supported,omitempty"`
-	// Action timeout budget in seconds. Defaults to 30.
+	// Action timeout budget in seconds. Defaults to 30 and cannot exceed five
+	// minutes.
 	TimeoutSeconds uint32 `protobuf:"varint,8,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
+	// Caller-stable key for retrying this logical control-plane mutation. This
+	// is separate from an action execution's idempotency key.
+	IdempotencyKey string `protobuf:"bytes,9,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1416,6 +1565,13 @@ func (x *RegisterConnectorActionRequest) GetTimeoutSeconds() uint32 {
 		return x.TimeoutSeconds
 	}
 	return 0
+}
+
+func (x *RegisterConnectorActionRequest) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
+	}
+	return ""
 }
 
 // RegisterConnectorActionResponse returns the registered action.
@@ -1561,8 +1717,10 @@ type DisableConnectorActionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Connector action id to disable.
 	ConnectorActionId string `protobuf:"bytes,1,opt,name=connector_action_id,json=connectorActionId,proto3" json:"connector_action_id,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Caller-stable key for retrying this logical mutation.
+	IdempotencyKey string `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *DisableConnectorActionRequest) Reset() {
@@ -1598,6 +1756,13 @@ func (*DisableConnectorActionRequest) Descriptor() ([]byte, []int) {
 func (x *DisableConnectorActionRequest) GetConnectorActionId() string {
 	if x != nil {
 		return x.ConnectorActionId
+	}
+	return ""
+}
+
+func (x *DisableConnectorActionRequest) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
 	}
 	return ""
 }
@@ -1649,6 +1814,7 @@ func (x *DisableConnectorActionResponse) GetAction() *ConnectorAction {
 }
 
 // ExecuteConnectorActionRequest starts or returns an idempotent execution.
+// Reusing an idempotency key with different request_json is rejected.
 type ExecuteConnectorActionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Connector action id to execute.
@@ -1865,7 +2031,8 @@ type PublishCdcEventsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Connector accepting the event batch.
 	ConnectorId string `protobuf:"bytes,1,opt,name=connector_id,json=connectorId,proto3" json:"connector_id,omitempty"`
-	// Events to publish. Each idempotency_key is scoped to connector_id.
+	// Events to publish. Each idempotency_key is scoped to connector_id and the
+	// event's stream_name.
 	Events        []*CdcEvent `protobuf:"bytes,2,rep,name=events,proto3" json:"events,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2249,7 +2416,8 @@ type PublishAuditEventsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Connector accepting the event batch.
 	ConnectorId string `protobuf:"bytes,1,opt,name=connector_id,json=connectorId,proto3" json:"connector_id,omitempty"`
-	// Events to publish. Each idempotency_key is scoped to connector_id.
+	// Events to publish. Each idempotency_key is scoped to connector_id and the
+	// server-selected external audit stream.
 	Events        []*AuditEvent `protobuf:"bytes,2,rep,name=events,proto3" json:"events,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2456,8 +2624,12 @@ type ListAuditEventsRequest struct {
 	PageCursor string `protobuf:"bytes,11,opt,name=page_cursor,json=pageCursor,proto3" json:"page_cursor,omitempty"`
 	// Optional authenticated ingester principal filter.
 	IngestedByPrincipal string `protobuf:"bytes,12,opt,name=ingested_by_principal,json=ingestedByPrincipal,proto3" json:"ingested_by_principal,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Optional server-derived origin filter. Unspecified returns all origins.
+	Origin AuditEventOrigin `protobuf:"varint,13,opt,name=origin,proto3,enum=medallion.connect.v1.AuditEventOrigin" json:"origin,omitempty"`
+	// Optional authoritative outcome filter. Unspecified returns all outcomes.
+	Outcome       AuditEventOutcome `protobuf:"varint,14,opt,name=outcome,proto3,enum=medallion.connect.v1.AuditEventOutcome" json:"outcome,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListAuditEventsRequest) Reset() {
@@ -2574,6 +2746,20 @@ func (x *ListAuditEventsRequest) GetIngestedByPrincipal() string {
 	return ""
 }
 
+func (x *ListAuditEventsRequest) GetOrigin() AuditEventOrigin {
+	if x != nil {
+		return x.Origin
+	}
+	return AuditEventOrigin_AUDIT_EVENT_ORIGIN_UNSPECIFIED
+}
+
+func (x *ListAuditEventsRequest) GetOutcome() AuditEventOutcome {
+	if x != nil {
+		return x.Outcome
+	}
+	return AuditEventOutcome_AUDIT_EVENT_OUTCOME_UNSPECIFIED
+}
+
 // ListAuditEventsResponse contains one page of audit events.
 type ListAuditEventsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -2633,12 +2819,14 @@ var File_medallion_connect_v1_connect_proto protoreflect.FileDescriptor
 
 const file_medallion_connect_v1_connect_proto_rawDesc = "" +
 	"\n" +
-	"\"medallion/connect/v1/connect.proto\x12\x14medallion.connect.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa3\x03\n" +
+	"\"medallion/connect/v1/connect.proto\x12\x14medallion.connect.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xab\x03\n" +
 	"\tConnector\x12\x17\n" +
-	"\x02id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x02id\x120\n" +
-	"\x0forganization_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eorganizationId\x12\x1b\n" +
-	"\x04kind\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04kind\x12,\n" +
-	"\rsource_system\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\fsourceSystem\x12*\n" +
+	"\x02id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x02id\x123\n" +
+	"\x0forganization_id\x18\x02 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\x01R\x0eorganizationId\x12\x1d\n" +
+	"\x04kind\x18\x03 \x01(\tB\t\xbaH\x06r\x04\x10\x01(@R\x04kind\x12/\n" +
+	"\rsource_system\x18\x04 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\x02R\fsourceSystem\x12*\n" +
 	"\fdisplay_name\x18\x05 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vdisplayName\x12\x1f\n" +
 	"\vexternal_id\x18\x06 \x01(\tR\n" +
 	"externalId\x12=\n" +
@@ -2646,70 +2834,83 @@ const file_medallion_connect_v1_connect_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xc6\x05\n" +
+	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x98\x06\n" +
 	"\bCdcEvent\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\x12'\n" +
-	"\x0forganization_id\x18\x02 \x01(\tR\x0eorganizationId\x12!\n" +
-	"\fconnector_id\x18\x03 \x01(\tR\vconnectorId\x12(\n" +
-	"\vstream_name\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
-	"streamName\x12(\n" +
-	"\ventity_type\x18\x05 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
-	"entityType\x12$\n" +
-	"\tentity_id\x18\x06 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\bentityId\x12@\n" +
-	"\toperation\x18\a \x01(\x0e2\".medallion.connect.v1.CdcOperationR\toperation\x12&\n" +
-	"\x0fsource_event_id\x18\b \x01(\tR\rsourceEventId\x120\n" +
-	"\x0fidempotency_key\x18\t \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eidempotencyKey\x12'\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\x121\n" +
+	"\x0forganization_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03(\x80\x01R\x0eorganizationId\x12+\n" +
+	"\fconnector_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03(\x80\x01R\vconnectorId\x12+\n" +
+	"\vstream_name\x18\x04 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\x02R\n" +
+	"streamName\x12+\n" +
+	"\ventity_type\x18\x05 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\x02R\n" +
+	"entityType\x12'\n" +
+	"\tentity_id\x18\x06 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\bR\bentityId\x12@\n" +
+	"\toperation\x18\a \x01(\x0e2\".medallion.connect.v1.CdcOperationR\toperation\x120\n" +
+	"\x0fsource_event_id\x18\b \x01(\tB\b\xbaH\x05r\x03(\x80\bR\rsourceEventId\x123\n" +
+	"\x0fidempotency_key\x18\t \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\x04R\x0eidempotencyKey\x121\n" +
 	"\x0factor_principal\x18\n" +
-	" \x01(\tR\x0eactorPrincipal\x12*\n" +
+	" \x01(\tB\b\xbaH\x05r\x03(\x80\x04R\x0eactorPrincipal\x12*\n" +
 	"\fpayload_json\x18\v \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vpayloadJson\x12;\n" +
 	"\voccurred_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"occurredAt\x12;\n" +
 	"\vobserved_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"observedAt\x12 \n" +
-	"\vdescription\x18\x0e \x01(\tR\vdescription\x12#\n" +
-	"\rsource_system\x18\x0f \x01(\tR\fsourceSystem\x122\n" +
-	"\x15ingested_by_principal\x18\x10 \x01(\tR\x13ingestedByPrincipal\"\x85\x05\n" +
+	"observedAt\x12*\n" +
+	"\vdescription\x18\x0e \x01(\tB\b\xbaH\x05r\x03(\x80 R\vdescription\x12-\n" +
+	"\rsource_system\x18\x0f \x01(\tB\b\xbaH\x05r\x03(\x80\x02R\fsourceSystem\x12<\n" +
+	"\x15ingested_by_principal\x18\x10 \x01(\tB\b\xbaH\x05r\x03(\x80\x04R\x13ingestedByPrincipal\"\xda\x06\n" +
 	"\n" +
 	"AuditEvent\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\x12'\n" +
-	"\x0forganization_id\x18\x02 \x01(\tR\x0eorganizationId\x12!\n" +
-	"\fconnector_id\x18\x03 \x01(\tR\vconnectorId\x12,\n" +
-	"\rresource_type\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\fresourceType\x12(\n" +
-	"\vresource_id\x18\x05 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
-	"resourceId\x12\x1f\n" +
-	"\x06action\x18\x06 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06action\x12&\n" +
-	"\x0fsource_event_id\x18\a \x01(\tR\rsourceEventId\x120\n" +
-	"\x0fidempotency_key\x18\b \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eidempotencyKey\x12'\n" +
-	"\x0factor_principal\x18\t \x01(\tR\x0eactorPrincipal\x12*\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\x121\n" +
+	"\x0forganization_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03(\x80\x01R\x0eorganizationId\x12+\n" +
+	"\fconnector_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03(\x80\x01R\vconnectorId\x12/\n" +
+	"\rresource_type\x18\x04 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\x02R\fresourceType\x12+\n" +
+	"\vresource_id\x18\x05 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\bR\n" +
+	"resourceId\x12\"\n" +
+	"\x06action\x18\x06 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\x02R\x06action\x120\n" +
+	"\x0fsource_event_id\x18\a \x01(\tB\b\xbaH\x05r\x03(\x80\bR\rsourceEventId\x123\n" +
+	"\x0fidempotency_key\x18\b \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\x04R\x0eidempotencyKey\x121\n" +
+	"\x0factor_principal\x18\t \x01(\tB\b\xbaH\x05r\x03(\x80\x04R\x0eactorPrincipal\x12*\n" +
 	"\fpayload_json\x18\n" +
 	" \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vpayloadJson\x12;\n" +
 	"\voccurred_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"occurredAt\x12;\n" +
 	"\vobserved_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"observedAt\x12 \n" +
-	"\vdescription\x18\r \x01(\tR\vdescription\x12#\n" +
-	"\rsource_system\x18\x0e \x01(\tR\fsourceSystem\x122\n" +
-	"\x15ingested_by_principal\x18\x0f \x01(\tR\x13ingestedByPrincipal\"\xf1\x04\n" +
+	"observedAt\x12*\n" +
+	"\vdescription\x18\r \x01(\tB\b\xbaH\x05r\x03(\x80 R\vdescription\x12-\n" +
+	"\rsource_system\x18\x0e \x01(\tB\b\xbaH\x05r\x03(\x80\x02R\fsourceSystem\x12<\n" +
+	"\x15ingested_by_principal\x18\x0f \x01(\tB\b\xbaH\x05r\x03(\x80\x04R\x13ingestedByPrincipal\x12>\n" +
+	"\x06origin\x18\x10 \x01(\x0e2&.medallion.connect.v1.AuditEventOriginR\x06origin\x12A\n" +
+	"\aoutcome\x18\x11 \x01(\x0e2'.medallion.connect.v1.AuditEventOutcomeR\aoutcome\"\x81\x05\n" +
 	"\x0fConnectorAction\x12\x17\n" +
-	"\x02id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x02id\x120\n" +
-	"\x0forganization_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eorganizationId\x12*\n" +
-	"\fconnector_id\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vconnectorId\x12,\n" +
-	"\roperation_key\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\foperationKey\x12*\n" +
+	"\x02id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x02id\x123\n" +
+	"\x0forganization_id\x18\x02 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\x01R\x0eorganizationId\x12*\n" +
+	"\fconnector_id\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vconnectorId\x12/\n" +
+	"\roperation_key\x18\x04 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\x02R\foperationKey\x12*\n" +
 	"\fdisplay_name\x18\x05 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vdisplayName\x12 \n" +
 	"\vdescription\x18\x06 \x01(\tR\vdescription\x12*\n" +
 	"\x11input_schema_json\x18\a \x01(\tR\x0finputSchemaJson\x12,\n" +
 	"\x12output_schema_json\x18\b \x01(\tR\x10outputSchemaJson\x123\n" +
-	"\x15idempotency_supported\x18\t \x01(\bR\x14idempotencySupported\x12'\n" +
+	"\x15idempotency_supported\x18\t \x01(\bR\x14idempotencySupported\x121\n" +
 	"\x0ftimeout_seconds\x18\n" +
-	" \x01(\rR\x0etimeoutSeconds\x12=\n" +
+	" \x01(\rB\b\xbaH\x05*\x03\x18\xac\x02R\x0etimeoutSeconds\x12=\n" +
 	"\x06status\x18\v \x01(\x0e2%.medallion.connect.v1.LifecycleStatusR\x06status\x129\n" +
 	"\n" +
 	"created_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xf6\x04\n" +
+	"updated_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xf9\x04\n" +
 	"\x0fActionExecution\x12\x17\n" +
-	"\x02id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x02id\x120\n" +
-	"\x0forganization_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eorganizationId\x12*\n" +
+	"\x02id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x02id\x123\n" +
+	"\x0forganization_id\x18\x02 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\x01R\x0eorganizationId\x12*\n" +
 	"\fconnector_id\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vconnectorId\x127\n" +
 	"\x13connector_action_id\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x11connectorActionId\x12,\n" +
 	"\roperation_key\x18\x05 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\foperationKey\x120\n" +
@@ -2722,48 +2923,59 @@ const file_medallion_connect_v1_connect_proto_rawDesc = "" +
 	"\rerror_message\x18\v \x01(\tR\ferrorMessage\x129\n" +
 	"\n" +
 	"started_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x12=\n" +
-	"\fcompleted_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\vcompletedAt\"\xe4\x01\n" +
-	"\x18RegisterConnectorRequest\x120\n" +
-	"\x0forganization_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eorganizationId\x12\x1b\n" +
-	"\x04kind\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04kind\x12,\n" +
-	"\rsource_system\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\fsourceSystem\x12*\n" +
-	"\fdisplay_name\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vdisplayName\x12\x1f\n" +
-	"\vexternal_id\x18\x05 \x01(\tR\n" +
-	"externalId\"b\n" +
+	"\fcompleted_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\vcompletedAt\"\xb8\x02\n" +
+	"\x18RegisterConnectorRequest\x123\n" +
+	"\x0forganization_id\x18\x01 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\x01R\x0eorganizationId\x12\x1d\n" +
+	"\x04kind\x18\x02 \x01(\tB\t\xbaH\x06r\x04\x10\x01(@R\x04kind\x12/\n" +
+	"\rsource_system\x18\x03 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\x02R\fsourceSystem\x12-\n" +
+	"\fdisplay_name\x18\x04 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\x04R\vdisplayName\x12)\n" +
+	"\vexternal_id\x18\x05 \x01(\tB\b\xbaH\x05r\x03(\x80\x10R\n" +
+	"externalId\x12=\n" +
+	"\x0fidempotency_key\x18\x06 \x01(\tB\x14\xbaH\x11r\x0f\x10\x01(\x80\x022\b^[!-~]+$R\x0eidempotencyKey\"b\n" +
 	"\x19RegisterConnectorResponse\x12E\n" +
-	"\tconnector\x18\x01 \x01(\v2\x1f.medallion.connect.v1.ConnectorB\x06\xbaH\x03\xc8\x01\x01R\tconnector\"I\n" +
-	"\x15ListConnectorsRequest\x120\n" +
-	"\x0forganization_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eorganizationId\"Y\n" +
+	"\tconnector\x18\x01 \x01(\v2\x1f.medallion.connect.v1.ConnectorB\x06\xbaH\x03\xc8\x01\x01R\tconnector\"L\n" +
+	"\x15ListConnectorsRequest\x123\n" +
+	"\x0forganization_id\x18\x01 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\x01R\x0eorganizationId\"Y\n" +
 	"\x16ListConnectorsResponse\x12?\n" +
 	"\n" +
 	"connectors\x18\x01 \x03(\v2\x1f.medallion.connect.v1.ConnectorR\n" +
-	"connectors\"E\n" +
+	"connectors\"\x84\x01\n" +
 	"\x17DisableConnectorRequest\x12*\n" +
-	"\fconnector_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vconnectorId\"a\n" +
+	"\fconnector_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vconnectorId\x12=\n" +
+	"\x0fidempotency_key\x18\x02 \x01(\tB\x14\xbaH\x11r\x0f\x10\x01(\x80\x022\b^[!-~]+$R\x0eidempotencyKey\"a\n" +
 	"\x18DisableConnectorResponse\x12E\n" +
-	"\tconnector\x18\x01 \x01(\v2\x1f.medallion.connect.v1.ConnectorB\x06\xbaH\x03\xc8\x01\x01R\tconnector\"\x80\x03\n" +
+	"\tconnector\x18\x01 \x01(\v2\x1f.medallion.connect.v1.ConnectorB\x06\xbaH\x03\xc8\x01\x01R\tconnector\"\xf4\x03\n" +
 	"\x1eRegisterConnectorActionRequest\x12*\n" +
-	"\fconnector_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vconnectorId\x12,\n" +
-	"\roperation_key\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\foperationKey\x12*\n" +
-	"\fdisplay_name\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vdisplayName\x12 \n" +
-	"\vdescription\x18\x04 \x01(\tR\vdescription\x12*\n" +
-	"\x11input_schema_json\x18\x05 \x01(\tR\x0finputSchemaJson\x12,\n" +
-	"\x12output_schema_json\x18\x06 \x01(\tR\x10outputSchemaJson\x123\n" +
-	"\x15idempotency_supported\x18\a \x01(\bR\x14idempotencySupported\x12'\n" +
-	"\x0ftimeout_seconds\x18\b \x01(\rR\x0etimeoutSeconds\"h\n" +
+	"\fconnector_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vconnectorId\x12/\n" +
+	"\roperation_key\x18\x02 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\x02R\foperationKey\x12-\n" +
+	"\fdisplay_name\x18\x03 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\x04R\vdisplayName\x12+\n" +
+	"\vdescription\x18\x04 \x01(\tB\t\xbaH\x06r\x04(\x80\x80\x02R\vdescription\x127\n" +
+	"\x11input_schema_json\x18\x05 \x01(\tB\v\xbaH\br\x06\x10\x01(\x80\x80\x10R\x0finputSchemaJson\x129\n" +
+	"\x12output_schema_json\x18\x06 \x01(\tB\v\xbaH\br\x06\x10\x01(\x80\x80\x10R\x10outputSchemaJson\x123\n" +
+	"\x15idempotency_supported\x18\a \x01(\bR\x14idempotencySupported\x121\n" +
+	"\x0ftimeout_seconds\x18\b \x01(\rB\b\xbaH\x05*\x03\x18\xac\x02R\x0etimeoutSeconds\x12=\n" +
+	"\x0fidempotency_key\x18\t \x01(\tB\x14\xbaH\x11r\x0f\x10\x01(\x80\x022\b^[!-~]+$R\x0eidempotencyKey\"h\n" +
 	"\x1fRegisterConnectorActionResponse\x12E\n" +
 	"\x06action\x18\x01 \x01(\v2%.medallion.connect.v1.ConnectorActionB\x06\xbaH\x03\xc8\x01\x01R\x06action\"I\n" +
 	"\x1bListConnectorActionsRequest\x12*\n" +
 	"\fconnector_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vconnectorId\"_\n" +
 	"\x1cListConnectorActionsResponse\x12?\n" +
-	"\aactions\x18\x01 \x03(\v2%.medallion.connect.v1.ConnectorActionR\aactions\"X\n" +
+	"\aactions\x18\x01 \x03(\v2%.medallion.connect.v1.ConnectorActionR\aactions\"\x97\x01\n" +
 	"\x1dDisableConnectorActionRequest\x127\n" +
-	"\x13connector_action_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x11connectorActionId\"g\n" +
+	"\x13connector_action_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x11connectorActionId\x12=\n" +
+	"\x0fidempotency_key\x18\x02 \x01(\tB\x14\xbaH\x11r\x0f\x10\x01(\x80\x022\b^[!-~]+$R\x0eidempotencyKey\"g\n" +
 	"\x1eDisableConnectorActionResponse\x12E\n" +
-	"\x06action\x18\x01 \x01(\v2%.medallion.connect.v1.ConnectorActionB\x06\xbaH\x03\xc8\x01\x01R\x06action\"\xd6\x01\n" +
+	"\x06action\x18\x01 \x01(\v2%.medallion.connect.v1.ConnectorActionB\x06\xbaH\x03\xc8\x01\x01R\x06action\"\xd9\x01\n" +
 	"\x1dExecuteConnectorActionRequest\x127\n" +
-	"\x13connector_action_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x11connectorActionId\x120\n" +
-	"\x0fidempotency_key\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eidempotencyKey\x12'\n" +
+	"\x13connector_action_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x11connectorActionId\x123\n" +
+	"\x0fidempotency_key\x18\x02 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\bR\x0eidempotencyKey\x12'\n" +
 	"\x0factor_principal\x18\x03 \x01(\tR\x0eactorPrincipal\x12!\n" +
 	"\frequest_json\x18\x04 \x01(\tR\vrequestJson\"m\n" +
 	"\x1eExecuteConnectorActionResponse\x12K\n" +
@@ -2771,9 +2983,10 @@ const file_medallion_connect_v1_connect_proto_rawDesc = "" +
 	"\x19GetActionExecutionRequest\x127\n" +
 	"\x13action_execution_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x11actionExecutionId\"i\n" +
 	"\x1aGetActionExecutionResponse\x12K\n" +
-	"\texecution\x18\x01 \x01(\v2%.medallion.connect.v1.ActionExecutionB\x06\xbaH\x03\xc8\x01\x01R\texecution\"\x8a\x01\n" +
-	"\x17PublishCdcEventsRequest\x12*\n" +
-	"\fconnector_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vconnectorId\x12C\n" +
+	"\texecution\x18\x01 \x01(\v2%.medallion.connect.v1.ActionExecutionB\x06\xbaH\x03\xc8\x01\x01R\texecution\"\x8d\x01\n" +
+	"\x17PublishCdcEventsRequest\x12-\n" +
+	"\fconnector_id\x18\x01 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\x01R\vconnectorId\x12C\n" +
 	"\x06events\x18\x02 \x03(\v2\x1e.medallion.connect.v1.CdcEventB\v\xbaH\b\x92\x01\x05\b\x01\x10\xe8\aR\x06events\"u\n" +
 	"\x11PublishedCdcEvent\x12'\n" +
 	"\x0fidempotency_key\x18\x01 \x01(\tR\x0eidempotencyKey\x12\x19\n" +
@@ -2782,29 +2995,31 @@ const file_medallion_connect_v1_connect_proto_rawDesc = "" +
 	"\x18PublishCdcEventsResponse\x12%\n" +
 	"\x0eaccepted_count\x18\x01 \x01(\rR\racceptedCount\x12'\n" +
 	"\x0fduplicate_count\x18\x02 \x01(\rR\x0eduplicateCount\x12?\n" +
-	"\x06events\x18\x03 \x03(\v2'.medallion.connect.v1.PublishedCdcEventR\x06events\"\x95\x04\n" +
-	"\x14ListCdcEventsRequest\x120\n" +
-	"\x0forganization_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eorganizationId\x12!\n" +
-	"\fconnector_id\x18\x02 \x01(\tR\vconnectorId\x12\x1f\n" +
-	"\ventity_type\x18\x03 \x01(\tR\n" +
-	"entityType\x12\x1b\n" +
-	"\tentity_id\x18\x04 \x01(\tR\bentityId\x12\x1e\n" +
-	"\x05limit\x18\x05 \x01(\rB\b\xbaH\x05*\x03\x18\xf4\x03R\x05limit\x12'\n" +
-	"\x0factor_principal\x18\x06 \x01(\tR\x0eactorPrincipal\x12D\n" +
+	"\x06events\x18\x03 \x03(\v2'.medallion.connect.v1.PublishedCdcEventR\x06events\"\xe8\x04\n" +
+	"\x14ListCdcEventsRequest\x123\n" +
+	"\x0forganization_id\x18\x01 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\x01R\x0eorganizationId\x12+\n" +
+	"\fconnector_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03(\x80\x01R\vconnectorId\x12)\n" +
+	"\ventity_type\x18\x03 \x01(\tB\b\xbaH\x05r\x03(\x80\x02R\n" +
+	"entityType\x12%\n" +
+	"\tentity_id\x18\x04 \x01(\tB\b\xbaH\x05r\x03(\x80\bR\bentityId\x12\x1e\n" +
+	"\x05limit\x18\x05 \x01(\rB\b\xbaH\x05*\x03\x18\xf4\x03R\x05limit\x121\n" +
+	"\x0factor_principal\x18\x06 \x01(\tB\b\xbaH\x05r\x03(\x80\x04R\x0eactorPrincipal\x12D\n" +
 	"\x10occurred_at_from\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x0eoccurredAtFrom\x12@\n" +
-	"\x0eoccurred_at_to\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\foccurredAtTo\x12#\n" +
-	"\rsource_system\x18\t \x01(\tR\fsourceSystem\x12\x1f\n" +
+	"\x0eoccurred_at_to\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\foccurredAtTo\x12-\n" +
+	"\rsource_system\x18\t \x01(\tB\b\xbaH\x05r\x03(\x80\x02R\fsourceSystem\x12)\n" +
 	"\vstream_name\x18\n" +
-	" \x01(\tR\n" +
-	"streamName\x12\x1f\n" +
-	"\vpage_cursor\x18\v \x01(\tR\n" +
-	"pageCursor\x122\n" +
-	"\x15ingested_by_principal\x18\f \x01(\tR\x13ingestedByPrincipal\"y\n" +
+	" \x01(\tB\b\xbaH\x05r\x03(\x80\x02R\n" +
+	"streamName\x12)\n" +
+	"\vpage_cursor\x18\v \x01(\tB\b\xbaH\x05r\x03(\x80\x10R\n" +
+	"pageCursor\x12<\n" +
+	"\x15ingested_by_principal\x18\f \x01(\tB\b\xbaH\x05r\x03(\x80\x04R\x13ingestedByPrincipal\"y\n" +
 	"\x15ListCdcEventsResponse\x126\n" +
 	"\x06events\x18\x01 \x03(\v2\x1e.medallion.connect.v1.CdcEventR\x06events\x12(\n" +
-	"\x10next_page_cursor\x18\x02 \x01(\tR\x0enextPageCursor\"\x8e\x01\n" +
-	"\x19PublishAuditEventsRequest\x12*\n" +
-	"\fconnector_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vconnectorId\x12E\n" +
+	"\x10next_page_cursor\x18\x02 \x01(\tR\x0enextPageCursor\"\x91\x01\n" +
+	"\x19PublishAuditEventsRequest\x12-\n" +
+	"\fconnector_id\x18\x01 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\x01R\vconnectorId\x12E\n" +
 	"\x06events\x18\x02 \x03(\v2 .medallion.connect.v1.AuditEventB\v\xbaH\b\x92\x01\x05\b\x01\x10\xe8\aR\x06events\"w\n" +
 	"\x13PublishedAuditEvent\x12'\n" +
 	"\x0fidempotency_key\x18\x01 \x01(\tR\x0eidempotencyKey\x12\x19\n" +
@@ -2813,23 +3028,26 @@ const file_medallion_connect_v1_connect_proto_rawDesc = "" +
 	"\x1aPublishAuditEventsResponse\x12%\n" +
 	"\x0eaccepted_count\x18\x01 \x01(\rR\racceptedCount\x12'\n" +
 	"\x0fduplicate_count\x18\x02 \x01(\rR\x0eduplicateCount\x12A\n" +
-	"\x06events\x18\x03 \x03(\v2).medallion.connect.v1.PublishedAuditEventR\x06events\"\x96\x04\n" +
-	"\x16ListAuditEventsRequest\x120\n" +
-	"\x0forganization_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eorganizationId\x12!\n" +
-	"\fconnector_id\x18\x02 \x01(\tR\vconnectorId\x12#\n" +
-	"\rresource_type\x18\x03 \x01(\tR\fresourceType\x12\x1f\n" +
-	"\vresource_id\x18\x04 \x01(\tR\n" +
+	"\x06events\x18\x03 \x03(\v2).medallion.connect.v1.PublishedAuditEventR\x06events\"\xec\x05\n" +
+	"\x16ListAuditEventsRequest\x123\n" +
+	"\x0forganization_id\x18\x01 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\x01R\x0eorganizationId\x12+\n" +
+	"\fconnector_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03(\x80\x01R\vconnectorId\x12-\n" +
+	"\rresource_type\x18\x03 \x01(\tB\b\xbaH\x05r\x03(\x80\x02R\fresourceType\x12)\n" +
+	"\vresource_id\x18\x04 \x01(\tB\b\xbaH\x05r\x03(\x80\bR\n" +
 	"resourceId\x12\x1e\n" +
-	"\x05limit\x18\x05 \x01(\rB\b\xbaH\x05*\x03\x18\xf4\x03R\x05limit\x12'\n" +
-	"\x0factor_principal\x18\x06 \x01(\tR\x0eactorPrincipal\x12\x16\n" +
-	"\x06action\x18\a \x01(\tR\x06action\x12D\n" +
+	"\x05limit\x18\x05 \x01(\rB\b\xbaH\x05*\x03\x18\xf4\x03R\x05limit\x121\n" +
+	"\x0factor_principal\x18\x06 \x01(\tB\b\xbaH\x05r\x03(\x80\x04R\x0eactorPrincipal\x12 \n" +
+	"\x06action\x18\a \x01(\tB\b\xbaH\x05r\x03(\x80\x02R\x06action\x12D\n" +
 	"\x10occurred_at_from\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\x0eoccurredAtFrom\x12@\n" +
-	"\x0eoccurred_at_to\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\foccurredAtTo\x12#\n" +
+	"\x0eoccurred_at_to\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\foccurredAtTo\x12-\n" +
 	"\rsource_system\x18\n" +
-	" \x01(\tR\fsourceSystem\x12\x1f\n" +
-	"\vpage_cursor\x18\v \x01(\tR\n" +
-	"pageCursor\x122\n" +
-	"\x15ingested_by_principal\x18\f \x01(\tR\x13ingestedByPrincipal\"}\n" +
+	" \x01(\tB\b\xbaH\x05r\x03(\x80\x02R\fsourceSystem\x12)\n" +
+	"\vpage_cursor\x18\v \x01(\tB\b\xbaH\x05r\x03(\x80\x10R\n" +
+	"pageCursor\x12<\n" +
+	"\x15ingested_by_principal\x18\f \x01(\tB\b\xbaH\x05r\x03(\x80\x04R\x13ingestedByPrincipal\x12>\n" +
+	"\x06origin\x18\r \x01(\x0e2&.medallion.connect.v1.AuditEventOriginR\x06origin\x12A\n" +
+	"\aoutcome\x18\x0e \x01(\x0e2'.medallion.connect.v1.AuditEventOutcomeR\aoutcome\"}\n" +
 	"\x17ListAuditEventsResponse\x128\n" +
 	"\x06events\x18\x01 \x03(\v2 .medallion.connect.v1.AuditEventR\x06events\x12(\n" +
 	"\x10next_page_cursor\x18\x02 \x01(\tR\x0enextPageCursor*o\n" +
@@ -2842,7 +3060,16 @@ const file_medallion_connect_v1_connect_proto_rawDesc = "" +
 	"\x14CDC_OPERATION_INSERT\x10\x01\x12\x18\n" +
 	"\x14CDC_OPERATION_UPDATE\x10\x02\x12\x18\n" +
 	"\x14CDC_OPERATION_DELETE\x10\x03\x12\x1a\n" +
-	"\x16CDC_OPERATION_SNAPSHOT\x10\x04*\x80\x02\n" +
+	"\x16CDC_OPERATION_SNAPSHOT\x10\x04*\x80\x01\n" +
+	"\x10AuditEventOrigin\x12\"\n" +
+	"\x1eAUDIT_EVENT_ORIGIN_UNSPECIFIED\x10\x00\x12(\n" +
+	"$AUDIT_EVENT_ORIGIN_EXTERNAL_PROVIDER\x10\x01\x12\x1e\n" +
+	"\x1aAUDIT_EVENT_ORIGIN_CONNECT\x10\x02*\xa2\x01\n" +
+	"\x11AuditEventOutcome\x12#\n" +
+	"\x1fAUDIT_EVENT_OUTCOME_UNSPECIFIED\x10\x00\x12!\n" +
+	"\x1dAUDIT_EVENT_OUTCOME_SUCCEEDED\x10\x01\x12\x1e\n" +
+	"\x1aAUDIT_EVENT_OUTCOME_FAILED\x10\x02\x12%\n" +
+	"!AUDIT_EVENT_OUTCOME_INDETERMINATE\x10\x03*\x80\x02\n" +
 	"\x15ActionExecutionStatus\x12'\n" +
 	"#ACTION_EXECUTION_STATUS_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fACTION_EXECUTION_STATUS_PENDING\x10\x01\x12#\n" +
@@ -2876,107 +3103,113 @@ func file_medallion_connect_v1_connect_proto_rawDescGZIP() []byte {
 	return file_medallion_connect_v1_connect_proto_rawDescData
 }
 
-var file_medallion_connect_v1_connect_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_medallion_connect_v1_connect_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
 var file_medallion_connect_v1_connect_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_medallion_connect_v1_connect_proto_goTypes = []any{
 	(LifecycleStatus)(0),                    // 0: medallion.connect.v1.LifecycleStatus
 	(CdcOperation)(0),                       // 1: medallion.connect.v1.CdcOperation
-	(ActionExecutionStatus)(0),              // 2: medallion.connect.v1.ActionExecutionStatus
-	(*Connector)(nil),                       // 3: medallion.connect.v1.Connector
-	(*CdcEvent)(nil),                        // 4: medallion.connect.v1.CdcEvent
-	(*AuditEvent)(nil),                      // 5: medallion.connect.v1.AuditEvent
-	(*ConnectorAction)(nil),                 // 6: medallion.connect.v1.ConnectorAction
-	(*ActionExecution)(nil),                 // 7: medallion.connect.v1.ActionExecution
-	(*RegisterConnectorRequest)(nil),        // 8: medallion.connect.v1.RegisterConnectorRequest
-	(*RegisterConnectorResponse)(nil),       // 9: medallion.connect.v1.RegisterConnectorResponse
-	(*ListConnectorsRequest)(nil),           // 10: medallion.connect.v1.ListConnectorsRequest
-	(*ListConnectorsResponse)(nil),          // 11: medallion.connect.v1.ListConnectorsResponse
-	(*DisableConnectorRequest)(nil),         // 12: medallion.connect.v1.DisableConnectorRequest
-	(*DisableConnectorResponse)(nil),        // 13: medallion.connect.v1.DisableConnectorResponse
-	(*RegisterConnectorActionRequest)(nil),  // 14: medallion.connect.v1.RegisterConnectorActionRequest
-	(*RegisterConnectorActionResponse)(nil), // 15: medallion.connect.v1.RegisterConnectorActionResponse
-	(*ListConnectorActionsRequest)(nil),     // 16: medallion.connect.v1.ListConnectorActionsRequest
-	(*ListConnectorActionsResponse)(nil),    // 17: medallion.connect.v1.ListConnectorActionsResponse
-	(*DisableConnectorActionRequest)(nil),   // 18: medallion.connect.v1.DisableConnectorActionRequest
-	(*DisableConnectorActionResponse)(nil),  // 19: medallion.connect.v1.DisableConnectorActionResponse
-	(*ExecuteConnectorActionRequest)(nil),   // 20: medallion.connect.v1.ExecuteConnectorActionRequest
-	(*ExecuteConnectorActionResponse)(nil),  // 21: medallion.connect.v1.ExecuteConnectorActionResponse
-	(*GetActionExecutionRequest)(nil),       // 22: medallion.connect.v1.GetActionExecutionRequest
-	(*GetActionExecutionResponse)(nil),      // 23: medallion.connect.v1.GetActionExecutionResponse
-	(*PublishCdcEventsRequest)(nil),         // 24: medallion.connect.v1.PublishCdcEventsRequest
-	(*PublishedCdcEvent)(nil),               // 25: medallion.connect.v1.PublishedCdcEvent
-	(*PublishCdcEventsResponse)(nil),        // 26: medallion.connect.v1.PublishCdcEventsResponse
-	(*ListCdcEventsRequest)(nil),            // 27: medallion.connect.v1.ListCdcEventsRequest
-	(*ListCdcEventsResponse)(nil),           // 28: medallion.connect.v1.ListCdcEventsResponse
-	(*PublishAuditEventsRequest)(nil),       // 29: medallion.connect.v1.PublishAuditEventsRequest
-	(*PublishedAuditEvent)(nil),             // 30: medallion.connect.v1.PublishedAuditEvent
-	(*PublishAuditEventsResponse)(nil),      // 31: medallion.connect.v1.PublishAuditEventsResponse
-	(*ListAuditEventsRequest)(nil),          // 32: medallion.connect.v1.ListAuditEventsRequest
-	(*ListAuditEventsResponse)(nil),         // 33: medallion.connect.v1.ListAuditEventsResponse
-	(*timestamppb.Timestamp)(nil),           // 34: google.protobuf.Timestamp
+	(AuditEventOrigin)(0),                   // 2: medallion.connect.v1.AuditEventOrigin
+	(AuditEventOutcome)(0),                  // 3: medallion.connect.v1.AuditEventOutcome
+	(ActionExecutionStatus)(0),              // 4: medallion.connect.v1.ActionExecutionStatus
+	(*Connector)(nil),                       // 5: medallion.connect.v1.Connector
+	(*CdcEvent)(nil),                        // 6: medallion.connect.v1.CdcEvent
+	(*AuditEvent)(nil),                      // 7: medallion.connect.v1.AuditEvent
+	(*ConnectorAction)(nil),                 // 8: medallion.connect.v1.ConnectorAction
+	(*ActionExecution)(nil),                 // 9: medallion.connect.v1.ActionExecution
+	(*RegisterConnectorRequest)(nil),        // 10: medallion.connect.v1.RegisterConnectorRequest
+	(*RegisterConnectorResponse)(nil),       // 11: medallion.connect.v1.RegisterConnectorResponse
+	(*ListConnectorsRequest)(nil),           // 12: medallion.connect.v1.ListConnectorsRequest
+	(*ListConnectorsResponse)(nil),          // 13: medallion.connect.v1.ListConnectorsResponse
+	(*DisableConnectorRequest)(nil),         // 14: medallion.connect.v1.DisableConnectorRequest
+	(*DisableConnectorResponse)(nil),        // 15: medallion.connect.v1.DisableConnectorResponse
+	(*RegisterConnectorActionRequest)(nil),  // 16: medallion.connect.v1.RegisterConnectorActionRequest
+	(*RegisterConnectorActionResponse)(nil), // 17: medallion.connect.v1.RegisterConnectorActionResponse
+	(*ListConnectorActionsRequest)(nil),     // 18: medallion.connect.v1.ListConnectorActionsRequest
+	(*ListConnectorActionsResponse)(nil),    // 19: medallion.connect.v1.ListConnectorActionsResponse
+	(*DisableConnectorActionRequest)(nil),   // 20: medallion.connect.v1.DisableConnectorActionRequest
+	(*DisableConnectorActionResponse)(nil),  // 21: medallion.connect.v1.DisableConnectorActionResponse
+	(*ExecuteConnectorActionRequest)(nil),   // 22: medallion.connect.v1.ExecuteConnectorActionRequest
+	(*ExecuteConnectorActionResponse)(nil),  // 23: medallion.connect.v1.ExecuteConnectorActionResponse
+	(*GetActionExecutionRequest)(nil),       // 24: medallion.connect.v1.GetActionExecutionRequest
+	(*GetActionExecutionResponse)(nil),      // 25: medallion.connect.v1.GetActionExecutionResponse
+	(*PublishCdcEventsRequest)(nil),         // 26: medallion.connect.v1.PublishCdcEventsRequest
+	(*PublishedCdcEvent)(nil),               // 27: medallion.connect.v1.PublishedCdcEvent
+	(*PublishCdcEventsResponse)(nil),        // 28: medallion.connect.v1.PublishCdcEventsResponse
+	(*ListCdcEventsRequest)(nil),            // 29: medallion.connect.v1.ListCdcEventsRequest
+	(*ListCdcEventsResponse)(nil),           // 30: medallion.connect.v1.ListCdcEventsResponse
+	(*PublishAuditEventsRequest)(nil),       // 31: medallion.connect.v1.PublishAuditEventsRequest
+	(*PublishedAuditEvent)(nil),             // 32: medallion.connect.v1.PublishedAuditEvent
+	(*PublishAuditEventsResponse)(nil),      // 33: medallion.connect.v1.PublishAuditEventsResponse
+	(*ListAuditEventsRequest)(nil),          // 34: medallion.connect.v1.ListAuditEventsRequest
+	(*ListAuditEventsResponse)(nil),         // 35: medallion.connect.v1.ListAuditEventsResponse
+	(*timestamppb.Timestamp)(nil),           // 36: google.protobuf.Timestamp
 }
 var file_medallion_connect_v1_connect_proto_depIdxs = []int32{
 	0,  // 0: medallion.connect.v1.Connector.status:type_name -> medallion.connect.v1.LifecycleStatus
-	34, // 1: medallion.connect.v1.Connector.created_at:type_name -> google.protobuf.Timestamp
-	34, // 2: medallion.connect.v1.Connector.updated_at:type_name -> google.protobuf.Timestamp
+	36, // 1: medallion.connect.v1.Connector.created_at:type_name -> google.protobuf.Timestamp
+	36, // 2: medallion.connect.v1.Connector.updated_at:type_name -> google.protobuf.Timestamp
 	1,  // 3: medallion.connect.v1.CdcEvent.operation:type_name -> medallion.connect.v1.CdcOperation
-	34, // 4: medallion.connect.v1.CdcEvent.occurred_at:type_name -> google.protobuf.Timestamp
-	34, // 5: medallion.connect.v1.CdcEvent.observed_at:type_name -> google.protobuf.Timestamp
-	34, // 6: medallion.connect.v1.AuditEvent.occurred_at:type_name -> google.protobuf.Timestamp
-	34, // 7: medallion.connect.v1.AuditEvent.observed_at:type_name -> google.protobuf.Timestamp
-	0,  // 8: medallion.connect.v1.ConnectorAction.status:type_name -> medallion.connect.v1.LifecycleStatus
-	34, // 9: medallion.connect.v1.ConnectorAction.created_at:type_name -> google.protobuf.Timestamp
-	34, // 10: medallion.connect.v1.ConnectorAction.updated_at:type_name -> google.protobuf.Timestamp
-	2,  // 11: medallion.connect.v1.ActionExecution.status:type_name -> medallion.connect.v1.ActionExecutionStatus
-	34, // 12: medallion.connect.v1.ActionExecution.started_at:type_name -> google.protobuf.Timestamp
-	34, // 13: medallion.connect.v1.ActionExecution.completed_at:type_name -> google.protobuf.Timestamp
-	3,  // 14: medallion.connect.v1.RegisterConnectorResponse.connector:type_name -> medallion.connect.v1.Connector
-	3,  // 15: medallion.connect.v1.ListConnectorsResponse.connectors:type_name -> medallion.connect.v1.Connector
-	3,  // 16: medallion.connect.v1.DisableConnectorResponse.connector:type_name -> medallion.connect.v1.Connector
-	6,  // 17: medallion.connect.v1.RegisterConnectorActionResponse.action:type_name -> medallion.connect.v1.ConnectorAction
-	6,  // 18: medallion.connect.v1.ListConnectorActionsResponse.actions:type_name -> medallion.connect.v1.ConnectorAction
-	6,  // 19: medallion.connect.v1.DisableConnectorActionResponse.action:type_name -> medallion.connect.v1.ConnectorAction
-	7,  // 20: medallion.connect.v1.ExecuteConnectorActionResponse.execution:type_name -> medallion.connect.v1.ActionExecution
-	7,  // 21: medallion.connect.v1.GetActionExecutionResponse.execution:type_name -> medallion.connect.v1.ActionExecution
-	4,  // 22: medallion.connect.v1.PublishCdcEventsRequest.events:type_name -> medallion.connect.v1.CdcEvent
-	25, // 23: medallion.connect.v1.PublishCdcEventsResponse.events:type_name -> medallion.connect.v1.PublishedCdcEvent
-	34, // 24: medallion.connect.v1.ListCdcEventsRequest.occurred_at_from:type_name -> google.protobuf.Timestamp
-	34, // 25: medallion.connect.v1.ListCdcEventsRequest.occurred_at_to:type_name -> google.protobuf.Timestamp
-	4,  // 26: medallion.connect.v1.ListCdcEventsResponse.events:type_name -> medallion.connect.v1.CdcEvent
-	5,  // 27: medallion.connect.v1.PublishAuditEventsRequest.events:type_name -> medallion.connect.v1.AuditEvent
-	30, // 28: medallion.connect.v1.PublishAuditEventsResponse.events:type_name -> medallion.connect.v1.PublishedAuditEvent
-	34, // 29: medallion.connect.v1.ListAuditEventsRequest.occurred_at_from:type_name -> google.protobuf.Timestamp
-	34, // 30: medallion.connect.v1.ListAuditEventsRequest.occurred_at_to:type_name -> google.protobuf.Timestamp
-	5,  // 31: medallion.connect.v1.ListAuditEventsResponse.events:type_name -> medallion.connect.v1.AuditEvent
-	8,  // 32: medallion.connect.v1.MedallionConnectService.RegisterConnector:input_type -> medallion.connect.v1.RegisterConnectorRequest
-	10, // 33: medallion.connect.v1.MedallionConnectService.ListConnectors:input_type -> medallion.connect.v1.ListConnectorsRequest
-	12, // 34: medallion.connect.v1.MedallionConnectService.DisableConnector:input_type -> medallion.connect.v1.DisableConnectorRequest
-	14, // 35: medallion.connect.v1.MedallionConnectService.RegisterConnectorAction:input_type -> medallion.connect.v1.RegisterConnectorActionRequest
-	16, // 36: medallion.connect.v1.MedallionConnectService.ListConnectorActions:input_type -> medallion.connect.v1.ListConnectorActionsRequest
-	18, // 37: medallion.connect.v1.MedallionConnectService.DisableConnectorAction:input_type -> medallion.connect.v1.DisableConnectorActionRequest
-	20, // 38: medallion.connect.v1.MedallionConnectService.ExecuteConnectorAction:input_type -> medallion.connect.v1.ExecuteConnectorActionRequest
-	22, // 39: medallion.connect.v1.MedallionConnectService.GetActionExecution:input_type -> medallion.connect.v1.GetActionExecutionRequest
-	24, // 40: medallion.connect.v1.MedallionConnectService.PublishCdcEvents:input_type -> medallion.connect.v1.PublishCdcEventsRequest
-	27, // 41: medallion.connect.v1.MedallionConnectService.ListCdcEvents:input_type -> medallion.connect.v1.ListCdcEventsRequest
-	29, // 42: medallion.connect.v1.MedallionConnectService.PublishAuditEvents:input_type -> medallion.connect.v1.PublishAuditEventsRequest
-	32, // 43: medallion.connect.v1.MedallionConnectService.ListAuditEvents:input_type -> medallion.connect.v1.ListAuditEventsRequest
-	9,  // 44: medallion.connect.v1.MedallionConnectService.RegisterConnector:output_type -> medallion.connect.v1.RegisterConnectorResponse
-	11, // 45: medallion.connect.v1.MedallionConnectService.ListConnectors:output_type -> medallion.connect.v1.ListConnectorsResponse
-	13, // 46: medallion.connect.v1.MedallionConnectService.DisableConnector:output_type -> medallion.connect.v1.DisableConnectorResponse
-	15, // 47: medallion.connect.v1.MedallionConnectService.RegisterConnectorAction:output_type -> medallion.connect.v1.RegisterConnectorActionResponse
-	17, // 48: medallion.connect.v1.MedallionConnectService.ListConnectorActions:output_type -> medallion.connect.v1.ListConnectorActionsResponse
-	19, // 49: medallion.connect.v1.MedallionConnectService.DisableConnectorAction:output_type -> medallion.connect.v1.DisableConnectorActionResponse
-	21, // 50: medallion.connect.v1.MedallionConnectService.ExecuteConnectorAction:output_type -> medallion.connect.v1.ExecuteConnectorActionResponse
-	23, // 51: medallion.connect.v1.MedallionConnectService.GetActionExecution:output_type -> medallion.connect.v1.GetActionExecutionResponse
-	26, // 52: medallion.connect.v1.MedallionConnectService.PublishCdcEvents:output_type -> medallion.connect.v1.PublishCdcEventsResponse
-	28, // 53: medallion.connect.v1.MedallionConnectService.ListCdcEvents:output_type -> medallion.connect.v1.ListCdcEventsResponse
-	31, // 54: medallion.connect.v1.MedallionConnectService.PublishAuditEvents:output_type -> medallion.connect.v1.PublishAuditEventsResponse
-	33, // 55: medallion.connect.v1.MedallionConnectService.ListAuditEvents:output_type -> medallion.connect.v1.ListAuditEventsResponse
-	44, // [44:56] is the sub-list for method output_type
-	32, // [32:44] is the sub-list for method input_type
-	32, // [32:32] is the sub-list for extension type_name
-	32, // [32:32] is the sub-list for extension extendee
-	0,  // [0:32] is the sub-list for field type_name
+	36, // 4: medallion.connect.v1.CdcEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	36, // 5: medallion.connect.v1.CdcEvent.observed_at:type_name -> google.protobuf.Timestamp
+	36, // 6: medallion.connect.v1.AuditEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	36, // 7: medallion.connect.v1.AuditEvent.observed_at:type_name -> google.protobuf.Timestamp
+	2,  // 8: medallion.connect.v1.AuditEvent.origin:type_name -> medallion.connect.v1.AuditEventOrigin
+	3,  // 9: medallion.connect.v1.AuditEvent.outcome:type_name -> medallion.connect.v1.AuditEventOutcome
+	0,  // 10: medallion.connect.v1.ConnectorAction.status:type_name -> medallion.connect.v1.LifecycleStatus
+	36, // 11: medallion.connect.v1.ConnectorAction.created_at:type_name -> google.protobuf.Timestamp
+	36, // 12: medallion.connect.v1.ConnectorAction.updated_at:type_name -> google.protobuf.Timestamp
+	4,  // 13: medallion.connect.v1.ActionExecution.status:type_name -> medallion.connect.v1.ActionExecutionStatus
+	36, // 14: medallion.connect.v1.ActionExecution.started_at:type_name -> google.protobuf.Timestamp
+	36, // 15: medallion.connect.v1.ActionExecution.completed_at:type_name -> google.protobuf.Timestamp
+	5,  // 16: medallion.connect.v1.RegisterConnectorResponse.connector:type_name -> medallion.connect.v1.Connector
+	5,  // 17: medallion.connect.v1.ListConnectorsResponse.connectors:type_name -> medallion.connect.v1.Connector
+	5,  // 18: medallion.connect.v1.DisableConnectorResponse.connector:type_name -> medallion.connect.v1.Connector
+	8,  // 19: medallion.connect.v1.RegisterConnectorActionResponse.action:type_name -> medallion.connect.v1.ConnectorAction
+	8,  // 20: medallion.connect.v1.ListConnectorActionsResponse.actions:type_name -> medallion.connect.v1.ConnectorAction
+	8,  // 21: medallion.connect.v1.DisableConnectorActionResponse.action:type_name -> medallion.connect.v1.ConnectorAction
+	9,  // 22: medallion.connect.v1.ExecuteConnectorActionResponse.execution:type_name -> medallion.connect.v1.ActionExecution
+	9,  // 23: medallion.connect.v1.GetActionExecutionResponse.execution:type_name -> medallion.connect.v1.ActionExecution
+	6,  // 24: medallion.connect.v1.PublishCdcEventsRequest.events:type_name -> medallion.connect.v1.CdcEvent
+	27, // 25: medallion.connect.v1.PublishCdcEventsResponse.events:type_name -> medallion.connect.v1.PublishedCdcEvent
+	36, // 26: medallion.connect.v1.ListCdcEventsRequest.occurred_at_from:type_name -> google.protobuf.Timestamp
+	36, // 27: medallion.connect.v1.ListCdcEventsRequest.occurred_at_to:type_name -> google.protobuf.Timestamp
+	6,  // 28: medallion.connect.v1.ListCdcEventsResponse.events:type_name -> medallion.connect.v1.CdcEvent
+	7,  // 29: medallion.connect.v1.PublishAuditEventsRequest.events:type_name -> medallion.connect.v1.AuditEvent
+	32, // 30: medallion.connect.v1.PublishAuditEventsResponse.events:type_name -> medallion.connect.v1.PublishedAuditEvent
+	36, // 31: medallion.connect.v1.ListAuditEventsRequest.occurred_at_from:type_name -> google.protobuf.Timestamp
+	36, // 32: medallion.connect.v1.ListAuditEventsRequest.occurred_at_to:type_name -> google.protobuf.Timestamp
+	2,  // 33: medallion.connect.v1.ListAuditEventsRequest.origin:type_name -> medallion.connect.v1.AuditEventOrigin
+	3,  // 34: medallion.connect.v1.ListAuditEventsRequest.outcome:type_name -> medallion.connect.v1.AuditEventOutcome
+	7,  // 35: medallion.connect.v1.ListAuditEventsResponse.events:type_name -> medallion.connect.v1.AuditEvent
+	10, // 36: medallion.connect.v1.MedallionConnectService.RegisterConnector:input_type -> medallion.connect.v1.RegisterConnectorRequest
+	12, // 37: medallion.connect.v1.MedallionConnectService.ListConnectors:input_type -> medallion.connect.v1.ListConnectorsRequest
+	14, // 38: medallion.connect.v1.MedallionConnectService.DisableConnector:input_type -> medallion.connect.v1.DisableConnectorRequest
+	16, // 39: medallion.connect.v1.MedallionConnectService.RegisterConnectorAction:input_type -> medallion.connect.v1.RegisterConnectorActionRequest
+	18, // 40: medallion.connect.v1.MedallionConnectService.ListConnectorActions:input_type -> medallion.connect.v1.ListConnectorActionsRequest
+	20, // 41: medallion.connect.v1.MedallionConnectService.DisableConnectorAction:input_type -> medallion.connect.v1.DisableConnectorActionRequest
+	22, // 42: medallion.connect.v1.MedallionConnectService.ExecuteConnectorAction:input_type -> medallion.connect.v1.ExecuteConnectorActionRequest
+	24, // 43: medallion.connect.v1.MedallionConnectService.GetActionExecution:input_type -> medallion.connect.v1.GetActionExecutionRequest
+	26, // 44: medallion.connect.v1.MedallionConnectService.PublishCdcEvents:input_type -> medallion.connect.v1.PublishCdcEventsRequest
+	29, // 45: medallion.connect.v1.MedallionConnectService.ListCdcEvents:input_type -> medallion.connect.v1.ListCdcEventsRequest
+	31, // 46: medallion.connect.v1.MedallionConnectService.PublishAuditEvents:input_type -> medallion.connect.v1.PublishAuditEventsRequest
+	34, // 47: medallion.connect.v1.MedallionConnectService.ListAuditEvents:input_type -> medallion.connect.v1.ListAuditEventsRequest
+	11, // 48: medallion.connect.v1.MedallionConnectService.RegisterConnector:output_type -> medallion.connect.v1.RegisterConnectorResponse
+	13, // 49: medallion.connect.v1.MedallionConnectService.ListConnectors:output_type -> medallion.connect.v1.ListConnectorsResponse
+	15, // 50: medallion.connect.v1.MedallionConnectService.DisableConnector:output_type -> medallion.connect.v1.DisableConnectorResponse
+	17, // 51: medallion.connect.v1.MedallionConnectService.RegisterConnectorAction:output_type -> medallion.connect.v1.RegisterConnectorActionResponse
+	19, // 52: medallion.connect.v1.MedallionConnectService.ListConnectorActions:output_type -> medallion.connect.v1.ListConnectorActionsResponse
+	21, // 53: medallion.connect.v1.MedallionConnectService.DisableConnectorAction:output_type -> medallion.connect.v1.DisableConnectorActionResponse
+	23, // 54: medallion.connect.v1.MedallionConnectService.ExecuteConnectorAction:output_type -> medallion.connect.v1.ExecuteConnectorActionResponse
+	25, // 55: medallion.connect.v1.MedallionConnectService.GetActionExecution:output_type -> medallion.connect.v1.GetActionExecutionResponse
+	28, // 56: medallion.connect.v1.MedallionConnectService.PublishCdcEvents:output_type -> medallion.connect.v1.PublishCdcEventsResponse
+	30, // 57: medallion.connect.v1.MedallionConnectService.ListCdcEvents:output_type -> medallion.connect.v1.ListCdcEventsResponse
+	33, // 58: medallion.connect.v1.MedallionConnectService.PublishAuditEvents:output_type -> medallion.connect.v1.PublishAuditEventsResponse
+	35, // 59: medallion.connect.v1.MedallionConnectService.ListAuditEvents:output_type -> medallion.connect.v1.ListAuditEventsResponse
+	48, // [48:60] is the sub-list for method output_type
+	36, // [36:48] is the sub-list for method input_type
+	36, // [36:36] is the sub-list for extension type_name
+	36, // [36:36] is the sub-list for extension extendee
+	0,  // [0:36] is the sub-list for field type_name
 }
 
 func init() { file_medallion_connect_v1_connect_proto_init() }
@@ -2989,7 +3222,7 @@ func file_medallion_connect_v1_connect_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_medallion_connect_v1_connect_proto_rawDesc), len(file_medallion_connect_v1_connect_proto_rawDesc)),
-			NumEnums:      3,
+			NumEnums:      5,
 			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,

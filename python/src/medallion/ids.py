@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from .errors import MedallionError
 from .types import ActorRef, ResourceRef
@@ -85,9 +86,7 @@ def normalize_id_record(
     values: Mapping[str, object],
     path: str = "primaryKey",
 ) -> dict[str, str]:
-    return {
-        key: normalize_id(value, f"{path}.{key}") for key, value in values.items()
-    }
+    return {key: normalize_id(value, f"{path}.{key}") for key, value in values.items()}
 
 
 def same_actor(left: ActorRef | None, right: Mapping[str, str]) -> bool:

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.31.0"]
+requires = ["hatchling==1.31.0"]
 build-backend = "hatchling.build"
 
 [project]
@@ -9,6 +9,7 @@ description = "Public Python SDK for Medallion."
 readme = "README.md"
 requires-python = ">=3.14"
 license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 authors = [
   { name = "Jim Technologies" }
 ]
@@ -24,7 +25,7 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
-  "opentelemetry-api>=1.43.0",
+  "opentelemetry-api>=1.44.0",
   "protobuf>=7.35.1",
 ]
 
@@ -35,3 +36,19 @@ Issues = "https://github.com/jim-technologies/medallion-sdk/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/medallion", "src/buf"]
+
+[tool.ruff]
+target-version = "py314"
+extend-exclude = [
+  "src/buf/validate/validate_pb2.py",
+  "src/medallion/connect/v1/connect_pb2.py",
+]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# These exports deliberately remain runtime class aliases, not PEP 695
+# TypeAliasType objects, so existing `medallion.Connector(...)` calls keep
+# working.
+"src/medallion/types.py" = ["UP040"]

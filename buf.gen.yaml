@@ -1,0 +1,14 @@
+version: v2
+plugins:
+  - local:
+      - go
+      - tool
+      - protoc-gen-go
+    out: go/gen
+    opt:
+      - paths=source_relative
+  - protoc_builtin: python
+    out: python/src
+    include_imports: true
+inputs:
+  - directory: proto

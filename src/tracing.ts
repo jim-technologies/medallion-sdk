@@ -1,11 +1,11 @@
 import {
   context,
   propagation,
+  type Span,
   SpanKind,
   SpanStatusCode,
-  trace,
-  type Span,
   type Tracer,
+  trace,
 } from "@opentelemetry/api";
 
 export interface TracingOptions {
@@ -53,7 +53,9 @@ export function normalizeTracing(config?: TracingConfig): NormalizedTracing {
   const enabled = config.enabled ?? config.tracer !== undefined;
   return {
     enabled,
-    tracer: config.tracer ?? trace.getTracer(config.tracerName ?? DEFAULT_TRACER_NAME),
+    tracer:
+      config.tracer ??
+      trace.getTracer(config.tracerName ?? DEFAULT_TRACER_NAME),
     spanPrefix: config.spanPrefix ?? DEFAULT_SPAN_PREFIX,
   };
 }

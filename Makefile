@@ -1,10 +1,21 @@
+SHELL := bash
+.SHELLFLAGS := -eu -o pipefail -c
+
 PNPM ?= pnpm
 GO ?= go
 UV ?= uv
+PYTHON ?= python3
+RUFF ?= ruff
+SHELLCHECK ?= shellcheck
+SHFMT ?= shfmt
+ACTIONLINT ?= actionlint
+GITLEAKS ?= gitleaks
+GOVULNCHECK_VERSION ?= v1.6.0
+PIP_AUDIT_VERSION ?= 2.10.1
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install check version-check version-set git-install-check check-public test test-version test-ts test-go test-python test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python deps proto-descriptor run clean
+.PHONY: help install check lock-check version-check version-set generated-check artifact-check git-install-check check-public test test-version test-package-artifacts test-ts test-go test-python test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python lint-proto lint-shell lint-workflows format format-ts format-go format-python format-proto format-shell audit audit-node audit-go audit-python secret-check deps proto-bindings proto-descriptor run clean
 
 help: ## Show available targets.
 	@awk 'BEGIN {FS = ":.*## "; printf "Medallion SDK targets:\n"} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -14,29 +25,42 @@ node_modules/.medallion-install-stamp: package.json pnpm-lock.yaml pnpm-workspac
 	@touch $@
 
 install: ## Install development dependencies for all languages.
-	$(PNPM) install
+	$(PNPM) install --frozen-lockfile
 	$(GO) mod download
-	cd python && $(UV) sync
+	cd python && $(UV) sync --locked
 
-check: version-check check-public lint test build ## Run public-surface checks, lint, tests, and builds for all languages.
+check: lock-check version-check generated-check check-public lint test build artifact-check ## Run every deterministic CI validation gate.
+
+lock-check: node_modules/.medallion-install-stamp ## Verify all language dependency locks are synchronized.
+	$(GO) mod tidy -diff
+	cd python && $(UV) lock --check
 
 version-check: ## Verify every language SDK uses the root VERSION.
-	PYTHONDONTWRITEBYTECODE=1 python3 scripts/check_versions.py
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/check_versions.py
 
 version-set: ## Synchronize every SDK version (usage: make version-set VERSION=X.Y.Z).
 	@test -n "$(VERSION)" || { echo "VERSION is required"; exit 2; }
-	PYTHONDONTWRITEBYTECODE=1 python3 scripts/set_version.py "$(VERSION)"
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/set_version.py "$(VERSION)"
 
-git-install-check: ## Install every language SDK from the current Git commit.
+generated-check: node_modules/.medallion-install-stamp ## Verify generated protobuf bindings and descriptors have no drift.
+	scripts/check_generated.sh
+
+artifact-check: build ## Verify Git-install package payloads and license metadata.
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/check_package_artifacts.py
+
+git-install-check: ## Install every SDK from the exact tree by SHA and root tag.
 	scripts/check_git_installs.sh
 
 check-public: node_modules/.medallion-install-stamp ## Scan public SDK surfaces for private/internal references.
 	$(PNPM) check:public
 
-test: test-version test-ts test-go test-python ## Run all tests.
+test: test-version test-package-artifacts test-ts test-go test-python ## Run all tests.
 
 test-version: ## Test version synchronization and release-tag guardrails.
-	PYTHONDONTWRITEBYTECODE=1 python3 scripts/test_versions.py
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/test_versions.py
+
+test-package-artifacts: ## Test package-artifact compatibility helpers.
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/test_package_artifacts.py
 
 test-ts: node_modules/.medallion-install-stamp ## Run TypeScript tests.
 	$(PNPM) test
@@ -45,7 +69,7 @@ test-go: ## Run Go tests.
 	$(GO) test ./go/...
 
 test-python: ## Run Python tests.
-	cd python && $(UV) run python -m unittest discover tests
+	cd python && $(UV) run --locked python -m unittest discover tests
 
 test-deployed: node_modules/.medallion-install-stamp ## Run opt-in deployed smoke test against a locked-down tenant.
 	$(PNPM) test:deployed
@@ -61,22 +85,83 @@ build-go: ## Compile Go packages.
 build-python: ## Build the Python package from the git subdirectory.
 	cd python && $(UV) build
 
-lint: lint-ts lint-go lint-python ## Run lightweight lint/type checks for all languages.
+lint: lint-ts lint-go lint-python lint-proto lint-shell lint-workflows ## Run all format, lint, type, schema, shell, and workflow checks.
 
-lint-ts: node_modules/.medallion-install-stamp ## Type-check the TypeScript SDK.
+lint-ts: node_modules/.medallion-install-stamp ## Type-check, lint, and format-check TypeScript and JSON.
 	$(PNPM) lint
 
-lint-go: ## Format-check Go files.
-	@test -z "$$(gofmt -l go)" || { echo "gofmt: files need formatting:"; gofmt -l go; exit 1; }
+lint-go: ## Format-check and vet Go code.
+	@unformatted="$$(find go -type f -name '*.go' -exec gofmt -l {} +)"; \
+	test -z "$$unformatted" || { echo "gofmt: files need formatting:"; echo "$$unformatted"; exit 1; }
+	$(GO) vet ./go/...
 
-lint-python: ## Byte-compile Python sources and tests.
-	cd python && $(UV) run python -m compileall -q src tests
+lint-python: ## Lint, format-check, and byte-compile authored Python code.
+	cd python && $(RUFF) check src tests
+	cd python && $(RUFF) format --check src tests
+	cd python && $(UV) run --locked python -m compileall -q src tests
+
+lint-proto: node_modules/.medallion-install-stamp ## Lint and format-check vendored protobuf contracts.
+	$(PNPM) exec buf lint
+	$(PNPM) exec buf format proto --diff --exit-code
+
+lint-shell: ## Lint and format-check repository shell scripts.
+	$(SHELLCHECK) scripts/*.sh
+	$(SHFMT) -d -i 2 -ci scripts/*.sh
+
+lint-workflows: ## Validate GitHub Actions syntax and expressions.
+	$(ACTIONLINT) .github/workflows/*.yml
+
+format: format-ts format-go format-python format-proto format-shell ## Apply every repository formatter.
+
+format-ts: node_modules/.medallion-install-stamp ## Format TypeScript and JSON.
+	$(PNPM) format
+
+format-go: ## Format Go code.
+	find go -type f -name '*.go' -exec gofmt -w {} +
+
+format-python: ## Apply safe Python lint fixes and formatting.
+	cd python && $(RUFF) check --fix src tests
+	cd python && $(RUFF) format src tests
+
+format-proto: node_modules/.medallion-install-stamp ## Format vendored protobuf contracts.
+	$(PNPM) exec buf format proto --write
+
+format-shell: ## Format repository shell scripts.
+	$(SHFMT) -w -i 2 -ci scripts/*.sh
+
+audit: audit-node audit-go audit-python secret-check ## Scan dependencies and the tree for known vulnerabilities and secrets.
+
+audit-node: node_modules/.medallion-install-stamp ## Audit the locked JavaScript dependency graph.
+	$(PNPM) audit --audit-level=low
+
+audit-go: ## Audit Go packages and tests against the current vulnerability database.
+	$(GO) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) -test ./...
+
+audit-python: ## Audit exact Python runtime locks and the pinned build backend.
+	@runtime_requirements="$$(mktemp)"; \
+	build_requirements="$$(mktemp)"; \
+	trap 'rm -f "$$runtime_requirements" "$$build_requirements"' EXIT; \
+	$(UV) export --project python --locked --no-dev --no-emit-project \
+		--format requirements-txt --output-file "$$runtime_requirements" >/dev/null; \
+	$(UV) tool run --from pip-audit==$(PIP_AUDIT_VERSION) pip-audit \
+		--strict --disable-pip --vulnerability-service osv \
+		--requirement "$$runtime_requirements" --progress-spinner off; \
+	$(PYTHON) -c 'import tomllib; data = tomllib.load(open("python/pyproject.toml", "rb")); print(*data["build-system"]["requires"], sep="\n")' >"$$build_requirements"; \
+	$(UV) tool run --from pip-audit==$(PIP_AUDIT_VERSION) --with pip pip-audit \
+		--strict --vulnerability-service osv \
+		--requirement "$$build_requirements" --progress-spinner off
+
+secret-check: ## Scan the working tree for committed credentials and tokens.
+	$(GITLEAKS) dir . --no-banner --redact
 
 deps: ## Refresh dependencies within declared compatibility ranges.
 	$(PNPM) update
-	$(GO) get -u ./go/...
-	$(GO) mod tidy
+	GOFLAGS=-mod=mod $(GO) get -u ./go/...
+	GOFLAGS=-mod=mod $(GO) mod tidy
 	cd python && $(UV) lock --upgrade
+
+proto-bindings: node_modules/.medallion-install-stamp ## Regenerate public Go and Python Connect protobuf bindings.
+	$(PNPM) exec buf generate --template buf.gen.yaml --path proto/medallion/connect/v1/connect.proto
 
 proto-descriptor: node_modules/.medallion-install-stamp ## Regenerate TypeScript invariantprotocol descriptors.
 	$(PNPM) proto:descriptor

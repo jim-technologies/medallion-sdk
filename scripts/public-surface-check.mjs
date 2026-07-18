@@ -45,7 +45,15 @@ const scannedExtensions = new Set([
   ".yml",
 ]);
 
-const binaryExtensions = new Set([".binpb", ".gz", ".lock", ".png", ".tgz", ".whl", ".zip"]);
+const binaryExtensions = new Set([
+  ".binpb",
+  ".gz",
+  ".lock",
+  ".png",
+  ".tgz",
+  ".whl",
+  ".zip",
+]);
 
 const checks = [
   {
@@ -54,7 +62,8 @@ const checks = [
   },
   {
     name: "private Medallion repository URL",
-    pattern: /\bgithub\.com\/jim-technologies\/medallion-(?:connect|ontology|storage)(?:[/?#.\s"'`)]|$)/i,
+    pattern:
+      /\bgithub\.com\/jim-technologies\/medallion-(?:connect|ontology|storage)(?:[/?#.\s"'`)]|$)/i,
   },
   {
     name: "sibling private repository path",

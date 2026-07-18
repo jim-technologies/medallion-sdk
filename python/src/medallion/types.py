@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping, TypeAlias
+from typing import Any, Literal, TypeAlias
 
 from medallion.connect.v1 import connect_pb2
 
@@ -23,6 +24,8 @@ class ResourceRef:
 
 ActorInput: TypeAlias = ActorRef | Mapping[str, Any]
 ResourceInput: TypeAlias = ResourceRef | Mapping[str, Any]
+AuditOutcome: TypeAlias = Literal["succeeded", "failed", "indeterminate"]
+AuditOrigin: TypeAlias = Literal["external_provider", "connect"]
 
 Connector: TypeAlias = connect_pb2.Connector
 CdcEvent: TypeAlias = connect_pb2.CdcEvent
@@ -126,6 +129,9 @@ class AuditTrailEvent:
     after: Any = None
     evidence_url: str | None = None
     source_event_id: str | None = None
+    source_system: str | None = None
+    origin: AuditOrigin | None = None
+    outcome: AuditOutcome | None = None
     payload: Any = None
     proto: connect_pb2.AuditEvent | None = None
 

@@ -77,18 +77,21 @@ export interface EventRecordResponse extends WriteResultMetadata {
 // the public name keeps the two event families explicit at call sites.
 export type PublishedAuditEventResult = PublishedEventResult;
 export type AuditRecordResponse = EventRecordResponse;
+export type AuditOutcome = "succeeded" | "failed" | "indeterminate";
+export type AuditOrigin = "external_provider" | "connect";
 
 export interface AuditRecordInput {
   connectorId?: string;
   actor: ActorRef;
   action: string;
+  outcome: AuditOutcome;
   resource: ResourceRef;
   before?: unknown;
   after?: unknown;
   metadata?: Record<string, unknown>;
   description?: string;
   evidenceUrl?: string;
-  idempotencyKey?: string;
+  idempotencyKey: string;
   sourceEventId?: IdInput;
   occurredAt?: string | Date;
 }
@@ -104,6 +107,8 @@ export interface AuditTrailInput {
   pageSize?: number;
   actor?: ActorRef;
   ingesterPrincipal?: string;
+  origin?: AuditOrigin;
+  outcome?: AuditOutcome;
 }
 
 export type CdcOperation = "insert" | "update" | "delete" | "snapshot";
@@ -120,7 +125,7 @@ export interface CdcEventInput {
   before?: unknown;
   after?: unknown;
   metadata?: Record<string, unknown>;
-  idempotencyKey?: string;
+  idempotencyKey: string;
   sourceEventId?: IdInput;
   occurredAt?: string | Date;
 }
@@ -129,8 +134,11 @@ export interface DatasourceRegistrationInput {
   organizationId?: string;
   name: string;
   type: string;
+  /** Stable key reused only when retrying this same registration mutation. */
+  idempotencyKey: string;
   displayName?: string;
   externalId?: IdInput;
+  /** Caller-side annotations copied into the returned Datasource; Connect does not persist them. */
   metadata?: Record<string, unknown>;
 }
 
@@ -172,19 +180,20 @@ export interface PlanActionInput {
 }
 
 export interface PlanActionResponse extends ResponseMetadata {
-  plan: ActionInvocation | undefined;
+  plan: ActionInvocation;
   requiredApprovals: string[];
 }
 
 export interface ExecuteActionInput {
   actionName: string;
   input?: unknown;
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
-export interface ExecuteActionResponse extends WriteResultMetadata {
-  result: "accepted" | "duplicate" | "succeeded" | "failed" | "rejected";
-  invocation: ActionInvocation | undefined;
+export interface ExecuteActionResponse extends ResponseMetadata {
+  idempotencyKey: string;
+  result: "accepted" | "succeeded" | "failed" | "rejected";
+  invocation: ActionInvocation;
 }
 
 export interface ActionInvocation {
@@ -231,6 +240,9 @@ export interface AuditTrailEvent {
   after?: unknown;
   evidenceUrl?: string;
   sourceEventId?: string;
+  sourceSystem?: string;
+  origin?: AuditOrigin;
+  outcome?: AuditOutcome;
   payload?: unknown;
 }
 
@@ -271,6 +283,7 @@ export interface ConnectRegisterConnectorRequest {
   source_system: string;
   display_name: string;
   external_id?: string;
+  idempotency_key: string;
 }
 
 export interface ConnectRegisterConnectorResponse {
@@ -329,6 +342,8 @@ export interface ConnectAuditEvent {
   description?: string;
   source_system?: string;
   ingested_by_principal?: string;
+  origin?: string;
+  outcome: string;
 }
 
 export interface ConnectPublishAuditEventsRequest {
@@ -361,6 +376,8 @@ export interface ConnectListAuditEventsRequest {
   source_system?: string;
   page_cursor?: string;
   ingested_by_principal?: string;
+  origin?: string;
+  outcome?: string;
 }
 
 export interface ConnectListAuditEventsResponse {

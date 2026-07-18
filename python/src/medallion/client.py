@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
-import uuid
-from datetime import datetime, timezone
-from typing import Any, Mapping
+from collections.abc import Mapping
+from datetime import UTC, datetime
+from typing import Any
 
 from google.protobuf.timestamp_pb2 import Timestamp
 
@@ -24,6 +24,8 @@ from .tracing import TracingConfig
 from .types import (
     ActorInput,
     ActorRef,
+    AuditOrigin,
+    AuditOutcome,
     AuditRecordResponse,
     AuditTrailEvent,
     AuditTrailResponse,
@@ -90,7 +92,12 @@ class ConnectClient:
         request: connect_pb2.RegisterConnectorRequest,
     ) -> tuple[connect_pb2.RegisterConnectorResponse, str | None]:
         response = connect_pb2.RegisterConnectorResponse()
-        envelope = self._requests.post_proto(REGISTER_CONNECTOR, request, response)
+        envelope = self._requests.post_proto(
+            REGISTER_CONNECTOR,
+            request,
+            response,
+            idempotency_key=request.idempotency_key,
+        )
         return response, envelope.request_id
 
     def publish_cdc_events(
@@ -144,6 +151,7 @@ class ConnectClient:
         *,
         name: str,
         type: str,
+        idempotency_key: str,
         display_name: str | None = None,
         organization_id: str | None = None,
         external_id: object | None = None,
@@ -155,6 +163,9 @@ class ConnectClient:
                 "organization_id is required to register a datasource.",
                 code="MEDALLION_MISSING_ORGANIZATION_ID",
             )
+        control_key = _required_control_idempotency_key(
+            idempotency_key, "datasource.idempotency_key"
+        )
         request = connect_pb2.RegisterConnectorRequest(
             organization_id=org,
             kind=type,
@@ -165,8 +176,15 @@ class ConnectClient:
                 if external_id is not None
                 else ""
             ),
+            idempotency_key=control_key,
         )
         response, request_id = self.register_connector(request)
+        if not response.connector.id.strip():
+            raise MedallionError(
+                "Medallion returned a datasource registration without a connector ID.",
+                code="MEDALLION_INVALID_DATASOURCE_RESPONSE",
+                request_id=request_id,
+            )
         datasource = _datasource_from_connector(response.connector, metadata)
         return RegisterDatasourceResponse(
             request_id=request_id,
@@ -180,8 +198,26 @@ class DatasourcesClient:
     def __init__(self, connect: ConnectClient) -> None:
         self._connect = connect
 
-    def register(self, **kwargs: Any) -> RegisterDatasourceResponse:
-        return self._connect.register_datasource(**kwargs)
+    def register(
+        self,
+        *,
+        name: str,
+        type: str,
+        idempotency_key: str,
+        display_name: str | None = None,
+        organization_id: str | None = None,
+        external_id: object | None = None,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> RegisterDatasourceResponse:
+        return self._connect.register_datasource(
+            name=name,
+            type=type,
+            idempotency_key=idempotency_key,
+            display_name=display_name,
+            organization_id=organization_id,
+            external_id=external_id,
+            metadata=metadata,
+        )
 
 
 class AuditClient:
@@ -201,14 +237,15 @@ class AuditClient:
         *,
         actor: ActorInput,
         action: str,
+        outcome: AuditOutcome,
         resource: ResourceInput,
+        idempotency_key: str,
         connector_id: str | None = None,
         before: Any = None,
         after: Any = None,
         metadata: Mapping[str, Any] | None = None,
         description: str | None = None,
         evidence_url: str | None = None,
-        idempotency_key: str | None = None,
         source_event_id: object | None = None,
         occurred_at: str | datetime | None = None,
     ) -> AuditRecordResponse:
@@ -220,7 +257,7 @@ class AuditClient:
             )
         normalized_actor = normalize_actor(actor)
         normalized_resource = normalize_resource(resource)
-        key = _idempotency_key(idempotency_key)
+        key = _required_event_idempotency_key(idempotency_key, "audit.idempotency_key")
         event = connect_pb2.AuditEvent(
             resource_type=normalized_resource["type"],
             resource_id=normalized_resource["id"],
@@ -243,6 +280,7 @@ class AuditClient:
                 else ""
             ),
             action=action,
+            outcome=_audit_outcome(outcome),
         )
         timestamp = _timestamp(occurred_at, "audit.occurred_at")
         if timestamp is not None:
@@ -264,6 +302,8 @@ class AuditClient:
         actor: ActorInput | None = None,
         ingester_principal: str | None = None,
         action: str | None = None,
+        origin: AuditOrigin | None = None,
+        outcome: AuditOutcome | None = None,
         organization_id: str | None = None,
         connector_id: str | None = None,
         cursor: str | None = None,
@@ -295,6 +335,8 @@ class AuditClient:
             ingested_by_principal=(ingester_principal or "").strip(),
             action=action or "",
             page_cursor=cursor or "",
+            origin=_audit_origin(origin),
+            outcome=_audit_outcome(outcome, optional=True),
         )
         response, request_id = self._connect.list_audit_events(request)
         events = [
@@ -328,6 +370,7 @@ class CdcClient:
         table: str,
         operation: str,
         primary_key: Mapping[str, object],
+        idempotency_key: str,
         connector_id: str | None = None,
         entity_type: str | None = None,
         entity_id: object | None = None,
@@ -335,7 +378,6 @@ class CdcClient:
         before: Any = None,
         after: Any = None,
         metadata: Mapping[str, Any] | None = None,
-        idempotency_key: str | None = None,
         source_event_id: object | None = None,
         occurred_at: str | datetime | None = None,
     ) -> EventRecordResponse:
@@ -345,12 +387,17 @@ class CdcClient:
                 "connector_id is required to record a CDC event.",
                 code="MEDALLION_MISSING_CONNECTOR_ID",
             )
-        key = _idempotency_key(idempotency_key)
+        key = _required_event_idempotency_key(idempotency_key, "cdc.idempotency_key")
         normalized_primary_key = normalize_id_record(primary_key)
         if not normalized_primary_key:
             raise MedallionError(
                 "cdc.primary_key must contain at least one field.",
                 code="MEDALLION_EMPTY_CDC_PRIMARY_KEY",
+            )
+        if len(normalized_primary_key) > 1 and entity_id is None:
+            raise MedallionError(
+                "cdc.entity_id is required when cdc.primary_key contains more than one field.",
+                code="MEDALLION_MISSING_CDC_ENTITY_ID",
             )
         normalized_actor = normalize_actor(actor) if actor is not None else None
         cdc_entity_id = (
@@ -410,6 +457,12 @@ def _cdc_event_response(
         for item in body.events
     ]
     first = events[0] if events else None
+    if not events and body.accepted_count == 0 and body.duplicate_count == 0:
+        raise MedallionError(
+            "Medallion returned an empty event publish acknowledgement.",
+            code="MEDALLION_INVALID_PUBLISH_RESPONSE",
+            request_id=request_id,
+        )
     duplicate = (
         first.duplicate
         if first is not None
@@ -444,6 +497,12 @@ def _audit_event_response(
         for item in body.events
     ]
     first = events[0] if events else None
+    if not events and body.accepted_count == 0 and body.duplicate_count == 0:
+        raise MedallionError(
+            "Medallion returned an empty event publish acknowledgement.",
+            code="MEDALLION_INVALID_PUBLISH_RESPONSE",
+            request_id=request_id,
+        )
     duplicate = (
         first.duplicate
         if first is not None
@@ -466,9 +525,14 @@ def _audit_event_response(
 def _audit_event_from_connect(item: connect_pb2.AuditEvent) -> AuditTrailEvent:
     payload = _parse_payload(item.payload_json)
     payload_record = _mapping(payload)
-    actor = _actor_from_payload(payload_record.get("actor")) or actor_from_principal(
-        item.actor_principal or None
-    )
+    actor = actor_from_principal(item.actor_principal or None)
+    payload_actor = _actor_from_payload(payload_record.get("actor"))
+    if (
+        payload_actor is not None
+        and actor_principal_from_ref(normalize_actor(payload_actor))
+        == item.actor_principal
+    ):
+        actor = payload_actor
     event_id = str(item.id) if item.id else None
     return AuditTrailEvent(
         id=event_id,
@@ -497,9 +561,63 @@ def _audit_event_from_connect(item: connect_pb2.AuditEvent) -> AuditTrailEvent:
         after=payload_record.get("after"),
         evidence_url=_string(payload_record.get("evidenceUrl")),
         source_event_id=item.source_event_id or None,
+        source_system=item.source_system or None,
+        origin=_audit_origin_from_connect(item.origin),
+        outcome=_audit_outcome_from_connect(item.outcome),
         payload=payload,
         proto=item,
     )
+
+
+def _audit_outcome(
+    value: AuditOutcome | None,
+    *,
+    optional: bool = False,
+) -> int:
+    outcomes = {
+        "succeeded": connect_pb2.AUDIT_EVENT_OUTCOME_SUCCEEDED,
+        "failed": connect_pb2.AUDIT_EVENT_OUTCOME_FAILED,
+        "indeterminate": connect_pb2.AUDIT_EVENT_OUTCOME_INDETERMINATE,
+    }
+    if value is None and optional:
+        return connect_pb2.AUDIT_EVENT_OUTCOME_UNSPECIFIED
+    try:
+        return outcomes[value]  # type: ignore[index]
+    except KeyError, TypeError:
+        raise MedallionError(
+            "audit outcome must be succeeded, failed, or indeterminate.",
+            code="MEDALLION_INVALID_AUDIT_OUTCOME",
+        ) from None
+
+
+def _audit_origin(value: AuditOrigin | None) -> int:
+    origins = {
+        None: connect_pb2.AUDIT_EVENT_ORIGIN_UNSPECIFIED,
+        "external_provider": connect_pb2.AUDIT_EVENT_ORIGIN_EXTERNAL_PROVIDER,
+        "connect": connect_pb2.AUDIT_EVENT_ORIGIN_CONNECT,
+    }
+    try:
+        return origins[value]
+    except KeyError:
+        raise MedallionError(
+            "audit origin must be external_provider or connect.",
+            code="MEDALLION_INVALID_AUDIT_ORIGIN",
+        ) from None
+
+
+def _audit_outcome_from_connect(value: int) -> AuditOutcome | None:
+    return {
+        connect_pb2.AUDIT_EVENT_OUTCOME_SUCCEEDED: "succeeded",
+        connect_pb2.AUDIT_EVENT_OUTCOME_FAILED: "failed",
+        connect_pb2.AUDIT_EVENT_OUTCOME_INDETERMINATE: "indeterminate",
+    }.get(value)
+
+
+def _audit_origin_from_connect(value: int) -> AuditOrigin | None:
+    return {
+        connect_pb2.AUDIT_EVENT_ORIGIN_EXTERNAL_PROVIDER: "external_provider",
+        connect_pb2.AUDIT_EVENT_ORIGIN_CONNECT: "connect",
+    }.get(value)
 
 
 def _datasource_from_connector(
@@ -543,10 +661,40 @@ def _actor_from_payload(value: Any) -> ActorRef | None:
     )
 
 
-def _idempotency_key(value: str | None) -> str:
-    if value is not None and value.strip():
-        return value
-    return str(uuid.uuid4())
+def _required_event_idempotency_key(value: object, field: str) -> str:
+    if not isinstance(value, str):
+        raise MedallionError(
+            f"{field} is required for retry-safe delivery.",
+            code="MEDALLION_MISSING_IDEMPOTENCY_KEY",
+        )
+    normalized = value.strip()
+    if not normalized:
+        raise MedallionError(
+            f"{field} is required for retry-safe delivery.",
+            code="MEDALLION_MISSING_IDEMPOTENCY_KEY",
+        )
+    if len(normalized.encode("utf-8")) > 512:
+        raise MedallionError(
+            f"{field} must not exceed 512 bytes.",
+            code="MEDALLION_INVALID_IDEMPOTENCY_KEY",
+        )
+    return normalized
+
+
+def _required_control_idempotency_key(value: object, field: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise MedallionError(
+            f"{field} is required for retry-safe mutation.",
+            code="MEDALLION_MISSING_IDEMPOTENCY_KEY",
+        )
+    if len(value.encode("utf-8")) > 256 or any(
+        ord(character) < 0x21 or ord(character) > 0x7E for character in value
+    ):
+        raise MedallionError(
+            f"{field} must be at most 256 bytes of visible ASCII without spaces.",
+            code="MEDALLION_INVALID_IDEMPOTENCY_KEY",
+        )
+    return value
 
 
 def _audit_trail_limit(limit: int | None, page_size: int | None) -> int:
@@ -580,7 +728,7 @@ def _timestamp(value: str | datetime | None, path: str) -> Timestamp | None:
     else:
         parsed = value
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
+        parsed = parsed.replace(tzinfo=UTC)
     timestamp = Timestamp()
     timestamp.FromDatetime(parsed)
     return timestamp
@@ -589,7 +737,7 @@ def _timestamp(value: str | datetime | None, path: str) -> Timestamp | None:
 def _timestamp_string(value: Timestamp | None) -> str | None:
     if value is None:
         return None
-    return value.ToDatetime(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+    return value.ToDatetime(tzinfo=UTC).isoformat().replace("+00:00", "Z")
 
 
 def _json_string(value: Mapping[str, Any]) -> str:
@@ -631,14 +779,7 @@ def _entity_id_from_primary_key(primary_key: Mapping[str, str]) -> str:
             "cdc.primary_key must contain at least one field.",
             code="MEDALLION_EMPTY_CDC_PRIMARY_KEY",
         )
-    if len(primary_key) == 1:
-        return next(iter(primary_key.values()))
-    return json.dumps(
-        primary_key,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    )
+    return next(iter(primary_key.values()))
 
 
 def _mapping(value: Any) -> Mapping[str, Any]:

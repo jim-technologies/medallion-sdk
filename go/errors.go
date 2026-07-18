@@ -6,10 +6,15 @@ type Error struct {
 	Code      string
 	RequestID string
 	Message   string
+	Cause     error
 }
 
 func (e *Error) Error() string {
 	return e.Message
+}
+
+func (e *Error) Unwrap() error {
+	return e.Cause
 }
 
 type APIError struct {

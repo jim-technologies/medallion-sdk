@@ -6,7 +6,9 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+from buf.validate import validate_pb2
 from medallion import MedallionClient, MedallionError, TracingConfig, connect_pb2
+from medallion.client import _audit_event_from_connect
 
 CONNECT_SERVICE = "/medallion.connect.v1.MedallionConnectService"
 PUBLISH_CDC_EVENTS = f"{CONNECT_SERVICE}/PublishCdcEvents"
@@ -58,7 +60,10 @@ class FakeTracer:
 
 
 class CaptureServer:
-    def __enter__(self) -> "CaptureServer":
+    def __init__(self, raw_response: bytes | None = None) -> None:
+        self.raw_response = raw_response
+
+    def __enter__(self) -> CaptureServer:
         outer = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -76,6 +81,9 @@ class CaptureServer:
                 self.send_header("content-type", "application/json")
                 self.send_header("x-request-id", "req_123")
                 self.end_headers()
+                if outer.raw_response is not None:
+                    self.wfile.write(outer.raw_response)
+                    return
                 if self.path.endswith(("/PublishAuditEvents", "/PublishCdcEvents")):
                     self.wfile.write(
                         json.dumps(
@@ -108,18 +116,35 @@ class CaptureServer:
                                             {
                                                 "actor": {
                                                     "type": "user",
-                                                    "id": "user_123",
+                                                    "id": "payload_spoof",
                                                 },
                                                 "after": {"status": "cancelled"},
                                                 "evidenceUrl": "https://evidence.example/orders/order_123",
                                             }
                                         ),
-                                        "action": "order.cancelled",
+                                        "action": "cancel",
+                                        "source_system": "orders",
+                                        "origin": "AUDIT_EVENT_ORIGIN_EXTERNAL_PROVIDER",
+                                        "outcome": "AUDIT_EVENT_OUTCOME_SUCCEEDED",
                                         "occurred_at": "1970-01-01T00:00:00Z",
                                         "observed_at": "1970-01-01T00:00:00Z",
                                     }
                                 ],
                                 "next_page_cursor": "cursor_2",
+                            }
+                        ).encode("utf-8")
+                    )
+                elif self.path.endswith("/RegisterConnector"):
+                    self.wfile.write(
+                        json.dumps(
+                            {
+                                "connector": {
+                                    "id": "conn_123",
+                                    "organization_id": "org_123",
+                                    "kind": "postgres",
+                                    "source_system": "primary_postgres",
+                                    "display_name": "Primary Postgres",
+                                }
                             }
                         ).encode("utf-8")
                     )
@@ -147,6 +172,88 @@ class CaptureServer:
 
 
 class ClientTests(unittest.TestCase):
+    def test_audit_structured_actor_preserves_matching_colon_id(self) -> None:
+        event = _audit_event_from_connect(
+            connect_pb2.AuditEvent(
+                actor_principal="user:tenant:42",
+                payload_json=json.dumps({"actor": {"type": "user", "id": "tenant:42"}}),
+            )
+        )
+        self.assertEqual(event.actor.type if event.actor else None, "user")
+        self.assertEqual(event.actor.provider if event.actor else None, None)
+        self.assertEqual(event.actor.id if event.actor else None, "tenant:42")
+
+    def test_audit_spoofed_structured_actor_keeps_wire_authoritative(self) -> None:
+        event = _audit_event_from_connect(
+            connect_pb2.AuditEvent(
+                actor_principal="user:tenant:42",
+                payload_json=json.dumps(
+                    {"actor": {"type": "system", "id": "attacker"}}
+                ),
+            )
+        )
+        self.assertEqual(event.actor.type if event.actor else None, "user")
+        self.assertEqual(event.actor.provider if event.actor else None, "tenant")
+        self.assertEqual(event.actor.id if event.actor else None, "42")
+
+    def test_datasource_registration_uses_canonical_json_and_response(self) -> None:
+        with CaptureServer() as server:
+            client = MedallionClient(
+                base_url=server.url,
+                access_token="test-access-token",
+                organization_id="org_123",
+            )
+            result = client.datasources.register(
+                name="primary_postgres",
+                type="postgres",
+                idempotency_key="register_primary_postgres",
+                display_name="Primary Postgres",
+                external_id=42,
+                metadata={"environment": "test"},
+            )
+
+        request = server.requests[0]
+        self.assertTrue(request["path"].endswith("/RegisterConnector"))
+        self.assertEqual(
+            request["headers"].get("authorization"),
+            "Bearer test-access-token",
+        )
+        self.assertEqual(
+            request["body"],
+            {
+                "organizationId": "org_123",
+                "kind": "postgres",
+                "sourceSystem": "primary_postgres",
+                "displayName": "Primary Postgres",
+                "externalId": "42",
+                "idempotencyKey": "register_primary_postgres",
+            },
+        )
+        self.assertEqual(
+            request["headers"].get("idempotency-key"),
+            "register_primary_postgres",
+        )
+        self.assertEqual(result.datasource.id, "conn_123")
+        self.assertEqual(result.datasource.source_system, "primary_postgres")
+        self.assertEqual(result.datasource.metadata, {"environment": "test"})
+
+    def test_datasource_requires_visible_ascii_idempotency_key(self) -> None:
+        client = MedallionClient(
+            base_url="https://connect.example.com",
+            api_key="test-api-key",
+            organization_id="org_123",
+        )
+        with self.assertRaises(MedallionError) as raised:
+            client.datasources.register(
+                name="primary_postgres",
+                type="postgres",
+                idempotency_key="register primary postgres",
+            )
+        self.assertEqual(
+            raised.exception.code,
+            "MEDALLION_INVALID_IDEMPOTENCY_KEY",
+        )
+
     def test_audit_record_uses_connect_proto_route_and_headers(self) -> None:
         with CaptureServer() as server:
             client = MedallionClient(
@@ -156,7 +263,8 @@ class ClientTests(unittest.TestCase):
             )
             result = client.audit.record(
                 actor={"type": "user", "id": 123},
-                action="order.cancelled",
+                action="cancel",
+                outcome="succeeded",
                 resource={"type": "order", "id": "order_123"},
                 after={"status": "cancelled"},
                 evidence_url="https://evidence.example/orders/order_123",
@@ -164,7 +272,8 @@ class ClientTests(unittest.TestCase):
             )
             client.audit.record(
                 actor={"type": "user", "id": 123},
-                action="order.viewed",
+                action="view",
+                outcome="succeeded",
                 resource={"type": "order", "id": "order_123"},
                 idempotency_key="audit_2",
             )
@@ -174,17 +283,18 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(request["headers"].get("authorization"), "Bearer test-api-key")
         self.assertEqual(request["headers"].get("idempotency-key"), "audit_1")
         event = request["body"]["events"][0]
-        self.assertEqual(event["actor_principal"], "user:123")
-        self.assertEqual(event["resource_type"], "order")
-        self.assertEqual(event["resource_id"], "order_123")
+        self.assertEqual(event["actorPrincipal"], "user:123")
+        self.assertEqual(event["resourceType"], "order")
+        self.assertEqual(event["resourceId"], "order_123")
+        self.assertEqual(event["outcome"], "AUDIT_EVENT_OUTCOME_SUCCEEDED")
         self.assertNotIn("kind", event)
         self.assertNotIn("operation", event)
         self.assertEqual(
-            json.loads(event["payload_json"])["evidenceUrl"],
+            json.loads(event["payloadJson"])["evidenceUrl"],
             "https://evidence.example/orders/order_123",
         )
         absent_payload = json.loads(
-            server.requests[1]["body"]["events"][0]["payload_json"]
+            server.requests[1]["body"]["events"][0]["payloadJson"]
         )
         self.assertIn("evidenceUrl", absent_payload)
         self.assertIsNone(absent_payload["evidenceUrl"])
@@ -205,20 +315,37 @@ class ClientTests(unittest.TestCase):
                 resource_id="order_123",
                 actor={"type": "user", "id": "user_123"},
                 ingester_principal="service_account:worker",
+                action="cancel",
+                origin="external_provider",
+                outcome="succeeded",
                 limit=0,
             )
 
         request = server.requests[0]
         self.assertTrue(request["path"].endswith("/ListAuditEvents"))
-        self.assertEqual(request["body"]["actor_principal"], "user:user_123")
+        self.assertEqual(request["body"]["actorPrincipal"], "user:user_123")
         self.assertEqual(
-            request["body"]["ingested_by_principal"],
+            request["body"]["ingestedByPrincipal"],
             "service_account:worker",
+        )
+        self.assertEqual(request["body"]["action"], "cancel")
+        self.assertEqual(
+            request["body"]["origin"],
+            "AUDIT_EVENT_ORIGIN_EXTERNAL_PROVIDER",
+        )
+        self.assertEqual(
+            request["body"]["outcome"],
+            "AUDIT_EVENT_OUTCOME_SUCCEEDED",
         )
         self.assertNotIn("limit", request["body"])
         self.assertEqual(result.next_cursor, "cursor_2")
         self.assertEqual(result.events[0].ingester_principal, "service_account:worker")
         self.assertEqual(result.events[0].actor_principal, "user:user_123")
+        self.assertIsNotNone(result.events[0].actor)
+        self.assertEqual(result.events[0].actor.id, "user_123")
+        self.assertEqual(result.events[0].source_system, "orders")
+        self.assertEqual(result.events[0].origin, "external_provider")
+        self.assertEqual(result.events[0].outcome, "succeeded")
         self.assertEqual(
             result.events[0].evidence_url,
             "https://evidence.example/orders/order_123",
@@ -311,6 +438,33 @@ class ClientTests(unittest.TestCase):
                 "page_cursor",
                 "ingested_by_principal",
             ),
+            connect_pb2.RegisterConnectorRequest: (
+                "organization_id",
+                "kind",
+                "source_system",
+                "display_name",
+                "external_id",
+                "idempotency_key",
+            ),
+            connect_pb2.DisableConnectorRequest: (
+                "connector_id",
+                "idempotency_key",
+            ),
+            connect_pb2.RegisterConnectorActionRequest: (
+                "connector_id",
+                "operation_key",
+                "display_name",
+                "description",
+                "input_schema_json",
+                "output_schema_json",
+                "idempotency_supported",
+                "timeout_seconds",
+                "idempotency_key",
+            ),
+            connect_pb2.DisableConnectorActionRequest: (
+                "connector_action_id",
+                "idempotency_key",
+            ),
         }
         for message, field_names in expected.items():
             with self.subTest(message=message.__name__):
@@ -320,7 +474,127 @@ class ClientTests(unittest.TestCase):
                     list(enumerate(field_names, start=1)),
                 )
 
-    def test_composite_primary_key_projection_is_complete_and_unambiguous(self) -> None:
+    def test_canonical_connect_validation_constraints(self) -> None:
+        string_rules = (
+            (connect_pb2.Connector, "organization_id", 1, 128),
+            (connect_pb2.Connector, "kind", 1, 64),
+            (connect_pb2.Connector, "source_system", 1, 256),
+            (connect_pb2.CdcEvent, "organization_id", 0, 128),
+            (connect_pb2.CdcEvent, "connector_id", 0, 128),
+            (connect_pb2.CdcEvent, "stream_name", 1, 256),
+            (connect_pb2.CdcEvent, "entity_type", 1, 256),
+            (connect_pb2.CdcEvent, "entity_id", 1, 1024),
+            (connect_pb2.CdcEvent, "source_event_id", 0, 1024),
+            (connect_pb2.CdcEvent, "idempotency_key", 1, 512),
+            (connect_pb2.CdcEvent, "actor_principal", 0, 512),
+            (connect_pb2.CdcEvent, "description", 0, 4096),
+            (connect_pb2.CdcEvent, "source_system", 0, 256),
+            (connect_pb2.CdcEvent, "ingested_by_principal", 0, 512),
+            (connect_pb2.AuditEvent, "organization_id", 0, 128),
+            (connect_pb2.AuditEvent, "connector_id", 0, 128),
+            (connect_pb2.AuditEvent, "resource_type", 1, 256),
+            (connect_pb2.AuditEvent, "resource_id", 1, 1024),
+            (connect_pb2.AuditEvent, "action", 1, 256),
+            (connect_pb2.AuditEvent, "source_event_id", 0, 1024),
+            (connect_pb2.AuditEvent, "idempotency_key", 1, 512),
+            (connect_pb2.AuditEvent, "actor_principal", 0, 512),
+            (connect_pb2.AuditEvent, "description", 0, 4096),
+            (connect_pb2.AuditEvent, "source_system", 0, 256),
+            (connect_pb2.AuditEvent, "ingested_by_principal", 0, 512),
+            (connect_pb2.ConnectorAction, "operation_key", 1, 256),
+            (
+                connect_pb2.RegisterConnectorActionRequest,
+                "operation_key",
+                1,
+                256,
+            ),
+            (
+                connect_pb2.RegisterConnectorActionRequest,
+                "idempotency_key",
+                1,
+                256,
+            ),
+            (
+                connect_pb2.DisableConnectorActionRequest,
+                "idempotency_key",
+                1,
+                256,
+            ),
+            (connect_pb2.RegisterConnectorRequest, "organization_id", 1, 128),
+            (connect_pb2.RegisterConnectorRequest, "kind", 1, 64),
+            (connect_pb2.RegisterConnectorRequest, "source_system", 1, 256),
+            (connect_pb2.RegisterConnectorRequest, "display_name", 1, 512),
+            (connect_pb2.RegisterConnectorRequest, "external_id", 0, 2048),
+            (
+                connect_pb2.RegisterConnectorRequest,
+                "idempotency_key",
+                1,
+                256,
+            ),
+            (
+                connect_pb2.DisableConnectorRequest,
+                "idempotency_key",
+                1,
+                256,
+            ),
+            (
+                connect_pb2.ExecuteConnectorActionRequest,
+                "idempotency_key",
+                1,
+                1024,
+            ),
+            (connect_pb2.PublishCdcEventsRequest, "connector_id", 1, 128),
+            (connect_pb2.PublishAuditEventsRequest, "connector_id", 1, 128),
+            (connect_pb2.ListCdcEventsRequest, "organization_id", 1, 128),
+            (connect_pb2.ListCdcEventsRequest, "connector_id", 0, 128),
+            (connect_pb2.ListCdcEventsRequest, "entity_type", 0, 256),
+            (connect_pb2.ListCdcEventsRequest, "entity_id", 0, 1024),
+            (connect_pb2.ListCdcEventsRequest, "actor_principal", 0, 512),
+            (connect_pb2.ListCdcEventsRequest, "source_system", 0, 256),
+            (connect_pb2.ListCdcEventsRequest, "stream_name", 0, 256),
+            (connect_pb2.ListCdcEventsRequest, "page_cursor", 0, 2048),
+            (connect_pb2.ListCdcEventsRequest, "ingested_by_principal", 0, 512),
+            (connect_pb2.ListAuditEventsRequest, "organization_id", 1, 128),
+            (connect_pb2.ListAuditEventsRequest, "connector_id", 0, 128),
+            (connect_pb2.ListAuditEventsRequest, "resource_type", 0, 256),
+            (connect_pb2.ListAuditEventsRequest, "resource_id", 0, 1024),
+            (connect_pb2.ListAuditEventsRequest, "actor_principal", 0, 512),
+            (connect_pb2.ListAuditEventsRequest, "action", 0, 256),
+            (connect_pb2.ListAuditEventsRequest, "source_system", 0, 256),
+            (connect_pb2.ListAuditEventsRequest, "page_cursor", 0, 2048),
+            (
+                connect_pb2.ListAuditEventsRequest,
+                "ingested_by_principal",
+                0,
+                512,
+            ),
+        )
+        for message_type, field_name, min_len, max_bytes in string_rules:
+            with self.subTest(message=message_type.__name__, field=field_name):
+                field = message_type.DESCRIPTOR.fields_by_name[field_name]
+                rules = field.GetOptions().Extensions[validate_pb2.field].string
+                self.assertEqual(rules.min_len, min_len)
+                self.assertEqual(rules.max_bytes, max_bytes)
+
+        for message_type in (
+            connect_pb2.RegisterConnectorRequest,
+            connect_pb2.DisableConnectorRequest,
+            connect_pb2.RegisterConnectorActionRequest,
+            connect_pb2.DisableConnectorActionRequest,
+        ):
+            field = message_type.DESCRIPTOR.fields_by_name["idempotency_key"]
+            rules = field.GetOptions().Extensions[validate_pb2.field].string
+            self.assertEqual(rules.pattern, "^[!-~]+$")
+
+        for message_type, field_name in (
+            (connect_pb2.ConnectorAction, "timeout_seconds"),
+            (connect_pb2.RegisterConnectorActionRequest, "timeout_seconds"),
+        ):
+            field = message_type.DESCRIPTOR.fields_by_name[field_name]
+            rules = field.GetOptions().Extensions[validate_pb2.field].uint32
+            self.assertEqual(rules.lte, 300)
+
+    def test_composite_primary_key_requires_canonical_entity_id(self) -> None:
         with CaptureServer() as server:
             client = MedallionClient(
                 base_url=server.url,
@@ -333,6 +607,7 @@ class ClientTests(unittest.TestCase):
                     table="orders",
                     operation="update",
                     primary_key={"tenant_id": tenant, "id": "1"},
+                    entity_id=f"{tenant}/order/1",
                     idempotency_key=f"cdc_{tenant}",
                 )
             client.cdc.record(
@@ -343,16 +618,35 @@ class ClientTests(unittest.TestCase):
                 idempotency_key="cdc_single",
             )
 
-        first = server.requests[0]["body"]["events"][0]["entity_id"]
-        second = server.requests[1]["body"]["events"][0]["entity_id"]
-        self.assertEqual(first, '{"id":"1","tenant_id":"tenant_a"}')
+        first = server.requests[0]["body"]["events"][0]["entityId"]
+        second = server.requests[1]["body"]["events"][0]["entityId"]
+        self.assertEqual(first, "tenant_a/order/1")
         self.assertNotEqual(first, second)
         self.assertEqual(
-            server.requests[2]["body"]["events"][0]["entity_id"],
+            server.requests[2]["body"]["events"][0]["entityId"],
             "1",
         )
         self.assertNotIn("kind", server.requests[0]["body"]["events"][0])
         self.assertNotIn("action", server.requests[0]["body"]["events"][0])
+
+    def test_cdc_rejects_composite_primary_key_without_entity_id(self) -> None:
+        client = MedallionClient(
+            base_url="https://connect.example.com",
+            api_key="test-api-key",
+            default_connector_id="conn_123",
+        )
+        with self.assertRaises(MedallionError) as raised:
+            client.cdc.record(
+                source="postgres",
+                table="orders",
+                operation="update",
+                primary_key={"tenant_id": "tenant_a", "id": "1"},
+                idempotency_key="cdc_composite_without_entity",
+            )
+        self.assertEqual(
+            raised.exception.code,
+            "MEDALLION_MISSING_CDC_ENTITY_ID",
+        )
 
     def test_cdc_rejects_empty_primary_key(self) -> None:
         client = MedallionClient(
@@ -366,8 +660,56 @@ class ClientTests(unittest.TestCase):
                 table="orders",
                 operation="update",
                 primary_key={},
+                idempotency_key="cdc_empty_key",
             )
         self.assertEqual(raised.exception.code, "MEDALLION_EMPTY_CDC_PRIMARY_KEY")
+
+    def test_event_records_require_stable_idempotency_keys(self) -> None:
+        client = MedallionClient(
+            base_url="https://connect.example.com",
+            api_key="test-api-key",
+            default_connector_id="conn_123",
+        )
+        with self.assertRaises(MedallionError) as audit:
+            client.audit.record(
+                actor={"type": "user", "id": "user_123"},
+                action="cancel",
+                outcome="succeeded",
+                resource={"type": "order", "id": "order_123"},
+                idempotency_key=" ",
+            )
+        with self.assertRaises(MedallionError) as cdc:
+            client.cdc.record(
+                source="postgres",
+                table="orders",
+                operation="update",
+                primary_key={"id": "order_123"},
+                idempotency_key=" ",
+            )
+        self.assertEqual(audit.exception.code, "MEDALLION_MISSING_IDEMPOTENCY_KEY")
+        self.assertEqual(cdc.exception.code, "MEDALLION_MISSING_IDEMPOTENCY_KEY")
+        with self.assertRaises(MedallionError) as audit_too_long:
+            client.audit.record(
+                actor={"type": "user", "id": "user_123"},
+                action="cancel",
+                outcome="succeeded",
+                resource={"type": "order", "id": "order_123"},
+                idempotency_key="x" * 513,
+            )
+        with self.assertRaises(MedallionError) as cdc_too_long:
+            client.cdc.record(
+                source="postgres",
+                table="orders",
+                operation="update",
+                primary_key={"id": "order_123"},
+                idempotency_key="x" * 513,
+            )
+        self.assertEqual(
+            audit_too_long.exception.code, "MEDALLION_INVALID_IDEMPOTENCY_KEY"
+        )
+        self.assertEqual(
+            cdc_too_long.exception.code, "MEDALLION_INVALID_IDEMPOTENCY_KEY"
+        )
 
     def test_tracing_creates_client_span(self) -> None:
         tracer = FakeTracer()
@@ -384,7 +726,8 @@ class ClientTests(unittest.TestCase):
             )
             client.audit.record(
                 actor={"type": "user", "id": "user_123"},
-                action="order.cancelled",
+                action="cancel",
+                outcome="succeeded",
                 resource={"type": "order", "id": "order_123"},
                 idempotency_key="audit_1",
             )
@@ -394,9 +737,76 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(span.name, f"test-medallion POST {PUBLISH_AUDIT_EVENTS}")
         self.assertTrue(span.ended)
         self.assertEqual(span.attributes["medallion.sdk.language"], "python")
-        self.assertEqual(span.attributes["medallion.request.path"], PUBLISH_AUDIT_EVENTS)
+        self.assertEqual(
+            span.attributes["medallion.request.path"], PUBLISH_AUDIT_EVENTS
+        )
         self.assertEqual(span.attributes["http.response.status_code"], 200)
         self.assertEqual(span.attributes["medallion.request_id"], "req_123")
+
+    def test_successful_responses_require_semantic_acknowledgements(self) -> None:
+        with CaptureServer(raw_response=b"{}") as server:
+            client = MedallionClient(
+                base_url=server.url,
+                api_key="test-api-key",
+                organization_id="org_123",
+                default_connector_id="conn_123",
+            )
+            with self.assertRaises(MedallionError) as publish:
+                client.audit.record(
+                    actor={"type": "user", "id": "user_123"},
+                    action="cancel",
+                    outcome="succeeded",
+                    resource={"type": "order", "id": "order_123"},
+                    idempotency_key="audit_empty_ack",
+                )
+            with self.assertRaises(MedallionError) as datasource:
+                client.datasources.register(
+                    name="primary_postgres",
+                    type="postgres",
+                    idempotency_key="register_primary_postgres",
+                )
+
+        self.assertEqual(
+            publish.exception.code,
+            "MEDALLION_INVALID_PUBLISH_RESPONSE",
+        )
+        self.assertEqual(publish.exception.request_id, "req_123")
+        self.assertEqual(
+            datasource.exception.code,
+            "MEDALLION_INVALID_DATASOURCE_RESPONSE",
+        )
+        self.assertEqual(datasource.exception.request_id, "req_123")
+
+    def test_transport_errors_and_options_are_classified(self) -> None:
+        with CaptureServer(raw_response=b"{") as server:
+            client = MedallionClient(
+                base_url=server.url,
+                access_token="   ",
+                api_key="fallback-key",
+                default_connector_id="conn_123",
+            )
+            with self.assertRaises(MedallionError) as malformed:
+                client.audit.record(
+                    actor={"type": "user", "id": "user_123"},
+                    action="cancel",
+                    outcome="succeeded",
+                    resource={"type": "order", "id": "order_123"},
+                    idempotency_key="audit_malformed_response",
+                )
+
+        self.assertEqual(
+            malformed.exception.code,
+            "MEDALLION_INVALID_JSON_RESPONSE",
+        )
+        self.assertEqual(malformed.exception.request_id, "req_123")
+        self.assertIsNotNone(malformed.exception.__cause__)
+
+        with self.assertRaises(MedallionError) as invalid_url:
+            MedallionClient(
+                base_url="https://user:secret@example.com?unsafe=true",
+                api_key="test-api-key",
+            )
+        self.assertEqual(invalid_url.exception.code, "MEDALLION_INVALID_OPTIONS")
 
 
 if __name__ == "__main__":

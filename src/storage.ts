@@ -15,8 +15,8 @@ export class StorageClient {
     input: StorageUploadInput,
     options: RequestOptions = {},
   ): Promise<StorageUploadResponse> {
-    const org = input.org ?? input.bucket;
-    if (org === undefined || org.trim().length === 0) {
+    const requestedOrg = input.org ?? input.bucket;
+    if (requestedOrg === undefined || requestedOrg.trim().length === 0) {
       throw new MedallionError("storage.upload requires org or bucket.", {
         code: "MEDALLION_MISSING_STORAGE_ORG",
       });
@@ -24,7 +24,7 @@ export class StorageClient {
 
     const response = await this.protocol.upload<Record<string, unknown>>(
       {
-        org,
+        org: requestedOrg,
         repo: input.repo,
         path: input.path,
         content_type: input.contentType,
@@ -36,13 +36,30 @@ export class StorageClient {
         idempotencyKey: input.idempotencyKey,
       },
     );
+    const responseOrg = nonEmptyString(response.body.org);
+    const path = nonEmptyString(response.body.path);
+    const entry = recordValue(response.body.entry);
+    if (
+      responseOrg === undefined ||
+      path === undefined ||
+      entry === undefined ||
+      nonEmptyString(entry.filename) === undefined
+    ) {
+      throw new MedallionError(
+        "Medallion returned an incomplete storage upload result.",
+        {
+          code: "MEDALLION_INVALID_STORAGE_RESPONSE",
+          requestId: response.requestId,
+        },
+      );
+    }
 
     return {
       requestId: response.requestId,
       result: "uploaded",
-      org,
-      path: input.path,
-      entry: recordValue(response.body.entry) ?? {},
+      org: responseOrg,
+      path,
+      entry,
     };
   }
 }
@@ -54,9 +71,11 @@ async function bodyInitToBase64(data: BodyInit): Promise<string> {
     }
 
     if (ArrayBuffer.isView(data)) {
-      return Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString(
-        "base64",
-      );
+      return Buffer.from(
+        data.buffer,
+        data.byteOffset,
+        data.byteLength,
+      ).toString("base64");
     }
 
     const buffer = await new Response(data).arrayBuffer();
@@ -72,5 +91,11 @@ async function bodyInitToBase64(data: BodyInit): Promise<string> {
 function recordValue(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0
+    ? value
     : undefined;
 }

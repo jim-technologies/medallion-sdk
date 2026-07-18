@@ -1,17 +1,20 @@
 export { MedallionClient } from "./client.js";
 export { ConnectClient } from "./connect.js";
 export { MedallionApiError, MedallionError } from "./errors.js";
+export { normalizeId, normalizeIdRecord } from "./ids.js";
+export type { ProtocolClients } from "./protocol.js";
 export {
   ProtocolConnectClient,
   ProtocolOntologyClient,
   ProtocolStorageClient,
 } from "./protocol.js";
-export type { ProtocolClients } from "./protocol.js";
-export { normalizeId, normalizeIdRecord } from "./ids.js";
 export { CONNECT_ROUTES, ONTOLOGY_ROUTES, STORAGE_ROUTES } from "./routes.js";
 export type { TracingConfig, TracingOptions } from "./tracing.js";
 export type {
+  ActionInvocation,
   ActorRef,
+  AuditOrigin,
+  AuditOutcome,
   AuditRecordInput,
   AuditRecordResponse,
   AuditTrailEvent,
@@ -53,8 +56,8 @@ export type {
   QueryResponse,
   RegisterDatasourceResponse,
   RequestOptions,
-  ResponseMetadata,
   ResourceRef,
+  ResponseMetadata,
   StorageCatalogEntry,
   StorageUploadInput,
   StorageUploadResponse,

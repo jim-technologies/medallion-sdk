@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MedallionClient, MedallionApiError } from "../src/index.js";
+import { MedallionApiError, MedallionClient } from "../src/index.js";
 
 const requiredEnv = [
   "MEDALLION_SMOKE_BASE_URL",
@@ -11,99 +11,102 @@ const requiredEnv = [
 const smokeEnabled = requiredEnv.every((name) => process.env[name]?.trim());
 
 describe.skipIf(!smokeEnabled)("deployed SDK smoke", () => {
-  it(
-    "registers a datasource and round-trips an audit trail event",
-    async () => {
-      const baseUrl = requiredEnvValue("MEDALLION_SMOKE_BASE_URL");
-      const accessToken = requiredEnvValue("MEDALLION_SMOKE_ACCESS_TOKEN");
-      const organizationId = requiredEnvValue("MEDALLION_SMOKE_ORGANIZATION_ID");
-      const expectedIngester = requiredEnvValue(
-        "MEDALLION_SMOKE_EXPECTED_INGESTER_PRINCIPAL",
-      );
-      const runId = `sdk_smoke_${Date.now()}`;
-      const actor = { type: "user", id: `user_${runId}` } as const;
-      const resource = { type: "order", id: `order_${runId}` } as const;
-      const action = "order.cancelled";
-      const evidenceUrl =
-        process.env.MEDALLION_SMOKE_EVIDENCE_URL ??
-        `https://example.com/deployments/medallion-sdk-smoke/${runId}`;
+  it("registers a datasource and round-trips an audit trail event", async () => {
+    const baseUrl = requiredEnvValue("MEDALLION_SMOKE_BASE_URL");
+    const accessToken = requiredEnvValue("MEDALLION_SMOKE_ACCESS_TOKEN");
+    const organizationId = requiredEnvValue("MEDALLION_SMOKE_ORGANIZATION_ID");
+    const expectedIngester = requiredEnvValue(
+      "MEDALLION_SMOKE_EXPECTED_INGESTER_PRINCIPAL",
+    );
+    const runId = `sdk_smoke_${Date.now()}`;
+    const actor = { type: "user", id: `user_${runId}` } as const;
+    const resource = { type: "order", id: `order_${runId}` } as const;
+    const action = "cancel";
+    const evidenceUrl =
+      process.env.MEDALLION_SMOKE_EVIDENCE_URL?.trim() ||
+      `https://example.com/deployments/medallion-sdk-smoke/${runId}`;
 
-      const client = new MedallionClient({
-        baseUrl,
-        accessToken,
-        organizationId,
-      });
+    const client = new MedallionClient({
+      baseUrl,
+      accessToken,
+      organizationId,
+    });
 
-      const connectorId =
-        process.env.MEDALLION_SMOKE_CONNECTOR_ID ??
-        (
-          await client.connect.registerDatasource({
-            name: `medallion_sdk_smoke_${runId}`,
-            type: "medallion_audit_logs",
-            displayName: `Medallion SDK Smoke ${runId}`,
-            externalId: runId,
-          })
-        ).datasource.id;
+    const connectorId =
+      process.env.MEDALLION_SMOKE_CONNECTOR_ID?.trim() ||
+      (
+        await client.connect.registerDatasource({
+          name: `medallion_sdk_smoke_${runId}`,
+          type: "medallion_audit_logs",
+          idempotencyKey: `register_medallion_sdk_smoke_${runId}`,
+          displayName: `Medallion SDK Smoke ${runId}`,
+          externalId: runId,
+        })
+      ).datasource.id;
 
-      await client.audit.record({
+    await client.audit.record({
+      connectorId,
+      actor,
+      action,
+      outcome: "succeeded",
+      resource,
+      before: { status: "confirmed" },
+      after: { status: "cancelled" },
+      metadata: { smokeRunId: runId },
+      evidenceUrl,
+      idempotencyKey: `audit_${runId}`,
+      sourceEventId: `source_${runId}`,
+    });
+
+    const event = await eventually(async () => {
+      const trail = await client.audit.trail({
         connectorId,
-        actor,
+        resourceType: resource.type,
+        resourceId: resource.id,
         action,
-        resource,
-        before: { status: "confirmed" },
-        after: { status: "cancelled" },
-        metadata: { smokeRunId: runId },
-        evidenceUrl,
-        idempotencyKey: `audit_${runId}`,
-        sourceEventId: `source_${runId}`,
+        origin: "external_provider",
+        outcome: "succeeded",
+        limit: 25,
       });
+      return trail.events.find((candidate) => {
+        return (
+          candidate.sourceEventId === `source_${runId}` ||
+          candidate.metadata?.smokeRunId === runId
+        );
+      });
+    });
 
-      const event = await eventually(async () => {
-        const trail = await client.audit.trail({
+    expect(event).toMatchObject({
+      actor,
+      ingesterPrincipal: expectedIngester,
+      action,
+      origin: "external_provider",
+      outcome: "succeeded",
+      targetType: resource.type,
+      targetId: resource.id,
+      before: { status: "confirmed" },
+      after: { status: "cancelled" },
+      evidenceUrl,
+    });
+
+    const deniedOrg =
+      process.env.MEDALLION_SMOKE_DENIED_ORGANIZATION_ID?.trim();
+    if (deniedOrg) {
+      await expect(
+        client.audit.trail({
+          organizationId: deniedOrg,
           connectorId,
           resourceType: resource.type,
           resourceId: resource.id,
-          action,
-          limit: 25,
-        });
-        return trail.events.find((candidate) => {
-          return (
-            candidate.sourceEventId === `source_${runId}` ||
-            candidate.metadata?.smokeRunId === runId
-          );
-        });
-      });
-
-      expect(event).toMatchObject({
-        actor,
-        ingesterPrincipal: expectedIngester,
-        action,
-        targetType: resource.type,
-        targetId: resource.id,
-        before: { status: "confirmed" },
-        after: { status: "cancelled" },
-        evidenceUrl,
-      });
-
-      const deniedOrg = process.env.MEDALLION_SMOKE_DENIED_ORGANIZATION_ID;
-      if (deniedOrg?.trim()) {
-        await expect(
-          client.audit.trail({
-            organizationId: deniedOrg,
-            connectorId,
-            resourceType: resource.type,
-            resourceId: resource.id,
-            limit: 1,
-          }),
-        ).rejects.toSatisfy(
-          (error: unknown) =>
-            error instanceof MedallionApiError &&
-            (error.status === 401 || error.status === 403),
-        );
-      }
-    },
-    60_000,
-  );
+          limit: 1,
+        }),
+      ).rejects.toSatisfy(
+        (error: unknown) =>
+          error instanceof MedallionApiError &&
+          (error.status === 401 || error.status === 403),
+      );
+    }
+  }, 60_000);
 });
 
 function requiredEnvValue(name: (typeof requiredEnv)[number]): string {
@@ -129,5 +132,7 @@ async function eventually<T>(
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
 
-  throw new Error(`Expected deployed smoke event was not visible after ${timeoutMs} ms.`);
+  throw new Error(
+    `Expected deployed smoke event was not visible after ${timeoutMs} ms.`,
+  );
 }

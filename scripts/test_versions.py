@@ -16,6 +16,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_FILES = (
     ".flox/env/manifest.toml",
+    "LICENSE",
+    "NOTICE",
     "VERSION",
     "README.md",
     "go.mod",
@@ -23,6 +25,8 @@ FIXTURE_FILES = (
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml",
     "python/pyproject.toml",
+    "python/LICENSE",
+    "python/NOTICE",
     "python/src/medallion/py.typed",
     "python/uv.lock",
     "scripts/check_versions.py",
@@ -151,6 +155,20 @@ class VersionScriptsTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("README.md Go toolchain versions", result.stderr)
 
+    def test_checker_rejects_documented_pnpm_version_drift(self) -> None:
+        readme_path = self.fixture / "README.md"
+        readme_path.write_text(
+            re.sub(
+                r"\bpnpm [0-9]+\.[0-9]+\.[0-9]+",
+                "pnpm 0.0.0",
+                readme_path.read_text(),
+            )
+        )
+
+        result = self.run_script("check_versions.py")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("README.md pnpm versions", result.stderr)
+
     def test_checker_rejects_missing_python_type_marker(self) -> None:
         (self.fixture / "python/src/medallion/py.typed").unlink()
 
@@ -230,6 +248,36 @@ class VersionScriptsTest(unittest.TestCase):
         self.assertIn(
             "pnpm-lock.yaml invariantprotocol specifier pins", result.stderr
         )
+
+    def test_checker_rejects_esbuild_override_drift(self) -> None:
+        workspace_path = self.fixture / "pnpm-workspace.yaml"
+        workspace_path.write_text(
+            workspace_path.read_text().replace(
+                'esbuild: "0.28.1"',
+                'esbuild: "0.0.0"',
+            )
+        )
+
+        result = self.run_script("check_versions.py")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("esbuild overrides", result.stderr)
+
+    def test_checker_rejects_esbuild_lock_drift(self) -> None:
+        lock_path = self.fixture / "pnpm-lock.yaml"
+        lock_path.write_text(
+            lock_path.read_text().replace("  esbuild@0.28.1:", "  esbuild@0.0.0:", 1)
+        )
+
+        result = self.run_script("check_versions.py")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("esbuild package versions", result.stderr)
+
+    def test_checker_rejects_python_license_drift(self) -> None:
+        (self.fixture / "python/NOTICE").write_text("stale notice\n")
+
+        result = self.run_script("check_versions.py")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("python/NOTICE must be byte-identical", result.stderr)
 
 
 if __name__ == "__main__":

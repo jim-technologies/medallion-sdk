@@ -3,25 +3,27 @@ import { MedallionClient } from "../src/index.js";
 
 describe("audit.record", () => {
   it("normalizes IDs, publishes an audit event through connect, and does not mutate input", async () => {
-    const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
-      return new Response(
-        JSON.stringify({
-          accepted_count: 1,
-          duplicate_count: 0,
-          events: [
-            {
-              idempotency_key: "order_456_cancelled",
-              event_id: "9223372036854775807",
-              duplicate: false,
-            },
-          ],
-        }),
-        {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        },
-      );
-    });
+    const fetch = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) => {
+        return new Response(
+          JSON.stringify({
+            accepted_count: 1,
+            duplicate_count: 0,
+            events: [
+              {
+                idempotency_key: "order_456_cancelled",
+                event_id: "9223372036854775807",
+                duplicate: false,
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      },
+    );
     const client = new MedallionClient({
       baseUrl: "https://api.example.com",
       apiKey: "test_api_key",
@@ -33,7 +35,8 @@ describe("audit.record", () => {
         type: "user",
         id: 123,
       },
-      action: "order.cancelled",
+      action: "cancel",
+      outcome: "succeeded",
       resource: {
         type: "order",
         id: "000456",
@@ -61,7 +64,8 @@ describe("audit.record", () => {
         {
           resourceType: "order",
           resourceId: "000456",
-          action: "order.cancelled",
+          action: "cancel",
+          outcome: "AUDIT_EVENT_OUTCOME_SUCCEEDED",
           idempotencyKey: "order_456_cancelled",
           actorPrincipal: "user:123",
           payloadJson: JSON.stringify({
@@ -93,36 +97,45 @@ describe("audit.record", () => {
   });
 
   it("reads audit trail events from Connect with server-side filters and cursor pagination", async () => {
-    const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
-      return new Response(
-        JSON.stringify({
-          events: [
-            {
-              id: "1",
-              organization_id: "org_123",
-              connector_id: "conn_123",
-              resource_type: "order",
-              resource_id: "order_123",
-              payload_json: JSON.stringify({
-                actor: { type: "user", provider: "google", id: "user_123" },
-                before: { status: "confirmed" },
-                after: { status: "cancelled" },
-                metadata: { reason: "user_request" },
-              }),
-              actor_principal: "user:google:user_123",
-              ingested_by_principal: "service_account:orders-worker",
-              action: "order.cancelled",
-              observed_at: "2026-07-07T00:00:00Z",
-            },
-          ],
-          next_page_cursor: "cursor_2",
-        }),
-        {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        },
-      );
-    });
+    const fetch = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) => {
+        return new Response(
+          JSON.stringify({
+            events: [
+              {
+                id: "1",
+                organization_id: "org_123",
+                connector_id: "conn_123",
+                resource_type: "order",
+                resource_id: "order_123",
+                payload_json: JSON.stringify({
+                  actor: {
+                    type: "user",
+                    provider: "google",
+                    id: "payload_spoof",
+                  },
+                  before: { status: "confirmed" },
+                  after: { status: "cancelled" },
+                  metadata: { reason: "user_request" },
+                }),
+                actor_principal: "user:google:user_123",
+                ingested_by_principal: "service_account:orders-worker",
+                action: "cancel",
+                source_system: "orders",
+                origin: "AUDIT_EVENT_ORIGIN_EXTERNAL_PROVIDER",
+                outcome: "AUDIT_EVENT_OUTCOME_SUCCEEDED",
+                observed_at: "2026-07-07T00:00:00Z",
+              },
+            ],
+            next_page_cursor: "cursor_2",
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      },
+    );
     const client = new MedallionClient({
       baseUrl: "https://api.example.com",
       apiKey: "test_api_key",
@@ -136,7 +149,9 @@ describe("audit.record", () => {
       resourceId: "order_123",
       actor: { type: "user", provider: "google", id: "user_123" },
       ingesterPrincipal: "service_account:orders-worker",
-      action: "order.cancelled",
+      action: "cancel",
+      origin: "external_provider",
+      outcome: "succeeded",
       cursor: "cursor_1",
       limit: 25,
     });
@@ -155,7 +170,9 @@ describe("audit.record", () => {
       limit: 25,
       actorPrincipal: "user:google:user_123",
       ingestedByPrincipal: "service_account:orders-worker",
-      action: "order.cancelled",
+      action: "cancel",
+      origin: "AUDIT_EVENT_ORIGIN_EXTERNAL_PROVIDER",
+      outcome: "AUDIT_EVENT_OUTCOME_SUCCEEDED",
       pageCursor: "cursor_1",
     });
     expect(result.nextCursor).toBe("cursor_2");
@@ -166,18 +183,108 @@ describe("audit.record", () => {
       actorPrincipal: "user:google:user_123",
       targetType: "order",
       targetId: "order_123",
-      action: "order.cancelled",
+      action: "cancel",
+      sourceSystem: "orders",
+      origin: "external_provider",
+      outcome: "succeeded",
       after: { status: "cancelled" },
     });
   });
 
-  it("defaults audit trail reads to a bounded page size", async () => {
-    const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
-      return new Response(JSON.stringify({ events: [] }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
+  it("uses a matching structured actor to preserve colons in actor IDs", async () => {
+    const fetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            events: [
+              {
+                id: "1",
+                organization_id: "org_123",
+                connector_id: "conn_123",
+                resource_type: "order",
+                resource_id: "order_123",
+                actor_principal: "user:tenant:42",
+                payload_json: JSON.stringify({
+                  actor: { type: "user", id: "tenant:42" },
+                }),
+                action: "cancel",
+                outcome: "AUDIT_EVENT_OUTCOME_SUCCEEDED",
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
+    const client = new MedallionClient({
+      baseUrl: "https://api.example.com",
+      apiKey: "test_api_key",
+      organizationId: "org_123",
+      fetch,
     });
+
+    const result = await client.audit.trail({
+      resourceType: "order",
+      resourceId: "order_123",
+    });
+
+    expect(result.events[0]?.actor).toEqual({
+      type: "user",
+      id: "tenant:42",
+    });
+  });
+
+  it("keeps the wire actor authoritative when structured payload actor is spoofed", async () => {
+    const fetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            events: [
+              {
+                id: "1",
+                organization_id: "org_123",
+                connector_id: "conn_123",
+                resource_type: "order",
+                resource_id: "order_123",
+                actor_principal: "user:tenant:42",
+                payload_json: JSON.stringify({
+                  actor: { type: "system", id: "attacker" },
+                }),
+                action: "cancel",
+                outcome: "AUDIT_EVENT_OUTCOME_SUCCEEDED",
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
+    const client = new MedallionClient({
+      baseUrl: "https://api.example.com",
+      apiKey: "test_api_key",
+      organizationId: "org_123",
+      fetch,
+    });
+
+    const result = await client.audit.trail({
+      resourceType: "order",
+      resourceId: "order_123",
+    });
+
+    expect(result.events[0]?.actor).toEqual({
+      type: "user",
+      provider: "tenant",
+      id: "42",
+    });
+  });
+
+  it("defaults audit trail reads to a bounded page size", async () => {
+    const fetch = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) => {
+        return new Response(JSON.stringify({ events: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    );
     const client = new MedallionClient({
       baseUrl: "https://api.example.com",
       apiKey: "test_api_key",
@@ -201,12 +308,105 @@ describe("audit.record", () => {
     });
   });
 
-  it("treats zero as the omitted audit trail page size", async () => {
-    const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
-      new Response(JSON.stringify({ events: [] }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
+  it("rejects an empty successful publish acknowledgement", async () => {
+    const fetch = vi.fn(
+      async () =>
+        new Response("{}", {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "x-request-id": "req_empty",
+          },
+        }),
+    );
+    const client = new MedallionClient({
+      baseUrl: "https://api.example.com",
+      apiKey: "test_api_key",
+      defaultConnectorId: "conn_123",
+      fetch,
+    });
+
+    await expect(
+      client.audit.record({
+        actor: { type: "user", id: "user_123" },
+        action: "cancel",
+        outcome: "succeeded",
+        resource: { type: "order", id: "order_123" },
+        idempotencyKey: "audit_empty_ack",
       }),
+    ).rejects.toMatchObject({
+      code: "MEDALLION_INVALID_PUBLISH_RESPONSE",
+      requestId: "req_empty",
+    });
+  });
+
+  it("validates audit enum values for untyped JavaScript callers", async () => {
+    const fetch = vi.fn();
+    const client = new MedallionClient({
+      baseUrl: "https://api.example.com",
+      apiKey: "test_api_key",
+      organizationId: "org_123",
+      defaultConnectorId: "conn_123",
+      fetch,
+    });
+
+    await expect(
+      client.audit.record({
+        actor: { type: "user", id: "user_123" },
+        action: "cancel",
+        outcome: "unknown" as never,
+        resource: { type: "order", id: "order_123" },
+        idempotencyKey: "audit_invalid_outcome",
+      }),
+    ).rejects.toMatchObject({ code: "MEDALLION_INVALID_AUDIT_OUTCOME" });
+
+    await expect(
+      client.audit.trail({
+        resourceType: "order",
+        resourceId: "order_123",
+        origin: "unknown" as never,
+      }),
+    ).rejects.toMatchObject({ code: "MEDALLION_INVALID_AUDIT_ORIGIN" });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("requires a caller-stable idempotency key before publishing", async () => {
+    const fetch = vi.fn();
+    const client = new MedallionClient({
+      baseUrl: "https://api.example.com",
+      apiKey: "test_api_key",
+      defaultConnectorId: "conn_123",
+      fetch,
+    });
+
+    await expect(
+      client.audit.record({
+        actor: { type: "user", id: "user_123" },
+        action: "cancel",
+        outcome: "succeeded",
+        resource: { type: "order", id: "order_123" },
+        idempotencyKey: " ",
+      }),
+    ).rejects.toMatchObject({ code: "MEDALLION_MISSING_IDEMPOTENCY_KEY" });
+    await expect(
+      client.audit.record({
+        actor: { type: "user", id: "user_123" },
+        action: "cancel",
+        outcome: "succeeded",
+        resource: { type: "order", id: "order_123" },
+        idempotencyKey: "x".repeat(513),
+      }),
+    ).rejects.toMatchObject({ code: "MEDALLION_INVALID_IDEMPOTENCY_KEY" });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("treats zero as the omitted audit trail page size", async () => {
+    const fetch = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify({ events: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
     );
     const client = new MedallionClient({
       baseUrl: "https://api.example.com",

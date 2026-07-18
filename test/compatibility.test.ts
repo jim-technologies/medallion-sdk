@@ -1,7 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { Server } from "@jim-technologies/invariant-protocol";
 import { describe, expect, it } from "vitest";
-import { CONNECT_ROUTES, ONTOLOGY_ROUTES, STORAGE_ROUTES } from "../src/index.js";
+import {
+  CONNECT_ROUTES,
+  ONTOLOGY_ROUTES,
+  STORAGE_ROUTES,
+} from "../src/index.js";
 
 interface RouteManifest {
   connect: {
@@ -105,6 +109,9 @@ describe("client-facing route compatibility", () => {
     );
     const parsed = Server.fromBytes(descriptor).parsed;
     const auditEvent = parsed.getMessage("medallion.connect.v1.AuditEvent");
+    const listRequest = parsed.getMessage(
+      "medallion.connect.v1.ListAuditEventsRequest",
+    );
 
     expect(
       auditEvent?.fields.map((field) => [field.number, field.name]),
@@ -124,6 +131,26 @@ describe("client-facing route compatibility", () => {
       [13, "description"],
       [14, "source_system"],
       [15, "ingested_by_principal"],
+      [16, "origin"],
+      [17, "outcome"],
+    ]);
+    expect(
+      listRequest?.fields.map((field) => [field.number, field.name]),
+    ).toEqual([
+      [1, "organization_id"],
+      [2, "connector_id"],
+      [3, "resource_type"],
+      [4, "resource_id"],
+      [5, "limit"],
+      [6, "actor_principal"],
+      [7, "action"],
+      [8, "occurred_at_from"],
+      [9, "occurred_at_to"],
+      [10, "source_system"],
+      [11, "page_cursor"],
+      [12, "ingested_by_principal"],
+      [13, "origin"],
+      [14, "outcome"],
     ]);
   });
 
@@ -137,24 +164,26 @@ describe("client-facing route compatibility", () => {
       "medallion.connect.v1.ListCdcEventsRequest",
     );
 
-    expect(cdcEvent?.fields.map((field) => [field.number, field.name])).toEqual([
-      [1, "id"],
-      [2, "organization_id"],
-      [3, "connector_id"],
-      [4, "stream_name"],
-      [5, "entity_type"],
-      [6, "entity_id"],
-      [7, "operation"],
-      [8, "source_event_id"],
-      [9, "idempotency_key"],
-      [10, "actor_principal"],
-      [11, "payload_json"],
-      [12, "occurred_at"],
-      [13, "observed_at"],
-      [14, "description"],
-      [15, "source_system"],
-      [16, "ingested_by_principal"],
-    ]);
+    expect(cdcEvent?.fields.map((field) => [field.number, field.name])).toEqual(
+      [
+        [1, "id"],
+        [2, "organization_id"],
+        [3, "connector_id"],
+        [4, "stream_name"],
+        [5, "entity_type"],
+        [6, "entity_id"],
+        [7, "operation"],
+        [8, "source_event_id"],
+        [9, "idempotency_key"],
+        [10, "actor_principal"],
+        [11, "payload_json"],
+        [12, "occurred_at"],
+        [13, "observed_at"],
+        [14, "description"],
+        [15, "source_system"],
+        [16, "ingested_by_principal"],
+      ],
+    );
     expect(
       listRequest?.fields.map((field) => [field.number, field.name]),
     ).toEqual([
@@ -171,6 +200,108 @@ describe("client-facing route compatibility", () => {
       [11, "page_cursor"],
       [12, "ingested_by_principal"],
     ]);
+  });
+
+  it("pins control-mutation idempotency fields", async () => {
+    const descriptor = await readFile(
+      new URL("../proto/medallion-connect.descriptor.binpb", import.meta.url),
+    );
+    const parsed = Server.fromBytes(descriptor).parsed;
+    const expected = new Map<string, Array<[number, string]>>([
+      [
+        "medallion.connect.v1.RegisterConnectorRequest",
+        [
+          [1, "organization_id"],
+          [2, "kind"],
+          [3, "source_system"],
+          [4, "display_name"],
+          [5, "external_id"],
+          [6, "idempotency_key"],
+        ],
+      ],
+      [
+        "medallion.connect.v1.DisableConnectorRequest",
+        [
+          [1, "connector_id"],
+          [2, "idempotency_key"],
+        ],
+      ],
+      [
+        "medallion.connect.v1.RegisterConnectorActionRequest",
+        [
+          [1, "connector_id"],
+          [2, "operation_key"],
+          [3, "display_name"],
+          [4, "description"],
+          [5, "input_schema_json"],
+          [6, "output_schema_json"],
+          [7, "idempotency_supported"],
+          [8, "timeout_seconds"],
+          [9, "idempotency_key"],
+        ],
+      ],
+      [
+        "medallion.connect.v1.DisableConnectorActionRequest",
+        [
+          [1, "connector_action_id"],
+          [2, "idempotency_key"],
+        ],
+      ],
+    ]);
+
+    for (const [messageName, fields] of expected) {
+      expect(
+        parsed
+          .getMessage(messageName)
+          ?.fields.map((field) => [field.number, field.name]),
+      ).toEqual(fields);
+    }
+  });
+
+  it("keeps additive storage response metadata in the strict descriptor", async () => {
+    const descriptor = await readFile(
+      new URL("../proto/medallion-storage.descriptor.binpb", import.meta.url),
+    );
+    const parsed = Server.fromBytes(descriptor).parsed;
+    const catalogEntry = parsed.getMessage("medallion.storage.v1.CatalogEntry");
+    const objectMetadata = parsed.getMessage(
+      "medallion.storage.v1.ObjectMetadata",
+    );
+    const objectBytes = parsed.getMessage("medallion.storage.v1.ObjectBytes");
+    const entry = parsed.getMessage("medallion.storage.v1.Entry");
+
+    expect(
+      catalogEntry?.fields.map((field) => [field.number, field.name]),
+    ).toEqual([
+      [1, "filename"],
+      [2, "content_type"],
+      [3, "size_bytes"],
+      [4, "sha256"],
+      [5, "chunks"],
+      [6, "created_at"],
+      [7, "manifest"],
+      [8, "metadata"],
+    ]);
+    expect(
+      objectMetadata?.fields.map((field) => [field.number, field.name]),
+    ).toEqual([
+      [1, "cache_control"],
+      [2, "content_disposition"],
+      [3, "content_encoding"],
+      [4, "content_language"],
+      [5, "user"],
+    ]);
+    expect(
+      objectBytes?.fields.map((field) => [field.number, field.name]),
+    ).toEqual([
+      [1, "chunks"],
+      [2, "manifest"],
+      [3, "metadata"],
+    ]);
+    expect(entry?.fields.at(-1)).toMatchObject({
+      number: 6,
+      name: "etag",
+    });
   });
 });
 

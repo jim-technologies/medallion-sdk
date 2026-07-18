@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { MedallionError, normalizeId, normalizeIdRecord } from "../src/index.js";
+import {
+  MedallionError,
+  normalizeId,
+  normalizeIdRecord,
+} from "../src/index.js";
 
 describe("ID normalization", () => {
   it("preserves string IDs exactly", () => {
