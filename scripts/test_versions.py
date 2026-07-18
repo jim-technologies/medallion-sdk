@@ -57,6 +57,10 @@ class VersionScriptsTest(unittest.TestCase):
         self, script: str, *arguments: str, env: dict[str, str] | None = None
     ) -> subprocess.CompletedProcess[str]:
         process_env = os.environ.copy()
+        # Fixture checks provide their own synthetic release context. Do not
+        # inherit an outer tag-triggered GitHub Actions run.
+        process_env.pop("GITHUB_REF_TYPE", None)
+        process_env.pop("GITHUB_REF_NAME", None)
         process_env["PYTHONDONTWRITEBYTECODE"] = "1"
         if env is not None:
             process_env.update(env)

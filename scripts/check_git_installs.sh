@@ -16,7 +16,9 @@ trap cleanup EXIT
 # release rehearsals validate pending changes as well as committed CI trees.
 snapshot="$tmp/source-snapshot"
 git clone --quiet --no-hardlinks "$root" "$snapshot"
-git -C "$root" diff --binary HEAD -- . | git -C "$snapshot" apply --binary
+if ! git -C "$root" diff --quiet HEAD -- .; then
+  git -C "$root" diff --binary HEAD -- . | git -C "$snapshot" apply --binary
+fi
 while IFS= read -r -d '' relative; do
   mkdir -p "$snapshot/$(dirname "$relative")"
   cp -p "$root/$relative" "$snapshot/$relative"
