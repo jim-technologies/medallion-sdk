@@ -12,8 +12,8 @@ importers:
   .:
     dependencies:
       '@bufbuild/protobuf':
-        specifier: 2.12.1
-        version: 2.12.1
+        specifier: 2.13.0
+        version: 2.13.0
       '@jim-technologies/invariant-protocol':
         specifier: github:jim-technologies/invariantprotocol#e1fb753ae72b0eb33f9de00fe319a1a2ab55dffd
         version: https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/e1fb753ae72b0eb33f9de00fe319a1a2ab55dffd
@@ -156,8 +156,8 @@ packages:
     peerDependencies:
       '@bufbuild/protobuf': ^2.6.2
 
-  '@bufbuild/protobuf@2.12.1':
-    resolution: {integrity: sha512-BvAMfS6LrgZiryOAZ4pBYucu4wG/Ei/9o9DZ9akbREnMLbPJiom2i8b9C8IsKErQoiKqVhrerzt3kOT/RrzLHg==}
+  '@bufbuild/protobuf@2.13.0':
+    resolution: {integrity: sha512-acq7c49vxfm1ggJ95P70TX7ABDM0vxr1SYD3BB0o0jnBLB4OAqeHyKuN+cD3w80gXEDQ2zxHpR6CUeA+O/aU9g==}
 
   '@bufbuild/protovalidate@1.2.0':
     resolution: {integrity: sha512-tD08DwGrHIV88khLz1Kdz9DYUwEo1TsoepaIg7/B/zd//AymaTx67kvCS1jlkcG/+vgQaSOl6f0HCE3sL8vI7w==}
@@ -1192,30 +1192,30 @@ snapshots:
       '@bufbuild/buf-win32-arm64': 1.71.0
       '@bufbuild/buf-win32-x64': 1.71.0
 
-  '@bufbuild/cel-spec@0.4.0(@bufbuild/protobuf@2.12.1)':
+  '@bufbuild/cel-spec@0.4.0(@bufbuild/protobuf@2.13.0)':
     dependencies:
-      '@bufbuild/protobuf': 2.12.1
+      '@bufbuild/protobuf': 2.13.0
 
-  '@bufbuild/cel@0.4.0(@bufbuild/protobuf@2.12.1)':
+  '@bufbuild/cel@0.4.0(@bufbuild/protobuf@2.13.0)':
     dependencies:
-      '@bufbuild/cel-spec': 0.4.0(@bufbuild/protobuf@2.12.1)
-      '@bufbuild/protobuf': 2.12.1
+      '@bufbuild/cel-spec': 0.4.0(@bufbuild/protobuf@2.13.0)
+      '@bufbuild/protobuf': 2.13.0
 
-  '@bufbuild/protobuf@2.12.1': {}
+  '@bufbuild/protobuf@2.13.0': {}
 
-  '@bufbuild/protovalidate@1.2.0(@bufbuild/protobuf@2.12.1)':
+  '@bufbuild/protovalidate@1.2.0(@bufbuild/protobuf@2.13.0)':
     dependencies:
-      '@bufbuild/cel': 0.4.0(@bufbuild/protobuf@2.12.1)
-      '@bufbuild/protobuf': 2.12.1
+      '@bufbuild/cel': 0.4.0(@bufbuild/protobuf@2.13.0)
+      '@bufbuild/protobuf': 2.13.0
 
-  '@connectrpc/connect-node@2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))':
+  '@connectrpc/connect-node@2.1.2(@bufbuild/protobuf@2.13.0)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.13.0))':
     dependencies:
-      '@bufbuild/protobuf': 2.12.1
-      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.1)
+      '@bufbuild/protobuf': 2.13.0
+      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.13.0)
 
-  '@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1)':
+  '@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.13.0)':
     dependencies:
-      '@bufbuild/protobuf': 2.12.1
+      '@bufbuild/protobuf': 2.13.0
 
   '@esbuild/aix-ppc64@0.28.1':
     optional: true
@@ -1322,10 +1322,10 @@ snapshots:
 
   '@jim-technologies/invariant-protocol@https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/e1fb753ae72b0eb33f9de00fe319a1a2ab55dffd':
     dependencies:
-      '@bufbuild/protobuf': 2.12.1
-      '@bufbuild/protovalidate': 1.2.0(@bufbuild/protobuf@2.12.1)
-      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.1)
-      '@connectrpc/connect-node': 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
+      '@bufbuild/protobuf': 2.13.0
+      '@bufbuild/protovalidate': 1.2.0(@bufbuild/protobuf@2.13.0)
+      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.13.0)
+      '@connectrpc/connect-node': 2.1.2(@bufbuild/protobuf@2.13.0)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.13.0))
       '@grpc/grpc-js': 1.14.4
       '@grpc/reflection': 1.0.4(@grpc/grpc-js@1.14.4)
 
