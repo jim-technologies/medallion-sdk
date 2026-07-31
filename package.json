@@ -54,7 +54,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.4",
     "@bufbuild/buf": "1.71.0",
-    "@types/node": "24.13.3",
+    "@types/node": "26.1.2",
     "tsup": "8.5.1",
     "typescript": "7.0.2",
     "vitest": "4.1.10"
