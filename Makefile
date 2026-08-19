@@ -15,7 +15,7 @@ PIP_AUDIT_VERSION ?= 2.10.1
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install validate lock-check version-check version-set contract-sync contract-check contract-release-check generated-check artifact-check git-install-check public-surface check-public check-examples test test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python lint-proto lint-shell lint-workflows fmt fmt-ts fmt-go fmt-python fmt-proto fmt-shell audit audit-node audit-go audit-python secret-check deps generate proto-bindings proto-descriptor run clean
+.PHONY: help install validate lock-check version-check version-set release contract-sync contract-check contract-release-check generated-check artifact-check git-install-check public-surface check-public check-examples test test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python lint-proto lint-shell lint-workflows fmt fmt-ts fmt-go fmt-python fmt-proto fmt-shell audit audit-node audit-go audit-python secret-check deps generate proto-bindings proto-descriptor run clean
 
 help: ## Show available targets.
 	@awk 'BEGIN {FS = ":.*## "; printf "Medallion SDK targets:\n"} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -41,6 +41,21 @@ version-check: ## Verify every language SDK uses the root VERSION.
 version-set: ## Synchronize every SDK version (usage: make version-set VERSION=X.Y.Z).
 	@test -n "$(VERSION)" || { echo "VERSION is required"; exit 2; }
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/set_version.py "$(VERSION)"
+
+release: ## Fail-closed release stub: require a clean, pushed, version-consistent tree, then refuse.
+	@status="$$(git status --porcelain)"; test -z "$$status" \
+		|| { echo "release: refusing: the working tree is dirty:"; echo "$$status"; exit 1; }
+	@git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' >/dev/null 2>&1 \
+		|| { echo "release: refusing: the current branch has no upstream"; exit 1; }
+	@git fetch --quiet \
+		|| { echo "release: refusing: cannot fetch the upstream to verify the push state"; exit 1; }
+	@git merge-base --is-ancestor HEAD '@{upstream}' \
+		|| { echo "release: refusing: HEAD is not pushed to $$(git rev-parse --abbrev-ref '@{upstream}')"; exit 1; }
+	$(MAKE) version-check
+	@echo "release: the tree is clean, pushed, and version-consistent at v$$(cat VERSION)."
+	@echo "release: publishing to npm, PyPI, or a public Go module tag is a pending product decision;"
+	@echo "release: distribution stays git-install from the annotated v$$(cat VERSION) root tag (see CONTRIBUTING.md)."
+	@exit 1
 
 contract-sync: node_modules/.medallion-install-stamp ## Sync a sanitized SDK contract export (MEDALLION_SDK_CONTRACT_ROOT), then regenerate.
 	node scripts/sync_external_ingestion_contract.mjs --sync

@@ -24,6 +24,11 @@ flox activate -- make version-set VERSION=X.Y.Z
 flox activate -- make version-check
 ```
 
+`make release` is a fail-closed stub: it verifies a clean, pushed,
+version-consistent tree and then refuses, because publishing to npm, PyPI, or
+a public Go module ecosystem is a pending product decision. Distribution stays
+git-install based per the Release Checklist below.
+
 The synchronizer updates the TypeScript and Python package metadata and the
 Python lockfile together. Go derives the same version from the root Git tag.
 Before a v2 or later release, migrate the Go module and imports to the required
