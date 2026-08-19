@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "medallion"
-version = "0.1.1"
-description = "Public Python SDK for Medallion."
+version = "0.2.0"
+description = "Server-side Python SDK for Medallion CDC and audit ingestion."
 readme = "README.md"
 requires-python = ">=3.14"
 license = "Apache-2.0"
@@ -13,7 +13,7 @@ license-files = ["LICENSE", "NOTICE"]
 authors = [
   { name = "Jim Technologies" }
 ]
-keywords = ["medallion", "audit", "sdk"]
+keywords = ["medallion", "cdc", "audit", "ingestion", "sdk"]
 classifiers = [
   "Private :: Do Not Upload",
   "Development Status :: 3 - Alpha",
@@ -25,8 +25,8 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
-  "opentelemetry-api>=1.44.0",
-  "protobuf>=7.35.1",
+  "opentelemetry-api>=1.44.0,<2",
+  "protobuf>=7.35.1,<8",
 ]
 
 [project.urls]
@@ -36,6 +36,9 @@ Issues = "https://github.com/jim-technologies/medallion-sdk/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/medallion", "src/buf"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["/tests", "/uv.lock"]
 
 [tool.ruff]
 target-version = "py314"
@@ -48,7 +51,6 @@ extend-exclude = [
 select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
-# These exports deliberately remain runtime class aliases, not PEP 695
-# TypeAliasType objects, so existing `medallion.Connector(...)` calls keep
-# working.
+# Protobuf runtime aliases deliberately remain normal assignments rather than
+# PEP 695 TypeAliasType objects.
 "src/medallion/types.py" = ["UP040"]

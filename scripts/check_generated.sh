@@ -2,7 +2,8 @@
 
 set -euo pipefail
 
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+tool_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+root="${MEDALLION_GENERATED_ROOT:-$tool_root}"
 tmp="$(mktemp -d)"
 
 cleanup() {
@@ -12,9 +13,16 @@ trap cleanup EXIT
 
 cd "$root"
 
-pnpm exec buf generate \
-  --template buf.gen.yaml \
-  --path proto/medallion/connect/v1/connect.proto \
+mapfile -t descriptors < <(find proto -maxdepth 1 -type f -name '*.descriptor.binpb' -print | sort)
+if [[ "${descriptors[*]}" != "proto/external-ingestion-v1.descriptor.binpb" ]]; then
+  echo "proto must contain exactly the external-ingestion v1 descriptor" >&2
+  printf 'found: %s\n' "${descriptors[*]:-(none)}" >&2
+  exit 1
+fi
+
+"$tool_root/node_modules/.bin/buf" generate proto/external-ingestion-v1.descriptor.binpb \
+  --template "$root/buf.gen.yaml" \
+  --path medallion/connect/v1/connect.proto \
   --output "$tmp/generated"
 
 generated_files=(
@@ -30,32 +38,5 @@ for relative in "${generated_files[@]}"; do
   fi
 done
 
-pnpm exec buf build proto \
-  --as-file-descriptor-set \
-  --path proto/medallion/connect/v1/connect.proto \
-  -o "$tmp/medallion-connect.descriptor.binpb"
-pnpm exec buf build proto \
-  --as-file-descriptor-set \
-  --path proto/medallion/ontology/v1/ontology.proto \
-  -o "$tmp/medallion-ontology.descriptor.binpb"
-pnpm exec buf build proto \
-  --as-file-descriptor-set \
-  --path proto/medallion/storage/v1/service.proto \
-  -o "$tmp/medallion-storage.descriptor.binpb"
-
-descriptor_pairs=(
-  "proto/medallion-connect.descriptor.binpb:$tmp/medallion-connect.descriptor.binpb"
-  "proto/medallion-ontology.descriptor.binpb:$tmp/medallion-ontology.descriptor.binpb"
-  "proto/medallion-storage.descriptor.binpb:$tmp/medallion-storage.descriptor.binpb"
-)
-for pair in "${descriptor_pairs[@]}"; do
-  committed="${pair%%:*}"
-  generated="${pair#*:}"
-  if ! cmp -s "$committed" "$generated"; then
-    echo "$committed is stale; run make proto-descriptor" >&2
-    exit 1
-  fi
-done
-
-node scripts/embed-connect-descriptor.mjs --check
+node "$tool_root/scripts/embed-connect-descriptor.mjs" --check --root "$root"
 echo "Generated protobuf bindings and descriptors are current"

@@ -44,12 +44,40 @@ def start_request_span(config: TracingConfig, method: str, path: str):
             "medallion.request.path": path,
             "http.request.method": method,
         },
+        # Request failures are recorded below with stable metadata. Letting the
+        # context manager record an escaping exception would copy arbitrary
+        # server messages into exception.message and the span status.
+        record_exception=False,
+        set_status_on_exception=False,
     )
 
 
 def inject_trace_context(config: TracingConfig, headers: dict[str, str]) -> None:
-    if config.enabled:
-        propagate.inject(headers)
+    if not config.enabled:
+        return
+    injected: dict[str, str] = {}
+    propagate.inject(injected)
+    for name, value in injected.items():
+        if (
+            isinstance(name, str)
+            and isinstance(value, str)
+            and _allowed_trace_header(name)
+        ):
+            headers[name] = value
+
+
+def _allowed_trace_header(name: str) -> bool:
+    normalized = name.lower()
+    return normalized in {
+        "b3",
+        "baggage",
+        "grpc-trace-bin",
+        "traceparent",
+        "tracestate",
+        "uber-trace-id",
+        "x-amzn-trace-id",
+        "x-cloud-trace-context",
+    } or normalized.startswith(("uberctx-", "x-b3-"))
 
 
 def set_response_span(span: Any, status: int, request_id: str | None) -> None:
@@ -67,5 +95,37 @@ def set_response_span(span: Any, status: int, request_id: str | None) -> None:
 def record_span_exception(span: Any, exc: BaseException) -> None:
     if span is None:
         return
-    span.record_exception(exc)
-    span.set_status(Status(StatusCode.ERROR, str(exc)))
+    code, error_type, request_id = _telemetry_error_fields(exc)
+    span.set_attribute("medallion.error.code", code)
+    span.set_attribute("medallion.error.type", error_type)
+    if request_id:
+        span.set_attribute("medallion.request_id", request_id)
+    span.record_exception(_TelemetryError(code))
+    span.set_status(Status(StatusCode.ERROR, code))
+
+
+class _TelemetryError(Exception):
+    """Stable exception projection that cannot contain response text."""
+
+
+def _telemetry_error_fields(
+    exc: BaseException,
+) -> tuple[str, str, str | None]:
+    raw_code = getattr(exc, "code", None)
+    code = (
+        raw_code
+        if isinstance(raw_code, str)
+        and raw_code.startswith("MEDALLION_")
+        and all(char in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_" for char in raw_code)
+        else "MEDALLION_TRANSPORT_ERROR"
+    )
+    error_type = (
+        "api"
+        if code == "MEDALLION_API_ERROR"
+        else "sdk"
+        if code != "MEDALLION_TRANSPORT_ERROR"
+        else "transport"
+    )
+    raw_request_id = getattr(exc, "request_id", None)
+    request_id = raw_request_id if isinstance(raw_request_id, str) else None
+    return code, error_type, request_id

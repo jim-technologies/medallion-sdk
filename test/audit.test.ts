@@ -27,6 +27,7 @@ describe("audit.record", () => {
     const client = new MedallionClient({
       baseUrl: "https://api.example.com",
       apiKey: "test_api_key",
+      workspaceId: "ws_01jz9q5g6rsf7r5ar4rah1b2c3",
       defaultConnectorId: "conn_123",
       fetch,
     });
@@ -56,7 +57,8 @@ describe("audit.record", () => {
     expect(url).toBe(
       "https://api.example.com/medallion.connect.v1.MedallionConnectService/PublishAuditEvents",
     );
-    expect(headers.get("idempotency-key")).toBe("order_456_cancelled");
+    // Batch idempotency is carried by each event, not a misleading batch header.
+    expect(headers.get("idempotency-key")).toBeNull();
     expect(headers.get("connect-protocol-version")).toBe("1");
     expect(body).toEqual({
       connectorId: "conn_123",
@@ -68,14 +70,8 @@ describe("audit.record", () => {
           outcome: "AUDIT_EVENT_OUTCOME_SUCCEEDED",
           idempotencyKey: "order_456_cancelled",
           actorPrincipal: "user:123",
-          payloadJson: JSON.stringify({
-            actor: { type: "user", id: "123" },
-            resource: { type: "order", id: "000456" },
-            before: { status: "confirmed" },
-            after: { status: "cancelled" },
-            metadata: { reason: "user_request" },
-            evidenceUrl: null,
-          }),
+          payloadJson:
+            '{"actor":{"id":"123","type":"user"},"after":{"status":"cancelled"},"before":{"status":"confirmed"},"evidenceUrl":null,"metadata":{"reason":"user_request"},"resource":{"id":"000456","type":"order"}}',
         },
       ],
     });
@@ -97,6 +93,11 @@ describe("audit.record", () => {
   });
 
   it("reads audit trail events from Connect with server-side filters and cursor pagination", async () => {
+    const payloadJson =
+      '{"actor":{"type":"user","provider":"google","id":"payload_spoof"},' +
+      '"before":{"status":"confirmed"},"after":{"status":"cancelled"},' +
+      '"metadata":{"reason":"user_request"},' +
+      '"decimal":1234567890.123456789}';
     const fetch = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) => {
         return new Response(
@@ -104,23 +105,16 @@ describe("audit.record", () => {
             events: [
               {
                 id: "1",
-                organization_id: "org_123",
+                workspace_id: "ws_01jz9q5g6rsf7r5ar4rah1b2c3",
                 connector_id: "conn_123",
                 resource_type: "order",
                 resource_id: "order_123",
-                payload_json: JSON.stringify({
-                  actor: {
-                    type: "user",
-                    provider: "google",
-                    id: "payload_spoof",
-                  },
-                  before: { status: "confirmed" },
-                  after: { status: "cancelled" },
-                  metadata: { reason: "user_request" },
-                }),
+                idempotency_key: "audit:order_123:cancel",
+                payload_json: payloadJson,
                 actor_principal: "user:google:user_123",
                 ingested_by_principal: "service_account:orders-worker",
                 action: "cancel",
+                description: "customer-visible audit",
                 source_system: "orders",
                 origin: "AUDIT_EVENT_ORIGIN_EXTERNAL_PROVIDER",
                 outcome: "AUDIT_EVENT_OUTCOME_SUCCEEDED",
@@ -139,7 +133,7 @@ describe("audit.record", () => {
     const client = new MedallionClient({
       baseUrl: "https://api.example.com",
       apiKey: "test_api_key",
-      organizationId: "org_123",
+      workspaceId: "ws_01jz9q5g6rsf7r5ar4rah1b2c3",
       defaultConnectorId: "conn_123",
       fetch,
     });
@@ -163,7 +157,7 @@ describe("audit.record", () => {
       "https://api.example.com/medallion.connect.v1.MedallionConnectService/ListAuditEvents",
     );
     expect(body).toEqual({
-      organizationId: "org_123",
+      workspaceId: "ws_01jz9q5g6rsf7r5ar4rah1b2c3",
       connectorId: "conn_123",
       resourceType: "order",
       resourceId: "order_123",
@@ -178,36 +172,41 @@ describe("audit.record", () => {
     expect(result.nextCursor).toBe("cursor_2");
     expect(result.events[0]).toMatchObject({
       id: "1",
-      actor: { type: "user", provider: "google", id: "user_123" },
+      actor: { id: "user:google:user_123" },
       ingesterPrincipal: "service_account:orders-worker",
       actorPrincipal: "user:google:user_123",
       targetType: "order",
       targetId: "order_123",
       action: "cancel",
+      description: "customer-visible audit",
+      idempotencyKey: "audit:order_123:cancel",
       sourceSystem: "orders",
       origin: "external_provider",
       outcome: "succeeded",
       after: { status: "cancelled" },
+      payloadJson,
     });
   });
 
   it("uses a matching structured actor to preserve colons in actor IDs", async () => {
     const fetch = vi.fn(
-      async () =>
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
         new Response(
           JSON.stringify({
             events: [
               {
                 id: "1",
-                organization_id: "org_123",
+                workspace_id: "ws_01jz9q5g6rsf7r5ar4rah1b2c3",
                 connector_id: "conn_123",
                 resource_type: "order",
                 resource_id: "order_123",
-                actor_principal: "user:tenant:42",
+                idempotency_key: "audit:actor:account_42",
+                actor_principal: "user:account:42",
                 payload_json: JSON.stringify({
-                  actor: { type: "user", id: "tenant:42" },
+                  actor: { type: "user", id: "account:42" },
                 }),
                 action: "cancel",
+                origin: "AUDIT_EVENT_ORIGIN_EXTERNAL_PROVIDER",
                 outcome: "AUDIT_EVENT_OUTCOME_SUCCEEDED",
               },
             ],
@@ -218,7 +217,7 @@ describe("audit.record", () => {
     const client = new MedallionClient({
       baseUrl: "https://api.example.com",
       apiKey: "test_api_key",
-      organizationId: "org_123",
+      workspaceId: "ws_01jz9q5g6rsf7r5ar4rah1b2c3",
       fetch,
     });
 
@@ -229,7 +228,53 @@ describe("audit.record", () => {
 
     expect(result.events[0]?.actor).toEqual({
       type: "user",
-      id: "tenant:42",
+      id: "account:42",
+    });
+  });
+
+  it("filters colon-bearing actors by their lossless canonical principal", async () => {
+    const fetch = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(
+          JSON.stringify({
+            events: [
+              {
+                id: "1",
+                workspace_id: "ws_01jz9q5g6rsf7r5ar4rah1b2c3",
+                connector_id: "conn_123",
+                resource_type: "order",
+                resource_id: "order_123",
+                actor_principal: "user:account:42",
+                payload_json: "{}",
+                idempotency_key: "audit:account:42",
+                action: "read",
+                origin: "AUDIT_EVENT_ORIGIN_EXTERNAL_PROVIDER",
+                outcome: "AUDIT_EVENT_OUTCOME_SUCCEEDED",
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
+    const client = new MedallionClient({
+      baseUrl: "https://api.example.com",
+      apiKey: "test_api_key",
+      workspaceId: "ws_01jz9q5g6rsf7r5ar4rah1b2c3",
+      fetch,
+    });
+
+    const result = await client.audit.list({
+      actor: { type: "user", id: "account:42" },
+    });
+
+    const body = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body)) as {
+      actorPrincipal: string;
+    };
+    expect(body.actorPrincipal).toBe("user:account:42");
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0]).toMatchObject({
+      actorPrincipal: "user:account:42",
+      actor: { id: "user:account:42" },
     });
   });
 
@@ -241,15 +286,17 @@ describe("audit.record", () => {
             events: [
               {
                 id: "1",
-                organization_id: "org_123",
+                workspace_id: "ws_01jz9q5g6rsf7r5ar4rah1b2c3",
                 connector_id: "conn_123",
                 resource_type: "order",
                 resource_id: "order_123",
-                actor_principal: "user:tenant:42",
+                idempotency_key: "audit:actor:spoofed",
+                actor_principal: "user:account:42",
                 payload_json: JSON.stringify({
                   actor: { type: "system", id: "attacker" },
                 }),
                 action: "cancel",
+                origin: "AUDIT_EVENT_ORIGIN_EXTERNAL_PROVIDER",
                 outcome: "AUDIT_EVENT_OUTCOME_SUCCEEDED",
               },
             ],
@@ -260,7 +307,7 @@ describe("audit.record", () => {
     const client = new MedallionClient({
       baseUrl: "https://api.example.com",
       apiKey: "test_api_key",
-      organizationId: "org_123",
+      workspaceId: "ws_01jz9q5g6rsf7r5ar4rah1b2c3",
       fetch,
     });
 
@@ -270,9 +317,7 @@ describe("audit.record", () => {
     });
 
     expect(result.events[0]?.actor).toEqual({
-      type: "user",
-      provider: "tenant",
-      id: "42",
+      id: "user:account:42",
     });
   });
 
@@ -288,7 +333,7 @@ describe("audit.record", () => {
     const client = new MedallionClient({
       baseUrl: "https://api.example.com",
       apiKey: "test_api_key",
-      organizationId: "org_123",
+      workspaceId: "ws_01jz9q5g6rsf7r5ar4rah1b2c3",
       fetch,
     });
 
@@ -301,7 +346,7 @@ describe("audit.record", () => {
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
 
     expect(body).toMatchObject({
-      organizationId: "org_123",
+      workspaceId: "ws_01jz9q5g6rsf7r5ar4rah1b2c3",
       resourceType: "order",
       resourceId: "order_123",
       limit: 100,
@@ -322,6 +367,7 @@ describe("audit.record", () => {
     const client = new MedallionClient({
       baseUrl: "https://api.example.com",
       apiKey: "test_api_key",
+      workspaceId: "ws_01jz9q5g6rsf7r5ar4rah1b2c3",
       defaultConnectorId: "conn_123",
       fetch,
     });
@@ -345,7 +391,7 @@ describe("audit.record", () => {
     const client = new MedallionClient({
       baseUrl: "https://api.example.com",
       apiKey: "test_api_key",
-      organizationId: "org_123",
+      workspaceId: "ws_01jz9q5g6rsf7r5ar4rah1b2c3",
       defaultConnectorId: "conn_123",
       fetch,
     });
@@ -375,6 +421,7 @@ describe("audit.record", () => {
     const client = new MedallionClient({
       baseUrl: "https://api.example.com",
       apiKey: "test_api_key",
+      workspaceId: "ws_01jz9q5g6rsf7r5ar4rah1b2c3",
       defaultConnectorId: "conn_123",
       fetch,
     });
@@ -385,7 +432,7 @@ describe("audit.record", () => {
         action: "cancel",
         outcome: "succeeded",
         resource: { type: "order", id: "order_123" },
-        idempotencyKey: " ",
+        idempotencyKey: "",
       }),
     ).rejects.toMatchObject({ code: "MEDALLION_MISSING_IDEMPOTENCY_KEY" });
     await expect(
@@ -411,7 +458,7 @@ describe("audit.record", () => {
     const client = new MedallionClient({
       baseUrl: "https://api.example.com",
       apiKey: "test_api_key",
-      organizationId: "org_123",
+      workspaceId: "ws_01jz9q5g6rsf7r5ar4rah1b2c3",
       fetch,
     });
 
@@ -430,7 +477,7 @@ describe("audit.record", () => {
     const client = new MedallionClient({
       baseUrl: "https://api.example.com",
       apiKey: "test_api_key",
-      organizationId: "org_123",
+      workspaceId: "ws_01jz9q5g6rsf7r5ar4rah1b2c3",
       fetch: vi.fn(),
     });
 
@@ -441,7 +488,7 @@ describe("audit.record", () => {
         limit: 501,
       }),
     ).rejects.toMatchObject({
-      code: "MEDALLION_AUDIT_TRAIL_LIMIT_TOO_LARGE",
+      code: "MEDALLION_INVALID_PAGE_SIZE",
     });
   });
 });

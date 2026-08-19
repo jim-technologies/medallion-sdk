@@ -81,11 +81,15 @@ export async function traceRequest<TResponse>(
   );
 
   return context.with(trace.setSpan(context.active(), span), async () => {
-    propagation.inject(context.active(), options.headers, {
+    const injected = new Headers();
+    propagation.inject(context.active(), injected, {
       set: (carrier, key, value) => {
         carrier.set(key, value);
       },
     });
+    for (const [name, value] of injected.entries()) {
+      if (allowedTracingHeader(name)) options.headers.set(name, value);
+    }
 
     try {
       const response = await options.run(span);
@@ -98,6 +102,24 @@ export async function traceRequest<TResponse>(
       span.end();
     }
   });
+}
+
+function allowedTracingHeader(name: string): boolean {
+  const normalized = name.toLowerCase();
+  return (
+    [
+      "b3",
+      "baggage",
+      "grpc-trace-bin",
+      "traceparent",
+      "tracestate",
+      "uber-trace-id",
+      "x-amzn-trace-id",
+      "x-cloud-trace-context",
+    ].includes(normalized) ||
+    normalized.startsWith("uberctx-") ||
+    normalized.startsWith("x-b3-")
+  );
 }
 
 export function setResponseSpanAttributes(
@@ -116,9 +138,26 @@ export function setResponseSpanAttributes(
 }
 
 function recordSpanException(span: Span, error: unknown): void {
-  span.recordException(error instanceof Error ? error : String(error));
-  span.setStatus({
-    code: SpanStatusCode.ERROR,
-    message: error instanceof Error ? error.message : undefined,
+  // Server messages, fetch errors, and caller-provided Error objects may echo
+  // credentials or event payloads. Telemetry records only a bounded local
+  // classification and never an arbitrary message or stack.
+  span.recordException({
+    name: safeErrorName(error),
+    message: "Medallion request failed.",
   });
+  span.setStatus({ code: SpanStatusCode.ERROR });
+}
+
+function safeErrorName(error: unknown): string {
+  if (!(error instanceof Error)) return "Error";
+  switch (error.name) {
+    case "AbortError":
+    case "MedallionApiError":
+    case "MedallionError":
+    case "TimeoutError":
+    case "TypeError":
+      return error.name;
+    default:
+      return "Error";
+  }
 }

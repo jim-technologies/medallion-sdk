@@ -1,41 +1,238 @@
-# Medallion Python SDK
+# Medallion Python ingestion SDK
 
-Install directly from Git:
+This server-side SDK publishes customer CDC and audit events to the stable
+`medallion.connect.v1.MedallionConnectService` identity at the configured
+Medallion API base URL. It is intentionally limited to external ingestion.
+
+The stable `external_ingestion_sdk_v1` profile contains exactly four RPCs:
+`PublishCdcEvents`, `PublishAuditEvents`, `ListCdcEvents`, and
+`ListAuditEvents`. Connector and credential provisioning remain control-plane
+operations and are intentionally absent here.
+
+Install the SDK directly from Git:
 
 ```sh
 uv add "medallion @ git+https://github.com/jim-technologies/medallion-sdk.git@vX.Y.Z#subdirectory=python"
 ```
 
-The repository-root `VERSION` is shared by every SDK and released through one
-plain root `vX.Y.Z` tag. Use a full commit SHA instead of the tag when a
-production build requires commit-level pinning.
+All language SDKs use the repository-root version and the same `vX.Y.Z` tag.
+Use a full commit SHA when a production build requires commit-level pinning.
 
-The Python SDK currently implements the Connect-backed server integration path:
+An administrator first provisions the integration through Medallion's control
+plane. Your server application receives a Medallion API base URL, scoped API
+key, workspace ID, and connector ID:
 
-- `client.connect.register_datasource(...)`
-- `client.datasources.register(...)`
-- `client.audit.record(...)`
-- `client.audit.trail(...)`
-- `client.cdc.record(...)`
-
-Audit and CDC use separate typed Connect contracts: audit methods publish
-`AuditEvent` values through `PublishAuditEvents`, while CDC remains on
-`PublishCdcEvents`.
-
-Low-level Connect request/response types are generated from the vendored public protobuf contract and are exported as:
+Set `MEDALLION_BASE_URL` to that origin, for example
+`https://api.example.com`.
 
 ```python
-from medallion import connect_pb2
+import os
+
+from medallion import MedallionClient
+
+client = MedallionClient(
+    base_url=os.environ["MEDALLION_BASE_URL"],
+    api_key=os.environ["MEDALLION_API_KEY"],
+    workspace_id=os.environ["MEDALLION_WORKSPACE_ID"],
+    default_connector_id=os.environ["MEDALLION_CONNECTOR_ID"],
+)
 ```
 
-Use this SDK from server-side Python services only. Do not embed service API keys in browser or mobile clients.
+One client represents one immutable, canonical `ws_...` workspace. To target a
+different workspace, obtain an appropriately bound credential and construct a
+separate client. Per-call workspace overrides are intentionally unavailable.
+For an allowed service-account flow, use `access_token` instead of `api_key`;
+configuring both is rejected. Never put either credential in browser or mobile
+code.
 
-OpenTelemetry tracing is off by default and can be enabled without SDK-specific exporter setup:
+## Publish CDC events
+
+Each event needs a stable, source-derived idempotency key of 1–512 UTF-8 bytes.
+Any non-empty valid Unicode string is accepted exactly as supplied, including
+whitespace and control characters; the key is an event-body field, not an HTTP
+header. Do not trim, normalize, or regenerate it during delivery retries.
+The SDK does not accept workspace or connector identity at event level,
+observed time, source system, or authenticated-ingester fields because
+Medallion derives them from trusted request context.
+
+```python
+receipt = client.cdc.record(
+    stream_name="orders",
+    entity_type="order",
+    entity_id="order-1842",
+    operation="update",
+    idempotency_key="postgres:orders:partition-3:lsn-9A/BC",
+    source_event_id="debezium-event-1842",
+    occurred_at="2026-08-01T17:30:12.123456789Z",
+    payload={"after": {"status": "paid", "totalCents": 4200}},
+)
+
+for event in receipt.events:
+    print(event.event_id, event.duplicate)  # event_id is a lossless string
+```
+
+Publish up to 1,000 events without changing their order:
+
+```python
+from medallion import CdcEventInput
+
+receipt = client.cdc.publish_batch(
+    [
+        CdcEventInput(
+            stream_name="orders",
+            entity_type="order",
+            entity_id=row.order_id,
+            operation=row.operation,
+            idempotency_key=row.outbox_id,
+            payload=row.payload,
+            occurred_at=row.occurred_at,
+        )
+        for row in claimed_outbox_rows
+    ]
+)
+```
+
+## Publish audit events
+
+`actor` is the source application principal that performed the business action;
+it is distinct from the service account authenticating this request. `action`
+is a stable operation key and `outcome` is the authoritative result.
+
+```python
+receipt = client.audit.record(
+    resource_type="invoice",
+    resource_id="invoice-842",
+    action="approved",
+    outcome="succeeded",
+    actor={"type": "user", "id": "user-17"},
+    idempotency_key="billing-audit:evt-9921",
+    payload={"evidenceRef": "s3://audit-evidence/evt-9921.json"},
+)
+```
+
+Use `AuditEventInput` with `client.audit.publish_batch(...)` for batches. Store
+large evidence externally and publish stable references instead of large event
+payloads.
+
+## Delivery, duplicates, and retries
+
+Customer delivery can be at least once. Medallion provides durable idempotent
+ingestion and duplicate detection; this is not magical transport-level exactly
+once delivery. When losing an event is unacceptable, use a transactional outbox
+or an equivalent durable queue:
+
+1. Commit the business change and an outbox row in one transaction.
+2. Use the durable outbox identity as the event idempotency key.
+3. Publish the claimed row or batch.
+4. Mark it delivered only after decoding the complete receipt.
+
+Automatic retries are opt-in (`max_attempts` defaults to one). When enabled,
+they resend the exact serialized batch, in the same order, with the same keys.
+The SDK retries only idempotent ingestion/readback operations and transient
+backpressure or availability failures. Validation, authentication,
+authorization, workspace conflicts, and idempotency mismatches are terminal.
+
+```python
+from medallion import RetryConfig
+
+client = MedallionClient(
+    base_url=os.environ["MEDALLION_BASE_URL"],
+    api_key=os.environ["MEDALLION_API_KEY"],
+    workspace_id=os.environ["MEDALLION_WORKSPACE_ID"],
+    default_connector_id=os.environ["MEDALLION_CONNECTOR_ID"],
+    timeout=20,
+    retry=RetryConfig(max_attempts=3, initial_backoff=0.1, max_backoff=2),
+)
+
+if receipt.duplicate_count:
+    for event in receipt.events:
+        if event.duplicate:
+            print("already accepted as", event.event_id)
+```
+
+The optional `stable_idempotency_key(namespace, *source_identity)` helper makes
+a deterministic UUID-based key. Persisted source IDs remain preferable when
+available; never generate a new key inside a retry loop.
+
+## Structured errors
+
+```python
+from medallion import KnownErrorReason, MedallionAPIError
+
+try:
+    publish_from_outbox()
+except MedallionAPIError as error:
+    if error.reason == KnownErrorReason.IDEMPOTENCY_MISMATCH:
+        quarantine_conflicting_outbox_row(error.metadata)
+    elif error.reason == KnownErrorReason.BACKPRESSURE and error.is_retryable(
+        idempotent=True
+    ):
+        reschedule_outbox_delivery()
+    else:
+        raise
+```
+
+Errors retain the Connect code, HTTP status, request ID, decoded
+`google.rpc.ErrorInfo`, and unknown additive details. Human message text is not
+a stable branching contract. Credentials and raw HTTP bodies are not retained
+in errors or tracing.
+
+## Read back events
+
+Raw page methods preserve the server's opaque cursor:
+
+```python
+page = client.cdc.list(stream_name="orders", page_size=100)
+next_page = client.cdc.list(
+    stream_name="orders",
+    page_size=100,
+    cursor=page.next_cursor,
+)
+```
+
+`limit=0` uses the server default of 100 and the maximum is 500. Cursors are
+confidential opaque values, limited to 2048 bytes; do not decode, log, or
+modify them. `occurred_at_from` is inclusive and `occurred_at_to` is exclusive.
+Audit `resource_type` and `resource_id` filters must be supplied together. The
+SDK preserves the server's `observedAt DESC, id DESC` order without sorting or
+deduplicating results.
+
+Iterators retain the original workspace and filters, continue through empty
+pages with continuation cursors, reject repeated cursors, and stop at a bounded
+page count. List requests repeat the configured workspace in both the protected
+header and request body. A response containing an event from any other
+workspace fails closed.
+
+```python
+for event in client.audit.iterate(resource_type="invoice", resource_id="invoice-842"):
+    verify(event)
+```
+
+Pass a `threading.Event` as `cancellation_event` for cooperative cancellation;
+the total `timeout` is propagated as `Connect-Timeout-Ms` and bounds network
+I/O and retries.
+
+## Optional tracing
+
+Tracing uses the application's OpenTelemetry provider and exporter. Payloads
+and credentials are never added to SDK spans.
 
 ```python
 client = MedallionClient(
     base_url=os.environ["MEDALLION_BASE_URL"],
-    access_token=os.environ["MEDALLION_SERVICE_ACCOUNT_TOKEN"],
+    api_key=os.environ["MEDALLION_API_KEY"],
+    workspace_id=os.environ["MEDALLION_WORKSPACE_ID"],
+    default_connector_id=os.environ["MEDALLION_CONNECTOR_ID"],
     tracing=True,
 )
 ```
+
+## Transport
+
+`base_url` is the Medallion API origin without a path, query, fragment, or
+embedded credentials. The SDK uses only canonical Connect paths and rejects
+redirects; it has no legacy compatibility prefix, alternate Connect URL,
+generic dispatcher, or connector-provisioning API.
+
+API keys are manually provisioned through Medallion's control plane for the
+initial release. The SDK never creates, rotates, exchanges, or refreshes them.

@@ -1,0 +1,43 @@
+{
+  "$schema": "schemas/external-ingestion-sdk-v1.schema.json",
+  "descriptor": "descriptor.binpb",
+  "descriptor_sha256": "991d1316e55c85091b3026a6950163dac5d6099e0eb81038eae6a3e9165c9f15",
+  "methods": [
+    {
+      "client_streaming": false,
+      "name": "PublishCdcEvents",
+      "path": "/medallion.connect.v1.MedallionConnectService/PublishCdcEvents",
+      "request_type": "medallion.connect.v1.PublishCdcEventsRequest",
+      "response_type": "medallion.connect.v1.PublishCdcEventsResponse",
+      "server_streaming": false
+    },
+    {
+      "client_streaming": false,
+      "name": "PublishAuditEvents",
+      "path": "/medallion.connect.v1.MedallionConnectService/PublishAuditEvents",
+      "request_type": "medallion.connect.v1.PublishAuditEventsRequest",
+      "response_type": "medallion.connect.v1.PublishAuditEventsResponse",
+      "server_streaming": false
+    },
+    {
+      "client_streaming": false,
+      "name": "ListCdcEvents",
+      "path": "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+      "request_type": "medallion.connect.v1.ListCdcEventsRequest",
+      "response_type": "medallion.connect.v1.ListCdcEventsResponse",
+      "server_streaming": false
+    },
+    {
+      "client_streaming": false,
+      "name": "ListAuditEvents",
+      "path": "/medallion.connect.v1.MedallionConnectService/ListAuditEvents",
+      "request_type": "medallion.connect.v1.ListAuditEventsRequest",
+      "response_type": "medallion.connect.v1.ListAuditEventsResponse",
+      "server_streaming": false
+    }
+  ],
+  "package": "medallion.connect.v1",
+  "profile": "external_ingestion_sdk_v1",
+  "schema_version": 1,
+  "service": "medallion.connect.v1.MedallionConnectService"
+}

@@ -14,9 +14,7 @@
       "!go",
       "!proto",
       "!python",
-      "!src/connect-descriptor.ts",
-      "!src/ontology-descriptor.ts",
-      "!src/storage-descriptor.ts"
+      "!src/connect-descriptor.ts"
     ]
   },
   "formatter": {

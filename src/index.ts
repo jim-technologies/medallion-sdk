@@ -1,18 +1,24 @@
 export { MedallionClient } from "./client.js";
-export { ConnectClient } from "./connect.js";
-export { MedallionApiError, MedallionError } from "./errors.js";
-export { normalizeId, normalizeIdRecord } from "./ids.js";
-export type { ProtocolClients } from "./protocol.js";
+export type {
+  ConnectErrorDetail,
+  ConnectErrorReason,
+  KnownConnectErrorReason,
+} from "./errors.js";
 export {
-  ProtocolConnectClient,
-  ProtocolOntologyClient,
-  ProtocolStorageClient,
-} from "./protocol.js";
-export { CONNECT_ROUTES, ONTOLOGY_ROUTES, STORAGE_ROUTES } from "./routes.js";
+  isRetryableConnectError,
+  MedallionApiError,
+  MedallionError,
+} from "./errors.js";
+export { normalizeId, normalizeIdRecord } from "./ids.js";
+export { idempotencyKeyFromParts } from "./ingestion.js";
+export { ProtocolConnectClient } from "./protocol.js";
 export type { TracingConfig, TracingOptions } from "./tracing.js";
 export type {
-  ActionInvocation,
   ActorRef,
+  AuditBatchInput,
+  AuditIngestionEventInput,
+  AuditIngestionRecordInput,
+  AuditListInput,
   AuditOrigin,
   AuditOutcome,
   AuditRecordInput,
@@ -20,11 +26,16 @@ export type {
   AuditTrailEvent,
   AuditTrailInput,
   AuditTrailResponse,
+  CdcBatchInput,
   CdcEventInput,
+  CdcIngestionEventInput,
+  CdcListInput,
   CdcOperation,
+  CdcPage,
+  CdcReadEvent,
+  CdcRecordInput,
   ConnectAuditEvent,
   ConnectCdcEvent,
-  ConnectConnector,
   ConnectListAuditEventsRequest,
   ConnectListAuditEventsResponse,
   ConnectListCdcEventsRequest,
@@ -35,31 +46,21 @@ export type {
   ConnectPublishCdcEventsResponse,
   ConnectPublishedAuditEvent,
   ConnectPublishedCdcEvent,
-  ConnectRegisterConnectorRequest,
-  ConnectRegisterConnectorResponse,
-  Datasource,
-  DatasourceRegistrationInput,
+  EventBatchResponse,
   EventRecordResponse,
-  ExecuteActionInput,
-  ExecuteActionResponse,
   FetchLike,
   IdInput,
+  JsonPrimitive,
+  JsonValue,
   KnownActorType,
   MedallionClientOptions,
   NormalizedActorRef,
   NormalizedResourceRef,
-  PlanActionInput,
-  PlanActionResponse,
   PublishedAuditEventResult,
   PublishedEventResult,
-  QueryInput,
-  QueryResponse,
-  RegisterDatasourceResponse,
   RequestOptions,
   ResourceRef,
   ResponseMetadata,
-  StorageCatalogEntry,
-  StorageUploadInput,
-  StorageUploadResponse,
+  RetryOptions,
   WriteResultMetadata,
 } from "./types.js";

@@ -1,55 +1,59 @@
+import { inspect } from "node:util";
 import { describe, expect, it, vi } from "vitest";
-import { MedallionClient } from "../src/index.js";
+import { MedallionClient, ProtocolConnectClient } from "../src/index.js";
 
 describe("MedallionClient", () => {
-  it("exposes the initial medallion-connect API groups", () => {
+  it("exposes only the bounded customer-ingestion clients", () => {
     const client = new MedallionClient({
       baseUrl: "https://api.example.com",
       apiKey: "test_api_key",
+      workspaceId: "ws_01jz9q5g6rsf7r5ar4rah1b2c3",
       fetch: vi.fn(),
     });
 
+    expect(Object.keys(client).sort()).toEqual(["audit", "cdc", "connect"]);
     expect(client.audit.record).toBeTypeOf("function");
     expect(client.cdc.record).toBeTypeOf("function");
-    expect(client.connect.registerDatasource).toBeTypeOf("function");
-    expect(client.datasources.register).toBeTypeOf("function");
-    expect(client.ontology.query).toBeTypeOf("function");
-    expect(client.ontology.planAction).toBeTypeOf("function");
-    expect(client.ontology.executeAction).toBeTypeOf("function");
-    expect(client.storage.upload).toBeTypeOf("function");
-    expect(client.protocol.connect.publishCdcEvents).toBeTypeOf("function");
-    expect(client.protocol.connect.publishAuditEvents).toBeTypeOf("function");
-    expect(client.protocol.connect.listAuditEvents).toBeTypeOf("function");
-    expect(client.generated.connect.publishCdcEvents).toBeTypeOf("function");
-    expect("events" in client).toBe(false);
+    expect(Object.getOwnPropertyNames(ProtocolConnectClient.prototype)).toEqual(
+      [
+        "constructor",
+        "publishCdcEvents",
+        "listCdcEvents",
+        "publishAuditEvents",
+        "listAuditEvents",
+      ],
+    );
   });
 
-  it("supports base URLs with a path prefix", async () => {
-    const fetch = vi.fn(
-      async (_input: RequestInfo | URL, _init?: RequestInit) => {
-        return new Response(JSON.stringify({ accepted_count: 1 }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      },
+  it("requires a canonical immutable workspace before network I/O", () => {
+    const fetch = vi.fn();
+
+    expect(
+      () =>
+        new MedallionClient({
+          baseUrl: "https://api.example.com",
+          apiKey: "test_api_key",
+          workspaceId: "workspace_not_canonical",
+          fetch,
+        }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "MEDALLION_INVALID_WORKSPACE_ID",
+      }),
     );
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("does not expose credentials through serialization or inspection", () => {
+    const secret = "api_key_that_must_remain_private";
     const client = new MedallionClient({
-      baseUrl: "https://api.example.com/connect",
-      apiKey: "test_api_key",
-      defaultConnectorId: "conn_123",
-      fetch,
+      baseUrl: "https://api.example.com",
+      apiKey: secret,
+      workspaceId: "ws_01jz9q5g6rsf7r5ar4rah1b2c3",
+      fetch: vi.fn(),
     });
 
-    await client.audit.record({
-      actor: { type: "user", id: "user_123" },
-      action: "start",
-      outcome: "succeeded",
-      resource: { type: "checkout", id: "checkout_123" },
-      idempotencyKey: "checkout_started_123",
-    });
-
-    expect(fetch.mock.calls[0]?.[0]).toBe(
-      "https://api.example.com/connect/medallion.connect.v1.MedallionConnectService/PublishAuditEvents",
-    );
+    expect(JSON.stringify(client)).not.toContain(secret);
+    expect(inspect(client, { depth: 10 })).not.toContain(secret);
   });
 });

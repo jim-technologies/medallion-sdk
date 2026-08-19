@@ -2,9 +2,36 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any
+from uuid import NAMESPACE_URL, uuid5
 
 from .errors import MedallionError
 from .types import ActorRef, ResourceRef
+
+
+def stable_idempotency_key(namespace: str, *source_identity: object) -> str:
+    """Create a deterministic UUID key from a durable source identity."""
+
+    if not isinstance(namespace, str) or not namespace.strip() or not source_identity:
+        raise MedallionError(
+            "namespace and at least one stable source identity are required.",
+            code="MEDALLION_INVALID_IDEMPOTENCY_KEY",
+        )
+    parts = [normalize_id(item, "source_identity") for item in source_identity]
+    logical_identity = "\x1f".join([namespace.strip(), *parts])
+    try:
+        logical_identity.encode("utf-8", errors="strict")
+    except UnicodeEncodeError:
+        raise MedallionError(
+            "Idempotency source identities must contain valid Unicode scalar values.",
+            code="MEDALLION_INVALID_IDEMPOTENCY_KEY",
+        ) from None
+    candidate = f"{namespace.strip()}:{uuid5(NAMESPACE_URL, logical_identity)}"
+    if len(candidate.encode("utf-8")) > 512:
+        raise MedallionError(
+            "The generated idempotency key must not exceed 512 UTF-8 bytes.",
+            code="MEDALLION_INVALID_IDEMPOTENCY_KEY",
+        )
+    return candidate
 
 
 def normalize_id(value: object, path: str = "id") -> str:

@@ -31,6 +31,15 @@ export interface RequestOptions {
   timeoutMs?: number;
 }
 
+export interface RetryOptions {
+  /** Total attempts, including the first. Defaults to 1 (no automatic retry). */
+  maxAttempts?: number;
+  initialDelayMs?: number;
+  maxDelayMs?: number;
+  /** Random delay spread from 0 through 1. */
+  jitterRatio?: number;
+}
+
 export type FetchLike = (
   input: RequestInfo | URL,
   init?: RequestInit,
@@ -40,14 +49,12 @@ export interface MedallionClientOptions {
   baseUrl: string;
   apiKey?: string;
   accessToken?: string;
-  connectBaseUrl?: string;
-  ontologyBaseUrl?: string;
-  storageBaseUrl?: string;
-  organizationId?: string;
-  tenantId?: string;
+  /** Immutable workspace bound to this client and its credential. */
+  workspaceId: string;
   defaultConnectorId?: string;
   fetch?: FetchLike;
   timeoutMs?: number;
+  retry?: RetryOptions;
   tracing?: TracingConfig;
 }
 
@@ -62,12 +69,22 @@ export interface WriteResultMetadata extends ResponseMetadata {
 
 export interface PublishedEventResult {
   idempotencyKey: string;
-  eventId?: string;
+  eventId: string;
   duplicate: boolean;
 }
 
 export interface EventRecordResponse extends WriteResultMetadata {
   result: "accepted" | "duplicate";
+  acceptedCount: number;
+  duplicateCount: number;
+  events: PublishedEventResult[];
+}
+
+export interface EventBatchResponse extends ResponseMetadata {
+  /** True only when every submitted event was already present. */
+  duplicate: boolean;
+  /** Aggregate acknowledgement across the complete atomic batch. */
+  result: "accepted" | "duplicate" | "mixed";
   acceptedCount: number;
   duplicateCount: number;
   events: PublishedEventResult[];
@@ -82,7 +99,7 @@ export type AuditOrigin = "external_provider" | "connect";
 
 export interface AuditRecordInput {
   connectorId?: string;
-  actor: ActorRef;
+  actor?: ActorRef;
   action: string;
   outcome: AuditOutcome;
   resource: ResourceRef;
@@ -94,10 +111,37 @@ export interface AuditRecordInput {
   idempotencyKey: string;
   sourceEventId?: IdInput;
   occurredAt?: string | Date;
+  /** Compact caller facts encoded deterministically into payload_json. */
+  payload?: JsonValue;
+  /** Valid raw JSON retained for compatibility. Mutually exclusive with payload. */
+  payloadJson?: string;
+}
+
+export interface AuditIngestionEventInput {
+  resourceType: string;
+  resourceId: IdInput;
+  action: string;
+  outcome: AuditOutcome;
+  idempotencyKey: string;
+  payload?: JsonValue;
+  payloadJson?: string;
+  sourceEventId?: IdInput;
+  actor?: ActorRef;
+  occurredAt?: string | Date;
+  description?: string;
+}
+
+export interface AuditIngestionRecordInput extends AuditIngestionEventInput {
+  /** Request-level connector override for this single-event call. */
+  connectorId?: string;
+}
+
+export interface AuditBatchInput {
+  connectorId?: string;
+  events: readonly AuditIngestionEventInput[];
 }
 
 export interface AuditTrailInput {
-  organizationId?: string;
   connectorId?: string;
   resourceType: string;
   resourceId: IdInput;
@@ -107,6 +151,22 @@ export interface AuditTrailInput {
   pageSize?: number;
   actor?: ActorRef;
   ingesterPrincipal?: string;
+  origin?: AuditOrigin;
+  outcome?: AuditOutcome;
+}
+
+export interface AuditListInput {
+  connectorId?: string;
+  resourceType?: string;
+  resourceId?: IdInput;
+  action?: string;
+  cursor?: string;
+  limit?: number;
+  actor?: ActorRef;
+  ingesterPrincipal?: string;
+  sourceSystem?: string;
+  occurredAtFrom?: string | Date;
+  occurredAtTo?: string | Date;
   origin?: AuditOrigin;
   outcome?: AuditOutcome;
 }
@@ -128,88 +188,81 @@ export interface CdcEventInput {
   idempotencyKey: string;
   sourceEventId?: IdInput;
   occurredAt?: string | Date;
+  description?: string;
+  payload?: JsonValue;
+  payloadJson?: string;
 }
 
-export interface DatasourceRegistrationInput {
-  organizationId?: string;
-  name: string;
-  type: string;
-  /** Stable key reused only when retrying this same registration mutation. */
+export interface CdcIngestionEventInput {
+  streamName: string;
+  entityType: string;
+  entityId: IdInput;
+  operation: CdcOperation;
   idempotencyKey: string;
-  displayName?: string;
-  externalId?: IdInput;
-  /** Caller-side annotations copied into the returned Datasource; Connect does not persist them. */
-  metadata?: Record<string, unknown>;
+  payload?: JsonValue;
+  payloadJson?: string;
+  sourceEventId?: IdInput;
+  actor?: ActorRef;
+  occurredAt?: string | Date;
+  description?: string;
 }
 
-export interface Datasource {
-  id: string;
-  organizationId?: string;
-  tenantId?: string;
-  kind?: string;
-  type?: string;
+export interface CdcRecordInput extends CdcIngestionEventInput {
+  /** Request-level connector override for this single-event call. */
+  connectorId?: string;
+}
+
+export interface CdcBatchInput {
+  connectorId?: string;
+  events: readonly CdcIngestionEventInput[];
+}
+
+export interface CdcListInput {
+  connectorId?: string;
+  entityType?: string;
+  entityId?: IdInput;
+  streamName?: string;
   sourceSystem?: string;
-  name?: string;
-  displayName?: string;
-  externalId?: string;
-  status?: string;
-  createdAt?: string;
-  updatedAt?: string;
-  metadata?: Record<string, unknown>;
+  actor?: ActorRef;
+  ingesterPrincipal?: string;
+  occurredAtFrom?: string | Date;
+  occurredAtTo?: string | Date;
+  cursor?: string;
+  limit?: number;
 }
 
-export interface RegisterDatasourceResponse extends ResponseMetadata {
-  datasource: Datasource;
-}
-
-export interface QueryInput {
-  question: string;
-  includeInferred?: boolean;
-}
-
-export interface QueryResponse extends ResponseMetadata {
-  answer?: string;
-  resourceIds: string[];
-  explanations: string[];
-  events: AuditTrailEvent[];
-}
-
-export interface PlanActionInput {
-  actionName: string;
-  input?: unknown;
-}
-
-export interface PlanActionResponse extends ResponseMetadata {
-  plan: ActionInvocation;
-  requiredApprovals: string[];
-}
-
-export interface ExecuteActionInput {
-  actionName: string;
-  input?: unknown;
+export interface CdcReadEvent {
+  id: string;
+  eventId: string;
+  workspaceId: string;
+  connectorId?: string;
+  streamName: string;
+  entityType: string;
+  entityId: string;
+  operation: CdcOperation;
+  sourceEventId?: string;
   idempotencyKey: string;
-}
-
-export interface ExecuteActionResponse extends ResponseMetadata {
-  idempotencyKey: string;
-  result: "accepted" | "succeeded" | "failed" | "rejected";
-  invocation: ActionInvocation;
-}
-
-export interface ActionInvocation {
-  id?: string;
-  tenantId?: string;
-  actionName?: string;
+  actor?: NormalizedActorRef;
   actorPrincipal?: string;
-  idempotencyKey?: string;
-  request?: unknown;
-  response?: unknown;
-  status?: string;
-  explanation?: string;
-  errorMessage?: string;
-  createdAt?: string;
-  resourceId?: string;
+  payload: unknown;
+  payloadJson: string;
+  occurredAt?: string;
+  observedAt?: string;
+  description?: string;
+  sourceSystem?: string;
+  ingesterPrincipal?: string;
 }
+
+export interface CdcPage extends ResponseMetadata {
+  events: CdcReadEvent[];
+  nextCursor?: string;
+}
+
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue =
+  | JsonPrimitive
+  | readonly JsonValue[]
+  | { readonly [key: string]: JsonValue };
 
 export interface AuditTrailResponse extends ResponseMetadata {
   events: AuditTrailEvent[];
@@ -217,20 +270,21 @@ export interface AuditTrailResponse extends ResponseMetadata {
 }
 
 export interface AuditTrailEvent {
-  id?: string;
-  eventId?: string;
-  tenantId?: string;
-  organizationId?: string;
+  id: string;
+  eventId: string;
+  workspaceId: string;
   connectorId?: string;
   actor?: NormalizedActorRef;
   ingesterPrincipal?: string;
   /** @deprecated Use actor for the source application actor or ingesterPrincipal for Connect server provenance. */
   actorPrincipal?: string;
-  action?: string;
-  targetType?: string;
-  targetId?: string;
-  entityType?: string;
-  entityId?: string;
+  action: string;
+  description?: string;
+  idempotencyKey: string;
+  targetType: string;
+  targetId: string;
+  entityType: string;
+  entityId: string;
   requestId?: string;
   metadata?: Record<string, unknown>;
   createdAt?: string;
@@ -241,77 +295,38 @@ export interface AuditTrailEvent {
   evidenceUrl?: string;
   sourceEventId?: string;
   sourceSystem?: string;
-  origin?: AuditOrigin;
-  outcome?: AuditOutcome;
-  payload?: unknown;
+  origin: AuditOrigin;
+  outcome: AuditOutcome;
+  payload: unknown;
+  /** Exact canonical payload_json text returned by Connect. */
+  payloadJson: string;
 }
 
-export interface StorageUploadInput {
-  org?: string;
-  bucket?: string;
-  path: string;
-  data: BodyInit;
-  repo?: string;
-  contentType?: string;
-  idempotencyKey?: string;
-}
-
-export interface StorageUploadResponse extends ResponseMetadata {
-  result: "uploaded";
-  org: string;
-  path: string;
-  entry: StorageCatalogEntry;
-}
-
-export type StorageCatalogEntry = Record<string, unknown>;
-
-export interface ConnectConnector {
-  id: string;
-  organization_id?: string;
-  kind?: string;
-  source_system?: string;
-  display_name?: string;
-  external_id?: string;
-  status?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export interface ConnectRegisterConnectorRequest {
-  organization_id: string;
-  kind: string;
-  source_system: string;
-  display_name: string;
-  external_id?: string;
-  idempotency_key: string;
-}
-
-export interface ConnectRegisterConnectorResponse {
-  connector: ConnectConnector;
-}
-
-export interface ConnectCdcEvent {
-  id?: string | number;
-  organization_id?: string;
-  connector_id?: string;
+export interface ConnectCdcEventInput {
   stream_name: string;
   entity_type: string;
   entity_id: string;
-  operation?: string;
+  operation: string;
   source_event_id?: string;
   idempotency_key: string;
   actor_principal?: string;
   payload_json: string;
   occurred_at?: string;
-  observed_at?: string;
   description?: string;
+}
+
+export interface ConnectCdcEvent extends ConnectCdcEventInput {
+  id?: string | number;
+  connector_id?: string;
+  observed_at?: string;
   source_system?: string;
   ingested_by_principal?: string;
+  workspace_id?: string;
 }
 
 export interface ConnectPublishCdcEventsRequest {
   connector_id: string;
-  events: ConnectCdcEvent[];
+  events: ConnectCdcEventInput[];
 }
 
 export interface ConnectPublishedCdcEvent {
@@ -326,10 +341,7 @@ export interface ConnectPublishCdcEventsResponse {
   events?: ConnectPublishedCdcEvent[];
 }
 
-export interface ConnectAuditEvent {
-  id?: string | number;
-  organization_id?: string;
-  connector_id?: string;
+export interface ConnectAuditEventInput {
   resource_type: string;
   resource_id: string;
   action: string;
@@ -338,17 +350,23 @@ export interface ConnectAuditEvent {
   actor_principal?: string;
   payload_json: string;
   occurred_at?: string;
-  observed_at?: string;
   description?: string;
+  outcome: string;
+}
+
+export interface ConnectAuditEvent extends ConnectAuditEventInput {
+  id?: string | number;
+  connector_id?: string;
+  observed_at?: string;
   source_system?: string;
   ingested_by_principal?: string;
   origin?: string;
-  outcome: string;
+  workspace_id?: string;
 }
 
 export interface ConnectPublishAuditEventsRequest {
   connector_id: string;
-  events: ConnectAuditEvent[];
+  events: ConnectAuditEventInput[];
 }
 
 export interface ConnectPublishedAuditEvent {
@@ -364,7 +382,7 @@ export interface ConnectPublishAuditEventsResponse {
 }
 
 export interface ConnectListAuditEventsRequest {
-  organization_id: string;
+  workspace_id: string;
   connector_id?: string;
   resource_type?: string;
   resource_id?: string;
@@ -386,7 +404,7 @@ export interface ConnectListAuditEventsResponse {
 }
 
 export interface ConnectListCdcEventsRequest {
-  organization_id: string;
+  workspace_id: string;
   connector_id?: string;
   entity_type?: string;
   entity_id?: string;

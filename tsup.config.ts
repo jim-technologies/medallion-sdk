@@ -23,6 +23,7 @@ export default defineConfig([
     ...common,
     format: ["cjs"],
     clean: false,
+    metafile: true,
     noExternal: ["@bufbuild/protobuf", "@jim-technologies/invariant-protocol"],
   },
 ]);

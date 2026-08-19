@@ -29,13 +29,21 @@ func TestAuditRecordUsesConnectProtoRouteAndHeaders(t *testing.T) {
 		}
 		w.Header().Set("content-type", "application/json")
 		w.Header().Set("x-request-id", "req_123")
-		_, _ = w.Write([]byte(`{"accepted_count":1,"events":[{"idempotency_key":"audit_1","event_id":"42"}]}`))
+		key := seen.body["events"].([]any)[0].(map[string]any)["idempotencyKey"]
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"accepted_count": 1,
+			"events": []any{map[string]any{
+				"idempotency_key": key,
+				"event_id":        "42",
+			}},
+		})
 	}))
 	defer server.Close()
 
 	client, err := NewClient(ClientConfig{
 		BaseURL:            server.URL,
 		APIKey:             "test-api-key",
+		WorkspaceID:        testWorkspaceID,
 		DefaultConnectorID: "conn_123",
 	})
 	if err != nil {
@@ -57,11 +65,14 @@ func TestAuditRecordUsesConnectProtoRouteAndHeaders(t *testing.T) {
 	if seen.path != publishAuditEventsPath {
 		t.Fatalf("path = %q, want %q", seen.path, publishAuditEventsPath)
 	}
-	if got := seen.headers.Get("Authorization"); got != "Bearer test-api-key" {
-		t.Fatalf("authorization = %q", got)
+	if got := seen.headers.Get("X-Medallion-API-Key"); got != "test-api-key" {
+		t.Fatalf("API key = %q", got)
 	}
-	if got := seen.headers.Get("Idempotency-Key"); got != "audit_1" {
-		t.Fatalf("idempotency key = %q", got)
+	if got := seen.headers.Get("Authorization"); got != "" {
+		t.Fatalf("API-key authentication must not set authorization: %q", got)
+	}
+	if got := seen.headers.Get("X-Medallion-Workspace-Id"); got != testWorkspaceID {
+		t.Fatalf("workspace ID = %q", got)
 	}
 	events := seen.body["events"].([]any)
 	event := events[0].(map[string]any)
@@ -113,87 +124,6 @@ func TestAuditRecordUsesConnectProtoRouteAndHeaders(t *testing.T) {
 	}
 }
 
-func TestDatasourceRegistrationUsesCanonicalJSONAndResponse(t *testing.T) {
-	var seen map[string]any
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := json.NewDecoder(r.Body).Decode(&seen); err != nil {
-			t.Fatalf("decode request: %v", err)
-		}
-		w.Header().Set("content-type", "application/json")
-		w.Header().Set("x-request-id", "req_register")
-		_, _ = w.Write([]byte(`{
-			"connector":{
-				"id":"conn_123",
-				"organization_id":"org_123",
-				"kind":"postgres",
-				"source_system":"primary_postgres",
-				"display_name":"Primary Postgres"
-			}
-		}`))
-	}))
-	defer server.Close()
-
-	client, err := NewClient(ClientConfig{
-		BaseURL:        server.URL,
-		AccessToken:    "test-access-token",
-		OrganizationID: "org_123",
-	})
-	if err != nil {
-		t.Fatalf("new client: %v", err)
-	}
-	result, err := client.Datasources.Register(context.Background(), DatasourceRegistration{
-		Name:           "primary_postgres",
-		Type:           "postgres",
-		IdempotencyKey: "register_primary_postgres",
-		DisplayName:    "Primary Postgres",
-		ExternalID:     42,
-		Metadata:       map[string]any{"environment": "test"},
-	})
-	if err != nil {
-		t.Fatalf("register datasource: %v", err)
-	}
-
-	expected := map[string]any{
-		"organizationId": "org_123",
-		"kind":           "postgres",
-		"sourceSystem":   "primary_postgres",
-		"displayName":    "Primary Postgres",
-		"externalId":     "42",
-		"idempotencyKey": "register_primary_postgres",
-	}
-	for key, value := range expected {
-		if seen[key] != value {
-			t.Fatalf("%s = %#v, want %#v (body %#v)", key, seen[key], value, seen)
-		}
-	}
-	if result.RequestID != "req_register" ||
-		result.Datasource.ID != "conn_123" ||
-		result.Datasource.SourceSystem != "primary_postgres" ||
-		result.Datasource.Metadata["environment"] != "test" {
-		t.Fatalf("unexpected result: %#v", result)
-	}
-}
-
-func TestDatasourceRegistrationRequiresVisibleASCIIIdempotencyKey(t *testing.T) {
-	client, err := NewClient(ClientConfig{
-		BaseURL:        "https://connect.example.com",
-		APIKey:         "test-api-key",
-		OrganizationID: "org_123",
-	})
-	if err != nil {
-		t.Fatalf("new client: %v", err)
-	}
-	_, err = client.Datasources.Register(context.Background(), DatasourceRegistration{
-		Name:           "primary_postgres",
-		Type:           "postgres",
-		IdempotencyKey: "register primary postgres",
-	})
-	var medallionErr *Error
-	if !errors.As(err, &medallionErr) || medallionErr.Code != "MEDALLION_INVALID_IDEMPOTENCY_KEY" {
-		t.Fatalf("error = %#v", err)
-	}
-}
-
 func TestAuditTrailFiltersSourceActorAndIngester(t *testing.T) {
 	var seen map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -208,7 +138,7 @@ func TestAuditTrailFiltersSourceActorAndIngester(t *testing.T) {
 		_, _ = w.Write([]byte(`{
 			"events":[{
 				"id":"42",
-				"organization_id":"org_123",
+				"workspace_id":"ws_01jz9q5g6rsf7r5ar4rah1b2c3",
 				"connector_id":"conn_123",
 				"resource_type":"order",
 				"resource_id":"order_123",
@@ -229,7 +159,7 @@ func TestAuditTrailFiltersSourceActorAndIngester(t *testing.T) {
 	client, err := NewClient(ClientConfig{
 		BaseURL:            server.URL,
 		APIKey:             "test-api-key",
-		OrganizationID:     "org_123",
+		WorkspaceID:        testWorkspaceID,
 		DefaultConnectorID: "conn_123",
 	})
 	if err != nil {
@@ -250,6 +180,9 @@ func TestAuditTrailFiltersSourceActorAndIngester(t *testing.T) {
 
 	if got := seen["actorPrincipal"]; got != "user:user_123" {
 		t.Fatalf("actorPrincipal = %#v", got)
+	}
+	if got := seen["workspaceId"]; got != testWorkspaceID {
+		t.Fatalf("workspaceId = %#v", got)
 	}
 	if got := seen["ingestedByPrincipal"]; got != "service_account:worker" {
 		t.Fatalf("ingestedByPrincipal = %#v", got)
@@ -285,20 +218,20 @@ func TestAuditTrailFiltersSourceActorAndIngester(t *testing.T) {
 
 func TestAuditTrailStructuredActorPreservesMatchingColonID(t *testing.T) {
 	event := auditEventFromConnect(&connectv1.AuditEvent{
-		ActorPrincipal: "user:tenant:42",
-		PayloadJson:    `{"actor":{"type":"user","id":"tenant:42"}}`,
+		ActorPrincipal: "user:realm:42",
+		PayloadJson:    `{"actor":{"type":"user","id":"realm:42"}}`,
 	})
-	if event.Actor == nil || event.Actor.Type != "user" || event.Actor.Provider != "" || event.Actor.ID != "tenant:42" {
+	if event.Actor == nil || event.Actor.Type != "user" || event.Actor.Provider != "" || event.Actor.ID != "realm:42" {
 		t.Fatalf("actor = %#v", event.Actor)
 	}
 }
 
 func TestAuditTrailRejectsSpoofedStructuredActor(t *testing.T) {
 	event := auditEventFromConnect(&connectv1.AuditEvent{
-		ActorPrincipal: "user:tenant:42",
+		ActorPrincipal: "user:realm:42",
 		PayloadJson:    `{"actor":{"type":"system","id":"attacker"}}`,
 	})
-	if event.Actor == nil || event.Actor.Type != "user" || event.Actor.Provider != "tenant" || event.Actor.ID != "42" {
+	if event.Actor == nil || event.Actor.Type != "user" || event.Actor.Provider != "realm" || event.Actor.ID != "42" {
 		t.Fatalf("wire actor was not authoritative: %#v", event.Actor)
 	}
 }
@@ -311,9 +244,9 @@ func TestAuditTrailValidatesLimit(t *testing.T) {
 		}
 	}
 	client, err := NewClient(ClientConfig{
-		BaseURL:        "https://connect.example.com",
-		APIKey:         "test-api-key",
-		OrganizationID: "org_123",
+		BaseURL:     "https://api.example.com",
+		APIKey:      "test-api-key",
+		WorkspaceID: testWorkspaceID,
 	})
 	if err != nil {
 		t.Fatalf("new client: %v", err)
@@ -344,9 +277,37 @@ func TestAuditTrailValidatesLimit(t *testing.T) {
 	}
 }
 
-func TestActionExecutionStatusIncludesIndeterminate(t *testing.T) {
-	if got := connectv1.ActionExecutionStatus_ACTION_EXECUTION_STATUS_INDETERMINATE.String(); got != "ACTION_EXECUTION_STATUS_INDETERMINATE" {
-		t.Fatalf("status = %q", got)
+func TestGeneratedConnectDescriptorIsBounded(t *testing.T) {
+	file := connectv1.File_medallion_connect_v1_connect_proto
+	if file.Services().Len() != 1 {
+		t.Fatalf("service count = %d, want 1", file.Services().Len())
+	}
+	service := file.Services().Get(0)
+	if got := string(service.FullName()); got != "medallion.connect.v1.MedallionConnectService" {
+		t.Fatalf("service = %q", got)
+	}
+	methodNames := make([]string, service.Methods().Len())
+	for index := range methodNames {
+		methodNames[index] = string(service.Methods().Get(index).Name())
+	}
+	if got, want := strings.Join(methodNames, ","), "PublishCdcEvents,ListCdcEvents,PublishAuditEvents,ListAuditEvents"; got != want {
+		t.Fatalf("methods = %q, want %q", got, want)
+	}
+
+	messageNames := make([]string, file.Messages().Len())
+	for index := range messageNames {
+		messageNames[index] = string(file.Messages().Get(index).Name())
+	}
+	if got, want := strings.Join(messageNames, ","), "CdcEvent,AuditEvent,PublishCdcEventsRequest,PublishedCdcEvent,PublishCdcEventsResponse,ListCdcEventsRequest,ListCdcEventsResponse,PublishAuditEventsRequest,PublishedAuditEvent,PublishAuditEventsResponse,ListAuditEventsRequest,ListAuditEventsResponse"; got != want {
+		t.Fatalf("messages = %q, want %q", got, want)
+	}
+
+	enumNames := make([]string, file.Enums().Len())
+	for index := range enumNames {
+		enumNames[index] = string(file.Enums().Get(index).Name())
+	}
+	if got, want := strings.Join(enumNames, ","), "CdcOperation,AuditEventOrigin,AuditEventOutcome"; got != want {
+		t.Fatalf("enums = %q, want %q", got, want)
 	}
 }
 
@@ -357,27 +318,66 @@ func TestCanonicalCdcProtoShapes(t *testing.T) {
 			Len() int
 			Get(int) protoreflect.FieldDescriptor
 		}
-		expected []string
+		expected []struct {
+			name   string
+			number protoreflect.FieldNumber
+		}
 	}{
 		{
 			name:   "CdcEvent",
 			fields: (&connectv1.CdcEvent{}).ProtoReflect().Descriptor().Fields(),
-			expected: []string{
-				"id", "organization_id", "connector_id", "stream_name",
-				"entity_type", "entity_id", "operation", "source_event_id",
-				"idempotency_key", "actor_principal", "payload_json",
-				"occurred_at", "observed_at", "description", "source_system",
-				"ingested_by_principal",
+			expected: []struct {
+				name   string
+				number protoreflect.FieldNumber
+			}{
+				{"id", 1}, {"connector_id", 3}, {"stream_name", 4},
+				{"entity_type", 5}, {"entity_id", 6}, {"operation", 7},
+				{"source_event_id", 8}, {"idempotency_key", 9}, {"actor_principal", 10},
+				{"payload_json", 11}, {"occurred_at", 12}, {"observed_at", 13},
+				{"description", 14}, {"source_system", 15}, {"ingested_by_principal", 16},
+				{"workspace_id", 17},
 			},
 		},
 		{
 			name:   "ListCdcEventsRequest",
 			fields: (&connectv1.ListCdcEventsRequest{}).ProtoReflect().Descriptor().Fields(),
-			expected: []string{
-				"organization_id", "connector_id", "entity_type", "entity_id",
-				"limit", "actor_principal", "occurred_at_from", "occurred_at_to",
-				"source_system", "stream_name", "page_cursor",
-				"ingested_by_principal",
+			expected: []struct {
+				name   string
+				number protoreflect.FieldNumber
+			}{
+				{"connector_id", 2}, {"entity_type", 3}, {"entity_id", 4},
+				{"limit", 5}, {"actor_principal", 6}, {"occurred_at_from", 7},
+				{"occurred_at_to", 8}, {"source_system", 9}, {"stream_name", 10},
+				{"page_cursor", 11}, {"ingested_by_principal", 12}, {"workspace_id", 13},
+			},
+		},
+		{
+			name:   "AuditEvent",
+			fields: (&connectv1.AuditEvent{}).ProtoReflect().Descriptor().Fields(),
+			expected: []struct {
+				name   string
+				number protoreflect.FieldNumber
+			}{
+				{"id", 1}, {"connector_id", 3}, {"resource_type", 4}, {"resource_id", 5},
+				{"action", 6}, {"source_event_id", 7}, {"idempotency_key", 8},
+				{"actor_principal", 9}, {"payload_json", 10}, {"occurred_at", 11},
+				{"observed_at", 12}, {"description", 13}, {"source_system", 14},
+				{"ingested_by_principal", 15}, {"origin", 16}, {"outcome", 17},
+				{"workspace_id", 18},
+			},
+		},
+		{
+			name:   "ListAuditEventsRequest",
+			fields: (&connectv1.ListAuditEventsRequest{}).ProtoReflect().Descriptor().Fields(),
+			expected: []struct {
+				name   string
+				number protoreflect.FieldNumber
+			}{
+				{"connector_id", 2}, {"resource_type", 3}, {"resource_id", 4}, {"limit", 5},
+				{"actor_principal", 6}, {"action", 7}, {"occurred_at_from", 8},
+				{"occurred_at_to", 9}, {"source_system", 10}, {"page_cursor", 11},
+				{"ingested_by_principal", 12}, {"origin", 13}, {"outcome", 14},
+				{"workspace_id", 15},
 			},
 		},
 	}
@@ -386,11 +386,30 @@ func TestCanonicalCdcProtoShapes(t *testing.T) {
 			if test.fields.Len() != len(test.expected) {
 				t.Fatalf("field count = %d, want %d", test.fields.Len(), len(test.expected))
 			}
-			for index, name := range test.expected {
+			for index, expected := range test.expected {
 				field := test.fields.Get(index)
-				if int(field.Number()) != index+1 || string(field.Name()) != name {
-					t.Fatalf("field %d = (%d, %s), want (%d, %s)", index, field.Number(), field.Name(), index+1, name)
+				if field.Number() != expected.number || string(field.Name()) != expected.name {
+					t.Fatalf("field %d = (%d, %s), want (%d, %s)", index, field.Number(), field.Name(), expected.number, expected.name)
 				}
+			}
+		})
+	}
+}
+
+func TestWorkspaceCutoverFieldsAreReserved(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		message protoreflect.MessageDescriptor
+		number  protoreflect.FieldNumber
+	}{
+		{"CdcEvent", (&connectv1.CdcEvent{}).ProtoReflect().Descriptor(), 2},
+		{"AuditEvent", (&connectv1.AuditEvent{}).ProtoReflect().Descriptor(), 2},
+		{"ListCdcEventsRequest", (&connectv1.ListCdcEventsRequest{}).ProtoReflect().Descriptor(), 1},
+		{"ListAuditEventsRequest", (&connectv1.ListAuditEventsRequest{}).ProtoReflect().Descriptor(), 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if !test.message.ReservedRanges().Has(test.number) || test.message.ReservedNames().Len() != 1 {
+				t.Fatalf("reserved metadata missing for %s", test.name)
 			}
 		})
 	}
@@ -398,9 +417,9 @@ func TestCanonicalCdcProtoShapes(t *testing.T) {
 
 func TestAuditTrailRequiresResourceType(t *testing.T) {
 	client, err := NewClient(ClientConfig{
-		BaseURL:        "https://connect.example.com",
-		APIKey:         "test-api-key",
-		OrganizationID: "org_123",
+		BaseURL:     "https://api.example.com",
+		APIKey:      "test-api-key",
+		WorkspaceID: testWorkspaceID,
 	})
 	if err != nil {
 		t.Fatalf("new client: %v", err)
@@ -436,7 +455,7 @@ func TestCdcRecordStaysOnDedicatedCdcRoute(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient(ClientConfig{BaseURL: server.URL, APIKey: "test-api-key", DefaultConnectorID: "conn_123"})
+	client, err := NewClient(ClientConfig{BaseURL: server.URL, APIKey: "test-api-key", WorkspaceID: testWorkspaceID, DefaultConnectorID: "conn_123"})
 	if err != nil {
 		t.Fatalf("new client: %v", err)
 	}
@@ -444,8 +463,8 @@ func TestCdcRecordStaysOnDedicatedCdcRoute(t *testing.T) {
 		Source:         "postgres",
 		Table:          "orders",
 		Operation:      "update",
-		PrimaryKey:     map[string]IDInput{"tenant_id": "tenant_a", "id": "1"},
-		EntityID:       "tenant_a/order/1",
+		PrimaryKey:     map[string]IDInput{"account_id": "account_a", "id": "1"},
+		EntityID:       "account_a/order/1",
 		IdempotencyKey: "cdc_1",
 	})
 	if err != nil {
@@ -456,7 +475,7 @@ func TestCdcRecordStaysOnDedicatedCdcRoute(t *testing.T) {
 		t.Fatalf("path = %q, want %q", seen.path, publishCdcEventsPath)
 	}
 	event := seen.body["events"].([]any)[0].(map[string]any)
-	if got := event["entityId"]; got != "tenant_a/order/1" {
+	if got := event["entityId"]; got != "account_a/order/1" {
 		t.Fatalf("entityId = %#v", got)
 	}
 	if _, ok := event["resourceType"]; ok {
@@ -471,7 +490,7 @@ func TestCdcRecordStaysOnDedicatedCdcRoute(t *testing.T) {
 }
 
 func TestCdcRecordRejectsCompositePrimaryKeyWithoutEntityID(t *testing.T) {
-	client, err := NewClient(ClientConfig{BaseURL: "https://connect.example.com", APIKey: "test-api-key", DefaultConnectorID: "conn_123"})
+	client, err := NewClient(ClientConfig{BaseURL: "https://api.example.com", APIKey: "test-api-key", WorkspaceID: testWorkspaceID, DefaultConnectorID: "conn_123"})
 	if err != nil {
 		t.Fatalf("new client: %v", err)
 	}
@@ -479,7 +498,7 @@ func TestCdcRecordRejectsCompositePrimaryKeyWithoutEntityID(t *testing.T) {
 		Source:         "postgres",
 		Table:          "orders",
 		Operation:      "update",
-		PrimaryKey:     map[string]IDInput{"tenant_id": "tenant_a", "id": "1"},
+		PrimaryKey:     map[string]IDInput{"account_id": "account_a", "id": "1"},
 		IdempotencyKey: "cdc_composite_without_entity",
 	})
 	var medallionErr *Error
@@ -489,7 +508,7 @@ func TestCdcRecordRejectsCompositePrimaryKeyWithoutEntityID(t *testing.T) {
 }
 
 func TestCdcRecordRejectsEmptyPrimaryKey(t *testing.T) {
-	client, err := NewClient(ClientConfig{BaseURL: "https://connect.example.com", APIKey: "test-api-key", DefaultConnectorID: "conn_123"})
+	client, err := NewClient(ClientConfig{BaseURL: "https://api.example.com", APIKey: "test-api-key", WorkspaceID: testWorkspaceID, DefaultConnectorID: "conn_123"})
 	if err != nil {
 		t.Fatalf("new client: %v", err)
 	}
@@ -510,8 +529,9 @@ func TestCdcRecordRejectsEmptyPrimaryKey(t *testing.T) {
 
 func TestEventRecordsRequireStableIdempotencyKeys(t *testing.T) {
 	client, err := NewClient(ClientConfig{
-		BaseURL:            "https://connect.example.com",
+		BaseURL:            "https://api.example.com",
 		APIKey:             "test-api-key",
+		WorkspaceID:        testWorkspaceID,
 		DefaultConnectorID: "conn_123",
 	})
 	if err != nil {
@@ -523,14 +543,14 @@ func TestEventRecordsRequireStableIdempotencyKeys(t *testing.T) {
 		Action:         "cancel",
 		Outcome:        AuditOutcomeSucceeded,
 		Resource:       ResourceRef{Type: "order", ID: "order_123"},
-		IdempotencyKey: " ",
+		IdempotencyKey: "",
 	})
 	_, cdcErr := client.CDC.Record(context.Background(), CDCEvent{
 		Source:         "postgres",
 		Table:          "orders",
 		Operation:      "update",
 		PrimaryKey:     map[string]IDInput{"id": "order_123"},
-		IdempotencyKey: " ",
+		IdempotencyKey: "",
 	})
 	for name, got := range map[string]error{"audit": auditErr, "cdc": cdcErr} {
 		medallionErr, ok := got.(*Error)
@@ -581,6 +601,7 @@ func TestTracingCreatesClientSpan(t *testing.T) {
 	client, err := NewClient(ClientConfig{
 		BaseURL:            server.URL,
 		APIKey:             "test-api-key",
+		WorkspaceID:        testWorkspaceID,
 		DefaultConnectorID: "conn_123",
 		Tracing: TracingConfig{
 			Enabled:    true,
@@ -633,7 +654,7 @@ func TestSuccessfulResponsesRequireSemanticAcknowledgements(t *testing.T) {
 	client, err := NewClient(ClientConfig{
 		BaseURL:            server.URL,
 		APIKey:             "test-api-key",
-		OrganizationID:     "org_123",
+		WorkspaceID:        testWorkspaceID,
 		DefaultConnectorID: "conn_123",
 	})
 	if err != nil {
@@ -654,16 +675,6 @@ func TestSuccessfulResponsesRequireSemanticAcknowledgements(t *testing.T) {
 		t.Fatalf("publish error = %#v", err)
 	}
 
-	_, err = client.Connect.RegisterDatasource(context.Background(), DatasourceRegistration{
-		Name:           "primary_postgres",
-		Type:           "postgres",
-		IdempotencyKey: "register_primary_postgres",
-	})
-	if !errors.As(err, &medallionErr) ||
-		medallionErr.Code != "MEDALLION_INVALID_DATASOURCE_RESPONSE" ||
-		medallionErr.RequestID != "req_empty" {
-		t.Fatalf("datasource error = %#v", err)
-	}
 }
 
 func TestTransportErrorsPreserveClassificationAndCause(t *testing.T) {
@@ -678,6 +689,7 @@ func TestTransportErrorsPreserveClassificationAndCause(t *testing.T) {
 		BaseURL:            server.URL,
 		AccessToken:        "   ",
 		APIKey:             "fallback-key",
+		WorkspaceID:        testWorkspaceID,
 		DefaultConnectorID: "conn_123",
 	})
 	if err != nil {
@@ -694,7 +706,7 @@ func TestTransportErrorsPreserveClassificationAndCause(t *testing.T) {
 	if !errors.As(err, &medallionErr) ||
 		medallionErr.Code != "MEDALLION_INVALID_JSON_RESPONSE" ||
 		medallionErr.RequestID != "req_invalid" ||
-		medallionErr.Unwrap() == nil {
+		!errors.Is(err, errInvalidJSONResponse) {
 		t.Fatalf("invalid response error = %#v", err)
 	}
 
@@ -714,8 +726,9 @@ func TestTransportErrorsPreserveClassificationAndCause(t *testing.T) {
 	}
 
 	_, err = NewClient(ClientConfig{
-		BaseURL: "https://user:secret@example.com?unsafe=true",
-		APIKey:  "key",
+		BaseURL:     "https://user:secret@example.com?unsafe=true",
+		APIKey:      "key",
+		WorkspaceID: testWorkspaceID,
 	})
 	if !errors.As(err, &medallionErr) || medallionErr.Code != "MEDALLION_INVALID_OPTIONS" {
 		t.Fatalf("invalid base URL error = %#v", err)

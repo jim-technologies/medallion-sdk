@@ -3,21 +3,23 @@ import { MedallionApiError, MedallionClient } from "../src/index.js";
 
 const requiredEnv = [
   "MEDALLION_SMOKE_BASE_URL",
-  "MEDALLION_SMOKE_ACCESS_TOKEN",
-  "MEDALLION_SMOKE_ORGANIZATION_ID",
-  "MEDALLION_SMOKE_EXPECTED_INGESTER_PRINCIPAL",
+  "MEDALLION_SMOKE_API_KEY",
+  "MEDALLION_SMOKE_WORKSPACE_ID",
+  "MEDALLION_SMOKE_CONNECTOR_ID",
 ] as const;
 
 const smokeEnabled = requiredEnv.every((name) => process.env[name]?.trim());
 
 describe.skipIf(!smokeEnabled)("deployed SDK smoke", () => {
-  it("registers a datasource and round-trips an audit trail event", async () => {
+  it("publishes and reads back an audit event", async () => {
     const baseUrl = requiredEnvValue("MEDALLION_SMOKE_BASE_URL");
-    const accessToken = requiredEnvValue("MEDALLION_SMOKE_ACCESS_TOKEN");
-    const organizationId = requiredEnvValue("MEDALLION_SMOKE_ORGANIZATION_ID");
-    const expectedIngester = requiredEnvValue(
-      "MEDALLION_SMOKE_EXPECTED_INGESTER_PRINCIPAL",
-    );
+    const apiKey = requiredEnvValue("MEDALLION_SMOKE_API_KEY");
+    const workspaceId = requiredEnvValue("MEDALLION_SMOKE_WORKSPACE_ID");
+    const connectorId = requiredEnvValue("MEDALLION_SMOKE_CONNECTOR_ID");
+    const expectedIngester =
+      process.env.MEDALLION_SMOKE_EXPECTED_INGESTER_PRINCIPAL?.trim();
+    const deniedWorkspaceId =
+      process.env.MEDALLION_SMOKE_DENIED_WORKSPACE_ID?.trim();
     const runId = `sdk_smoke_${Date.now()}`;
     const actor = { type: "user", id: `user_${runId}` } as const;
     const resource = { type: "order", id: `order_${runId}` } as const;
@@ -28,38 +30,29 @@ describe.skipIf(!smokeEnabled)("deployed SDK smoke", () => {
 
     const client = new MedallionClient({
       baseUrl,
-      accessToken,
-      organizationId,
+      apiKey,
+      workspaceId,
+      defaultConnectorId: connectorId,
     });
 
-    const connectorId =
-      process.env.MEDALLION_SMOKE_CONNECTOR_ID?.trim() ||
-      (
-        await client.connect.registerDatasource({
-          name: `medallion_sdk_smoke_${runId}`,
-          type: "medallion_audit_logs",
-          idempotencyKey: `register_medallion_sdk_smoke_${runId}`,
-          displayName: `Medallion SDK Smoke ${runId}`,
-          externalId: runId,
-        })
-      ).datasource.id;
-
     await client.audit.record({
-      connectorId,
       actor,
       action,
       outcome: "succeeded",
-      resource,
-      before: { status: "confirmed" },
-      after: { status: "cancelled" },
-      metadata: { smokeRunId: runId },
-      evidenceUrl,
+      resourceType: resource.type,
+      resourceId: resource.id,
+      payload: {
+        before: { status: "confirmed" },
+        after: { status: "cancelled" },
+        metadata: { smokeRunId: runId },
+        evidenceUrl,
+      },
       idempotencyKey: `audit_${runId}`,
       sourceEventId: `source_${runId}`,
     });
 
     const event = await eventually(async () => {
-      const trail = await client.audit.trail({
+      const trail = await client.audit.list({
         connectorId,
         resourceType: resource.type,
         resourceId: resource.id,
@@ -78,7 +71,6 @@ describe.skipIf(!smokeEnabled)("deployed SDK smoke", () => {
 
     expect(event).toMatchObject({
       actor,
-      ingesterPrincipal: expectedIngester,
       action,
       origin: "external_provider",
       outcome: "succeeded",
@@ -88,13 +80,19 @@ describe.skipIf(!smokeEnabled)("deployed SDK smoke", () => {
       after: { status: "cancelled" },
       evidenceUrl,
     });
+    if (expectedIngester) {
+      expect(event.ingesterPrincipal).toBe(expectedIngester);
+    }
 
-    const deniedOrg =
-      process.env.MEDALLION_SMOKE_DENIED_ORGANIZATION_ID?.trim();
-    if (deniedOrg) {
+    if (deniedWorkspaceId) {
+      const deniedClient = new MedallionClient({
+        baseUrl,
+        apiKey,
+        workspaceId: deniedWorkspaceId,
+        defaultConnectorId: connectorId,
+      });
       await expect(
-        client.audit.trail({
-          organizationId: deniedOrg,
+        deniedClient.audit.trail({
           connectorId,
           resourceType: resource.type,
           resourceId: resource.id,

@@ -1,0 +1,89 @@
+{
+  "$id": "urn:medallion:external-ingestion-sdk:v1:error-reasons",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "const": "schemas/error-reasons.schema.json"
+    },
+    "domain": {
+      "const": "medallion.jimtech.io"
+    },
+    "reasons": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "consumer_category": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "grpc_code": {
+            "enum": [
+              "ALREADY_EXISTS",
+              "FAILED_PRECONDITION",
+              "INVALID_ARGUMENT",
+              "RESOURCE_EXHAUSTED",
+              "UNAVAILABLE"
+            ]
+          },
+          "reason": {
+            "enum": [
+              "AUTHORIZATION_DEPENDENCY_UNAVAILABLE",
+              "BACKPRESSURE",
+              "CAPABILITY_UNAVAILABLE",
+              "FEATURE_NOT_ENTITLED",
+              "IDEMPOTENCY_MISMATCH",
+              "INTEGRATION_UNAVAILABLE",
+              "WORKSPACE_SELECTOR_CONFLICT"
+            ]
+          },
+          "retry_policy": {
+            "additionalProperties": false,
+            "properties": {
+              "classification": {
+                "enum": [
+                  "bounded_transient_retry",
+                  "bounded_transient_retry_idempotent_operations_only",
+                  "retry_after_configuration_or_entitlement_change",
+                  "terminal"
+                ]
+              },
+              "reuse_idempotency_key": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "classification",
+              "reuse_idempotency_key"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "consumer_category",
+          "grpc_code",
+          "reason",
+          "retry_policy"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "unknown_reason_policy": {
+      "const": "preserve"
+    }
+  },
+  "required": [
+    "$schema",
+    "domain",
+    "reasons",
+    "schema_version",
+    "unknown_reason_policy"
+  ],
+  "title": "External-ingestion ErrorInfo reason registry",
+  "type": "object"
+}

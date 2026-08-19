@@ -5,249 +5,448 @@ import {
   normalizeResourceRef,
 } from "./ids.js";
 import {
+  actorFromEventPayload,
+  assertIteratorPageWithinLimit,
+  batchResponse,
+  ingestionPageSize,
+  invalidListResponse,
+  optionalListText,
+  optionalListTimestamp,
+  optionalText,
+  parseListJsonPayload,
+  repeatedCursor,
+  requiredConnectorId,
+  requiredListEventId,
+  requiredListIdempotencyKey,
+  requiredListText,
+  requiredResponseWorkspace,
+  requiredText,
+  singleEventResponse,
+  validateBatchSize,
+} from "./ingestion.js";
+import {
   compactRecord,
-  jsonString,
   occurredAt,
   optionalId,
+  rawOrJsonString,
+  requiredId,
   requiredIdempotencyKey,
 } from "./payload.js";
 import type { ProtocolConnectClient } from "./protocol.js";
 import type {
+  AuditBatchInput,
+  AuditIngestionEventInput,
+  AuditIngestionRecordInput,
+  AuditListInput,
   AuditOrigin,
   AuditOutcome,
   AuditRecordInput,
   AuditRecordResponse,
+  AuditTrailEvent,
   AuditTrailInput,
   AuditTrailResponse,
   ConnectAuditEvent,
-  ConnectPublishAuditEventsResponse,
-  ConnectPublishCdcEventsResponse,
-  NormalizedActorRef,
-  PublishedEventResult,
+  ConnectAuditEventInput,
+  EventBatchResponse,
   RequestOptions,
 } from "./types.js";
 
 export interface AuditClientOptions {
-  organizationId?: string;
+  workspaceId: string;
   defaultConnectorId?: string;
 }
 
-const DEFAULT_AUDIT_TRAIL_LIMIT = 100;
-const MAX_AUDIT_TRAIL_LIMIT = 500;
-
 export class AuditClient {
-  constructor(
-    private readonly connect: ProtocolConnectClient,
-    private readonly options: AuditClientOptions = {},
-  ) {}
+  readonly #connect: ProtocolConnectClient;
+  readonly #defaultConnectorId?: string;
+  readonly #workspaceId: string;
 
-  async record(
-    input: AuditRecordInput,
-    options: RequestOptions = {},
-  ): Promise<AuditRecordResponse> {
-    const connectorId = input.connectorId ?? this.options.defaultConnectorId;
-    if (connectorId === undefined || connectorId.trim().length === 0) {
-      throw new MedallionError(
-        "connectorId is required to record an audit event. Pass defaultConnectorId to MedallionClient or audit.record().",
-        { code: "MEDALLION_MISSING_CONNECTOR_ID" },
-      );
-    }
-
-    const resource = normalizeResourceRef(input.resource);
-    const actor = normalizeActorRef(input.actor);
-    const key = requiredIdempotencyKey(
-      input.idempotencyKey,
-      "audit.idempotencyKey",
-      512,
-    );
-    const event: ConnectAuditEvent = compactRecord({
-      resource_type: resource.type,
-      resource_id: resource.id,
-      action: input.action,
-      outcome: auditOutcome(input.outcome),
-      idempotency_key: key,
-      actor_principal: actorPrincipalFromRef(actor),
-      payload_json: jsonString(
-        {
-          actor,
-          resource,
-          before: input.before ?? null,
-          after: input.after ?? null,
-          metadata: input.metadata ?? null,
-          evidenceUrl: input.evidenceUrl ?? null,
-        },
-        "audit payload",
-      ),
-      occurred_at: occurredAt(input.occurredAt),
-      description: input.description,
-      source_event_id: optionalId(input.sourceEventId, "audit.sourceEventId"),
-    });
-
-    const response = await this.connect.publishAuditEvents(
-      {
-        connector_id: connectorId,
-        events: [event],
-      },
-      options,
-    );
-
-    return eventResponse(response.body, key, response.requestId);
+  constructor(connect: ProtocolConnectClient, options: AuditClientOptions) {
+    this.#connect = connect;
+    this.#defaultConnectorId = options.defaultConnectorId;
+    this.#workspaceId = options.workspaceId;
   }
 
-  async trail(
-    input: AuditTrailInput,
+  async record(
+    input: AuditRecordInput | AuditIngestionRecordInput,
+    options: RequestOptions = {},
+  ): Promise<AuditRecordResponse> {
+    const connectorId = requiredConnectorId(
+      input.connectorId ?? this.#defaultConnectorId,
+      "publish an audit event",
+    );
+    const eventInput = { ...input };
+    delete eventInput.connectorId;
+    const event = isModernEvent(eventInput)
+      ? modernEventToWire(eventInput)
+      : legacyEventToWire(eventInput);
+    const response = await this.publishWireEvents(
+      connectorId,
+      [event],
+      options,
+    );
+    return singleEventResponse(response);
+  }
+
+  async publishBatch(
+    input: AuditBatchInput,
+    options: RequestOptions = {},
+  ): Promise<EventBatchResponse> {
+    validateBatchSize(input.events);
+    const connectorId = requiredConnectorId(
+      input.connectorId ?? this.#defaultConnectorId,
+      "publish audit events",
+    );
+    const events = input.events.map((event) => modernEventToWire(event));
+    return this.publishWireEvents(connectorId, events, options);
+  }
+
+  async list(
+    input: AuditListInput = {},
     options: RequestOptions = {},
   ): Promise<AuditTrailResponse> {
-    const organizationId = input.organizationId ?? this.options.organizationId;
-    if (organizationId === undefined || organizationId.trim().length === 0) {
+    const resourceType = optionalText(
+      input.resourceType,
+      "audit.resourceType",
+      256,
+    );
+    const resourceId = optionalId(input.resourceId, "audit.resourceId", 1024);
+    if ((resourceType === undefined) !== (resourceId === undefined)) {
       throw new MedallionError(
-        "organizationId is required to read an audit trail from Connect. Pass organizationId to MedallionClient or audit.trail().",
-        { code: "MEDALLION_MISSING_ORGANIZATION_ID" },
+        "audit resourceType and resourceId must be provided together.",
+        { code: "MEDALLION_INVALID_AUDIT_FILTER" },
       );
     }
-
     const sourceActor =
       input.actor === undefined ? undefined : normalizeActorRef(input.actor);
-    const resource = normalizeResourceRef({
-      type: input.resourceType,
-      id: input.resourceId,
-    });
-    const limit = auditTrailLimit(input.limit ?? input.pageSize);
-    const response = await this.connect.listAuditEvents(
-      {
-        organization_id: organizationId,
-        connector_id: input.connectorId ?? this.options.defaultConnectorId,
-        resource_type: resource.type,
-        resource_id: resource.id,
-        limit,
-        actor_principal:
-          sourceActor === undefined
-            ? undefined
-            : actorPrincipalFromRef(sourceActor),
-        ingested_by_principal: optionalString(input.ingesterPrincipal),
-        action: input.action,
+    const sourceActorPrincipal =
+      sourceActor === undefined
+        ? undefined
+        : requiredText(
+            actorPrincipalFromRef(sourceActor),
+            "audit.actorPrincipal",
+            512,
+          );
+    const response = await this.#connect.listAuditEvents(
+      compactRecord({
+        workspace_id: this.#workspaceId,
+        connector_id: optionalText(
+          input.connectorId ?? this.#defaultConnectorId,
+          "audit.connectorId",
+          128,
+        ),
+        resource_type: resourceType,
+        resource_id: resourceId,
+        limit: ingestionPageSize(input.limit),
+        actor_principal: sourceActorPrincipal,
+        ingested_by_principal: optionalText(
+          input.ingesterPrincipal,
+          "audit.ingesterPrincipal",
+          512,
+        ),
+        action: optionalText(input.action, "audit.action", 256),
+        occurred_at_from: occurredAt(input.occurredAtFrom),
+        occurred_at_to: occurredAt(input.occurredAtTo),
+        source_system: optionalText(
+          input.sourceSystem,
+          "audit.sourceSystem",
+          256,
+        ),
         origin:
           input.origin === undefined ? undefined : auditOrigin(input.origin),
         outcome:
           input.outcome === undefined ? undefined : auditOutcome(input.outcome),
-        page_cursor: input.cursor,
-      },
+        page_cursor: optionalText(input.cursor, "audit.cursor", 2048),
+      }),
       options,
     );
-    const events = (response.body.events ?? [])
-      .map((event) => auditTrailEventFromConnect(event))
-      .filter(
-        (event) =>
-          sourceActor === undefined || sameActorRef(event.actor, sourceActor),
-      );
-
+    const events = (response.body.events ?? []).map((event) =>
+      auditEventFromWire(event, this.#workspaceId, response.requestId),
+    );
     return {
       requestId: response.requestId,
-      nextCursor: response.body.next_page_cursor,
+      nextCursor: optionalListText(
+        response.body.next_page_cursor,
+        "audit.list.nextCursor",
+        2_048,
+        response.requestId,
+      ),
       events,
     };
   }
-}
 
-export function eventResponse(
-  body: ConnectPublishCdcEventsResponse | ConnectPublishAuditEventsResponse,
-  fallbackIdempotencyKey: string,
-  requestId?: string,
-): AuditRecordResponse {
-  const acceptedCount = body.accepted_count ?? 0;
-  const duplicateCount = body.duplicate_count ?? 0;
-  const events: PublishedEventResult[] = (body.events ?? []).map((event) => ({
-    idempotencyKey: event.idempotency_key ?? fallbackIdempotencyKey,
-    eventId: event.event_id === undefined ? undefined : String(event.event_id),
-    duplicate: event.duplicate ?? false,
-  }));
-  if (events.length === 0 && acceptedCount === 0 && duplicateCount === 0) {
-    throw new MedallionError(
-      "Medallion returned an empty event publish acknowledgement.",
+  /** @deprecated Use list; retained for resource-scoped compatibility. */
+  trail(
+    input: AuditTrailInput,
+    options: RequestOptions = {},
+  ): Promise<AuditTrailResponse> {
+    return this.list(
       {
-        code: "MEDALLION_INVALID_PUBLISH_RESPONSE",
-        requestId,
+        ...input,
+        limit: input.limit ?? input.pageSize,
       },
+      options,
     );
   }
-  const first = events[0];
-  const duplicate =
-    first?.duplicate ?? (duplicateCount > 0 && acceptedCount === 0);
 
-  return {
-    requestId,
-    idempotencyKey: first?.idempotencyKey ?? fallbackIdempotencyKey,
-    duplicate,
-    result: duplicate ? "duplicate" : "accepted",
-    acceptedCount,
-    duplicateCount,
-    events,
-  };
+  async *iterate(
+    input: AuditListInput = {},
+    options: RequestOptions = {},
+  ): AsyncGenerator<AuditTrailEvent, void, undefined> {
+    const filters: AuditListInput = {
+      ...input,
+      actor: input.actor === undefined ? undefined : { ...input.actor },
+      occurredAtFrom: occurredAt(input.occurredAtFrom),
+      occurredAtTo: occurredAt(input.occurredAtTo),
+    };
+    const requestOptions = { ...options };
+    let cursor = filters.cursor;
+    const seen = new Set<string>();
+    let pages = 0;
+    if (cursor !== undefined && cursor.length > 0) seen.add(cursor);
+
+    for (;;) {
+      pages += 1;
+      assertIteratorPageWithinLimit(pages);
+      const page = await this.list({ ...filters, cursor }, requestOptions);
+      for (const event of page.events) yield event;
+      const nextCursor = page.nextCursor;
+      if (nextCursor === undefined || nextCursor.length === 0) return;
+      if (seen.has(nextCursor)) throw repeatedCursor();
+      seen.add(nextCursor);
+      cursor = nextCursor;
+    }
+  }
+
+  private async publishWireEvents(
+    connectorId: string,
+    events: ConnectAuditEventInput[],
+    options: RequestOptions,
+  ): Promise<EventBatchResponse> {
+    const expectedKeys = events.map((event) => event.idempotency_key);
+    const response = await this.#connect.publishAuditEvents(
+      { connector_id: connectorId, events },
+      options,
+    );
+    return batchResponse(response.body, expectedKeys, response.requestId);
+  }
 }
 
-function auditTrailLimit(value: number | undefined): number {
-  if (value === undefined || value === 0) {
-    return DEFAULT_AUDIT_TRAIL_LIMIT;
-  }
-
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new MedallionError(
-      "audit.trail limit/pageSize must be a positive integer.",
-      { code: "MEDALLION_INVALID_AUDIT_TRAIL_LIMIT" },
-    );
-  }
-
-  if (value > MAX_AUDIT_TRAIL_LIMIT) {
-    throw new MedallionError(
-      `audit.trail limit/pageSize must be ${MAX_AUDIT_TRAIL_LIMIT} or less. Use cursor pagination for larger reads.`,
-      { code: "MEDALLION_AUDIT_TRAIL_LIMIT_TOO_LARGE" },
-    );
-  }
-
-  return value;
-}
-
-function auditTrailEventFromConnect(event: ConnectAuditEvent) {
-  const payload = parseEventPayload(event.payload_json);
-  const payloadRecord = recordValue(payload);
-  const wireActor = actorFromPrincipal(event.actor_principal);
-  const payloadActor = actorFromPayload(payloadRecord?.actor);
+function modernEventToWire(
+  input: AuditIngestionEventInput,
+): ConnectAuditEventInput {
+  rejectServerOwnedInput(input);
   const actor =
-    payloadActor !== undefined &&
-    actorPrincipalFromRef(payloadActor) === event.actor_principal
-      ? payloadActor
-      : wireActor;
-  const before = payloadRecord?.before;
-  const after = payloadRecord?.after;
-  const metadata = recordValue(payloadRecord?.metadata);
-  const evidenceUrl = stringValue(payloadRecord?.evidenceUrl);
-  const eventId = event.id === undefined ? undefined : String(event.id);
+    input.actor === undefined ? undefined : normalizeActorRef(input.actor);
+  return compactRecord({
+    resource_type: requiredText(input.resourceType, "audit.resourceType", 256),
+    resource_id: requiredId(input.resourceId, "audit.resourceId", 1024),
+    action: requiredText(input.action, "audit.action", 256),
+    outcome: auditOutcome(input.outcome),
+    idempotency_key: requiredIdempotencyKey(
+      input.idempotencyKey,
+      "audit.idempotencyKey",
+      512,
+    ),
+    actor_principal:
+      actor === undefined
+        ? undefined
+        : requiredText(
+            actorPrincipalFromRef(actor),
+            "audit.actorPrincipal",
+            512,
+          ),
+    payload_json: rawOrJsonString(
+      input.payload,
+      input.payloadJson,
+      "audit.payload",
+    ),
+    occurred_at: occurredAt(input.occurredAt),
+    description: optionalText(input.description, "audit.description", 4096),
+    source_event_id: optionalId(
+      input.sourceEventId,
+      "audit.sourceEventId",
+      1024,
+    ),
+  });
+}
 
+function legacyEventToWire(input: AuditRecordInput): ConnectAuditEventInput {
+  rejectServerOwnedInput(input);
+  const resource = normalizeResourceRef(input.resource);
+  const actor =
+    input.actor === undefined ? undefined : normalizeActorRef(input.actor);
+  const compatibilityPayload = {
+    actor: actor ?? null,
+    resource,
+    before: input.before ?? null,
+    after: input.after ?? null,
+    metadata: input.metadata ?? null,
+    evidenceUrl: input.evidenceUrl ?? null,
+  };
+  return compactRecord({
+    resource_type: requiredText(resource.type, "audit.resourceType", 256),
+    resource_id: requiredId(resource.id, "audit.resourceId", 1024),
+    action: requiredText(input.action, "audit.action", 256),
+    outcome: auditOutcome(input.outcome),
+    idempotency_key: requiredIdempotencyKey(
+      input.idempotencyKey,
+      "audit.idempotencyKey",
+      512,
+    ),
+    actor_principal:
+      actor === undefined
+        ? undefined
+        : requiredText(
+            actorPrincipalFromRef(actor),
+            "audit.actorPrincipal",
+            512,
+          ),
+    payload_json: rawOrJsonString(
+      input.payload === undefined ? compatibilityPayload : input.payload,
+      input.payloadJson,
+      "audit.payload",
+    ),
+    occurred_at: occurredAt(input.occurredAt),
+    description: optionalText(input.description, "audit.description", 4096),
+    source_event_id: optionalId(
+      input.sourceEventId,
+      "audit.sourceEventId",
+      1024,
+    ),
+  });
+}
+
+export function auditEventFromWire(
+  event: ConnectAuditEvent,
+  expectedWorkspaceId: string,
+  requestId?: string,
+): AuditTrailEvent {
+  const resourceType = requiredListText(
+    event.resource_type,
+    "audit.list.events[].resourceType",
+    256,
+    requestId,
+  );
+  const resourceId = requiredListText(
+    event.resource_id,
+    "audit.list.events[].resourceId",
+    1_024,
+    requestId,
+  );
+  const action = requiredListText(
+    event.action,
+    "audit.list.events[].action",
+    256,
+    requestId,
+  );
+  const idempotencyKey = requiredListIdempotencyKey(
+    event.idempotency_key,
+    "audit.list.events[].idempotencyKey",
+    requestId,
+  );
+  const workspaceId = requiredResponseWorkspace(
+    event.workspace_id,
+    expectedWorkspaceId,
+    "audit.list.events[].workspaceId",
+    requestId,
+  );
+  const connectorId = optionalListText(
+    event.connector_id,
+    "audit.list.events[].connectorId",
+    128,
+    requestId,
+  );
+  const sourceEventId = optionalListText(
+    event.source_event_id,
+    "audit.list.events[].sourceEventId",
+    1_024,
+    requestId,
+  );
+  const actorPrincipal = optionalListText(
+    event.actor_principal,
+    "audit.list.events[].actorPrincipal",
+    512,
+    requestId,
+  );
+  const description = optionalListText(
+    event.description,
+    "audit.list.events[].description",
+    4_096,
+    requestId,
+  );
+  const sourceSystem = optionalListText(
+    event.source_system,
+    "audit.list.events[].sourceSystem",
+    256,
+    requestId,
+  );
+  const ingesterPrincipal = optionalListText(
+    event.ingested_by_principal,
+    "audit.list.events[].ingestedByPrincipal",
+    512,
+    requestId,
+  );
+  const payload = parseListJsonPayload(
+    event.payload_json,
+    "audit.list.events[].payloadJson",
+    requestId,
+  );
+  const payloadRecord = recordValue(payload);
+  const occurredAt = optionalListTimestamp(
+    event.occurred_at,
+    "audit.list.events[].occurredAt",
+    requestId,
+  );
+  const observedAt = optionalListTimestamp(
+    event.observed_at,
+    "audit.list.events[].observedAt",
+    requestId,
+  );
+  const actor = actorFromEventPayload(payload, actorPrincipal);
+  const eventId = requiredListEventId(event.id, requestId);
+  const origin = auditOriginFromWire(event.origin);
+  if (origin === undefined) {
+    throw invalidListResponse(
+      "Medallion returned a listed audit event without a concrete origin.",
+      requestId,
+    );
+  }
+  const outcome = auditOutcomeFromWire(event.outcome);
+  if (outcome === undefined) {
+    throw invalidListResponse(
+      "Medallion returned a listed audit event without a concrete outcome.",
+      requestId,
+    );
+  }
   return {
     id: eventId,
     eventId,
-    organizationId: event.organization_id,
-    connectorId: event.connector_id,
+    workspaceId,
+    connectorId,
     actor,
-    ingesterPrincipal: event.ingested_by_principal,
-    actorPrincipal: event.actor_principal,
-    action: event.action,
-    targetType: event.resource_type,
-    targetId: event.resource_id,
-    entityType: event.resource_type,
-    entityId: event.resource_id,
-    metadata,
-    createdAt: event.observed_at,
-    occurredAt: event.occurred_at,
-    observedAt: event.observed_at,
-    before,
-    after,
-    evidenceUrl,
-    sourceEventId: event.source_event_id,
-    sourceSystem: event.source_system,
-    origin: auditOriginFromConnect(event.origin),
-    outcome: auditOutcomeFromConnect(event.outcome),
+    ingesterPrincipal,
+    actorPrincipal,
+    action,
+    description,
+    idempotencyKey,
+    targetType: resourceType,
+    targetId: resourceId,
+    entityType: resourceType,
+    entityId: resourceId,
+    metadata: recordValue(payloadRecord?.metadata),
+    createdAt: observedAt,
+    occurredAt,
+    observedAt,
+    before: payloadRecord?.before,
+    after: payloadRecord?.after,
+    evidenceUrl: stringValue(payloadRecord?.evidenceUrl),
+    sourceEventId,
+    sourceSystem,
+    origin,
+    outcome,
     payload,
+    payloadJson: event.payload_json,
   };
 }
 
@@ -281,7 +480,7 @@ function auditOrigin(origin: AuditOrigin): string {
   }
 }
 
-function auditOutcomeFromConnect(
+function auditOutcomeFromWire(
   value: string | undefined,
 ): AuditOutcome | undefined {
   switch (value) {
@@ -296,7 +495,7 @@ function auditOutcomeFromConnect(
   }
 }
 
-function auditOriginFromConnect(
+function auditOriginFromWire(
   value: string | undefined,
 ): AuditOrigin | undefined {
   switch (value) {
@@ -309,33 +508,10 @@ function auditOriginFromConnect(
   }
 }
 
-function actorFromPrincipal(
-  value: string | undefined,
-): NormalizedActorRef | undefined {
-  if (value === undefined || value.length === 0) {
-    return undefined;
-  }
-
-  const parts = value.split(":");
-  if (parts.length < 2) {
-    return { id: value };
-  }
-
-  const id = parts.pop();
-  if (id === undefined) {
-    return { id: value };
-  }
-  const type = parts.shift();
-  const provider = parts.length > 0 ? parts.join(":") : undefined;
-  return { id, type, provider };
-}
-
-function parseEventPayload(payload: string): unknown {
-  try {
-    return JSON.parse(payload) as unknown;
-  } catch {
-    return undefined;
-  }
+function isModernEvent(
+  input: AuditRecordInput | AuditIngestionEventInput,
+): input is AuditIngestionEventInput {
+  return "resourceType" in input;
 }
 
 function recordValue(value: unknown): Record<string, unknown> | undefined {
@@ -344,49 +520,31 @@ function recordValue(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-function actorFromPayload(value: unknown): NormalizedActorRef | undefined {
-  const record = recordValue(value);
-  if (record === undefined) {
-    return undefined;
-  }
-
-  const id = record.id;
-  if (
-    typeof id !== "string" &&
-    typeof id !== "number" &&
-    typeof id !== "bigint"
-  ) {
-    return undefined;
-  }
-
-  try {
-    return normalizeActorRef({
-      id,
-      type: typeof record.type === "string" ? record.type : undefined,
-      provider:
-        typeof record.provider === "string" ? record.provider : undefined,
-    });
-  } catch {
-    return undefined;
-  }
-}
-
-function sameActorRef(
-  left: NormalizedActorRef | undefined,
-  right: NormalizedActorRef,
-): boolean {
-  return (
-    left?.id === right.id &&
-    left.type === right.type &&
-    left.provider === right.provider
-  );
-}
-
-function optionalString(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-  return trimmed === undefined || trimmed.length === 0 ? undefined : trimmed;
-}
-
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function rejectServerOwnedInput(input: object): void {
+  const record = input as Record<string, unknown>;
+  const fields = [
+    "id",
+    "eventId",
+    "workspaceId",
+    "connectorId",
+    "observedAt",
+    "sourceSystem",
+    "ingestedByPrincipal",
+    "origin",
+    "workspace_id",
+    "connector_id",
+    "observed_at",
+    "source_system",
+    "ingested_by_principal",
+  ];
+  if (fields.some((field) => Object.hasOwn(record, field))) {
+    throw new MedallionError(
+      "Audit events must not contain server-owned fields.",
+      { code: "MEDALLION_SERVER_DERIVED_FIELD" },
+    );
+  }
 }

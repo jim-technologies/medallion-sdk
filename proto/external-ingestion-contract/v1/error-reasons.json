@@ -1,0 +1,71 @@
+{
+  "$schema": "schemas/error-reasons.schema.json",
+  "domain": "medallion.jimtech.io",
+  "reasons": [
+    {
+      "consumer_category": "transient_authorization_dependency",
+      "grpc_code": "UNAVAILABLE",
+      "reason": "AUTHORIZATION_DEPENDENCY_UNAVAILABLE",
+      "retry_policy": {
+        "classification": "bounded_transient_retry",
+        "reuse_idempotency_key": true
+      }
+    },
+    {
+      "consumer_category": "transient_backpressure",
+      "grpc_code": "RESOURCE_EXHAUSTED",
+      "reason": "BACKPRESSURE",
+      "retry_policy": {
+        "classification": "bounded_transient_retry",
+        "reuse_idempotency_key": true
+      }
+    },
+    {
+      "consumer_category": "capability_disabled",
+      "grpc_code": "FAILED_PRECONDITION",
+      "reason": "CAPABILITY_UNAVAILABLE",
+      "retry_policy": {
+        "classification": "retry_after_configuration_or_entitlement_change",
+        "reuse_idempotency_key": true
+      }
+    },
+    {
+      "consumer_category": "entitlement_denied",
+      "grpc_code": "FAILED_PRECONDITION",
+      "reason": "FEATURE_NOT_ENTITLED",
+      "retry_policy": {
+        "classification": "retry_after_configuration_or_entitlement_change",
+        "reuse_idempotency_key": true
+      }
+    },
+    {
+      "consumer_category": "idempotency_conflict",
+      "grpc_code": "ALREADY_EXISTS",
+      "reason": "IDEMPOTENCY_MISMATCH",
+      "retry_policy": {
+        "classification": "terminal",
+        "reuse_idempotency_key": false
+      }
+    },
+    {
+      "consumer_category": "transient_integration",
+      "grpc_code": "UNAVAILABLE",
+      "reason": "INTEGRATION_UNAVAILABLE",
+      "retry_policy": {
+        "classification": "bounded_transient_retry_idempotent_operations_only",
+        "reuse_idempotency_key": true
+      }
+    },
+    {
+      "consumer_category": "workspace_selector_invalid",
+      "grpc_code": "INVALID_ARGUMENT",
+      "reason": "WORKSPACE_SELECTOR_CONFLICT",
+      "retry_policy": {
+        "classification": "terminal",
+        "reuse_idempotency_key": false
+      }
+    }
+  ],
+  "schema_version": 1,
+  "unknown_reason_policy": "preserve"
+}

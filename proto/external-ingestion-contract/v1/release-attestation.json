@@ -1,0 +1,43 @@
+{
+  "artifact_set_sha256": "2093a54e0101e28d1385997786ea4fb6dea6f42909d3304856767021b27d5ed3",
+  "artifacts": [
+    {
+      "path": "conformance/external-sdk-ingestion.json",
+      "sha256": "61ba4d8a75f864dd2da48d073546b5eef980897345a1cbcc9f20ad1c23de6abc"
+    },
+    {
+      "path": "conformance/schemas/fixture-document.schema.json",
+      "sha256": "dce434b85138fa9ee087ea8af8dc830992c26f0838a7750b243409495064b0bd"
+    },
+    {
+      "path": "connect-idempotency-policy.json",
+      "sha256": "30e6d279b42e259df09e119fc22ef721a4c8f7dbd714c4f356cf391d2071eb71"
+    },
+    {
+      "path": "descriptor.binpb",
+      "sha256": "991d1316e55c85091b3026a6950163dac5d6099e0eb81038eae6a3e9165c9f15"
+    },
+    {
+      "path": "error-reasons.json",
+      "sha256": "d14043f7ae71993d1992d3bd71a7d7118432413b84173da398a7067f701df9e6"
+    },
+    {
+      "path": "external_ingestion_sdk_v1.json",
+      "sha256": "241b1e917ca632cf8d34e2cf27e1bdea8c031a5ad6227b50dddb83111c879b61"
+    },
+    {
+      "path": "schemas/error-reasons.schema.json",
+      "sha256": "8ee0836e5eabe5629ac55072b96ac40022d4c1a30142b9720233612baef97959"
+    },
+    {
+      "path": "schemas/external-ingestion-sdk-v1.schema.json",
+      "sha256": "a9de3e16da412d0a3f8259b7fa45d501d797488f690a26d4c0c4aa5d2427b7cb"
+    }
+  ],
+  "attestation": "unreleased_candidate",
+  "contract_version": "sdkc_01k1ef8x2m6q9v4r7t3w5y8z0a",
+  "immutable": false,
+  "release_id": null,
+  "released": false,
+  "schema_version": 1
+}

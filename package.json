@@ -1,8 +1,8 @@
 {
   "name": "@jimtech/medallion",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
-  "description": "Public TypeScript SDK package for the multi-language Medallion SDK.",
+  "description": "Server-side TypeScript SDK for Medallion CDC and audit ingestion.",
   "license": "Apache-2.0",
   "type": "module",
   "repository": {
@@ -28,32 +28,37 @@
     }
   },
   "files": [
-    "dist",
+    "dist/*.cjs",
+    "dist/*.js",
+    "dist/*.map",
+    "dist/*.d.ts",
+    "dist/THIRD_PARTY_LICENSES.txt",
     "LICENSE",
     "NOTICE",
     "README.md",
     "VERSION"
   ],
   "scripts": {
-    "build": "tsup && tsc -p tsconfig.build.json",
+    "build": "tsup && node scripts/generate_third_party_licenses.mjs --write && tsc -p tsconfig.build.json",
     "check": "node scripts/public-surface-check.mjs && tsc --noEmit && vitest run && npm run build",
+    "check:examples": "tsc --ignoreConfig --noEmit --target ES2024 --lib ES2024,DOM --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck --types node examples/ingestion.ts examples/audit-trail.ts",
     "check:public": "node scripts/public-surface-check.mjs",
     "clean": "rm -rf dist coverage",
     "format": "biome check --write .",
     "lint": "tsc --noEmit && biome ci .",
     "prepare": "npm run build",
-    "proto:descriptor": "buf build proto --as-file-descriptor-set --path proto/medallion/connect/v1/connect.proto -o proto/medallion-connect.descriptor.binpb && buf build proto --as-file-descriptor-set --path proto/medallion/ontology/v1/ontology.proto -o proto/medallion-ontology.descriptor.binpb && buf build proto --as-file-descriptor-set --path proto/medallion/storage/v1/service.proto -o proto/medallion-storage.descriptor.binpb && node scripts/embed-connect-descriptor.mjs",
-    "test": "vitest run",
+    "proto:descriptor": "node scripts/embed-connect-descriptor.mjs",
+    "test": "vitest run && node --test scripts/test_third_party_licenses.mjs",
     "test:deployed": "vitest run test/deployed-smoke.test.ts"
   },
   "dependencies": {
-    "@bufbuild/protobuf": "2.12.1",
-    "@jim-technologies/invariant-protocol": "github:jim-technologies/invariantprotocol#e1fb753ae72b0eb33f9de00fe319a1a2ab55dffd",
+    "@bufbuild/protobuf": "2.13.0",
+    "@jim-technologies/invariant-protocol": "github:jim-technologies/invariantprotocol#f924e602582402476f257571852fabb0e1e1cf43",
     "@opentelemetry/api": "1.9.1"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.4",
-    "@bufbuild/buf": "1.71.0",
+    "@biomejs/biome": "2.5.5",
+    "@bufbuild/buf": "1.72.0",
     "@types/node": "24.13.3",
     "tsup": "8.5.1",
     "typescript": "7.0.2",

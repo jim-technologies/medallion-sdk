@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -14,8 +15,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 SEMVER_COMPONENT = r"(?:0|[1-9][0-9]*)"
 SEMVER = re.compile(rf"{SEMVER_COMPONENT}\.{SEMVER_COMPONENT}\.{SEMVER_COMPONENT}")
-INVARIANT_PROTOCOL_VERSION = "0.8.3"
-INVARIANT_PROTOCOL_SHA = "e1fb753ae72b0eb33f9de00fe319a1a2ab55dffd"
+INVARIANT_PROTOCOL_VERSION = "0.14.0"
+INVARIANT_PROTOCOL_SHA = "f924e602582402476f257571852fabb0e1e1cf43"
 INVARIANT_PROTOCOL_PACKAGE = "@jim-technologies/invariant-protocol"
 INVARIANT_PROTOCOL_SPEC = (
     "github:jim-technologies/invariantprotocol#" + INVARIANT_PROTOCOL_SHA
@@ -25,6 +26,7 @@ INVARIANT_PROTOCOL_LOCATOR_PREFIX = (
 )
 INVARIANT_PROTOCOL_LOCATOR = INVARIANT_PROTOCOL_LOCATOR_PREFIX + INVARIANT_PROTOCOL_SHA
 ESBUILD_VERSION = "0.28.1"
+POSTCSS_VERSION = "8.5.24"
 
 
 def read_json(path: str) -> dict[str, Any]:
@@ -59,6 +61,7 @@ def main() -> int:
     package = read_json("package.json")
     pyproject = read_toml("python/pyproject.toml")
     uv_lock = read_toml("python/uv.lock")
+    flox_manifest = read_toml(".flox/env/manifest.toml")
     package_manager = package.get("packageManager")
     pnpm_match = (
         re.fullmatch(r"pnpm@([0-9]+\.[0-9]+\.[0-9]+)", package_manager)
@@ -72,6 +75,80 @@ def main() -> int:
         pnpm_version = None
     else:
         pnpm_version = pnpm_match.group(1)
+
+    engines = package.get("engines", {})
+    node_engine = engines.get("node") if isinstance(engines, dict) else None
+    node_match = (
+        re.fullmatch(r">=([1-9][0-9]*)", node_engine)
+        if isinstance(node_engine, str)
+        else None
+    )
+    if node_match is None:
+        errors.append("package.json engines.node must declare one minimum major as >=N")
+        minimum_node_major = None
+    else:
+        minimum_node_major = int(node_match.group(1))
+
+    dev_dependencies = package.get("devDependencies", {})
+    node_types = (
+        dev_dependencies.get("@types/node")
+        if isinstance(dev_dependencies, dict)
+        else None
+    )
+    node_types_match = (
+        SEMVER.fullmatch(node_types) if isinstance(node_types, str) else None
+    )
+    if node_types_match is None:
+        errors.append("package.json must pin @types/node to an exact patch version")
+    elif (
+        minimum_node_major is not None
+        and int(node_types_match.group(0).split(".", 1)[0]) != minimum_node_major
+    ):
+        errors.append(
+            f"package.json @types/node major must match the minimum Node "
+            f"runtime {minimum_node_major}"
+        )
+
+    primary_node_path = (
+        flox_manifest.get("install", {}).get("nodejs", {}).get("pkg-path")
+    )
+    primary_node_match = (
+        re.fullmatch(r"nodejs_([1-9][0-9]*)", primary_node_path)
+        if isinstance(primary_node_path, str)
+        else None
+    )
+    if minimum_node_major is not None and (
+        primary_node_match is None
+        or int(primary_node_match.group(1)) < minimum_node_major
+    ):
+        errors.append(
+            ".flox/env/manifest.toml nodejs must meet the minimum Node runtime"
+        )
+
+    minimum_node_manifest_path = (
+        ROOT / f".ci/node-{minimum_node_major}/.flox/env/manifest.toml"
+        if minimum_node_major is not None
+        else None
+    )
+    if minimum_node_manifest_path is None:
+        minimum_node_manifest: dict[str, Any] = {}
+    elif not minimum_node_manifest_path.is_file():
+        errors.append(f".ci/node-{minimum_node_major} Flox environment must exist")
+        minimum_node_manifest = {}
+    else:
+        with minimum_node_manifest_path.open("rb") as file:
+            minimum_node_manifest = tomllib.load(file)
+    minimum_node_path = (
+        minimum_node_manifest.get("install", {}).get("nodejs", {}).get("pkg-path")
+    )
+    if (
+        minimum_node_major is not None
+        and minimum_node_path != f"nodejs_{minimum_node_major}"
+    ):
+        errors.append(
+            f".ci/node-{minimum_node_major} Flox environment must use "
+            f"nodejs_{minimum_node_major}"
+        )
 
     dependencies = package.get("dependencies", {})
     invariant_spec = (
@@ -96,6 +173,36 @@ def main() -> int:
             "pnpm-workspace.yaml esbuild overrides are "
             f"{workspace_esbuild_versions!r}; expected only {[ESBUILD_VERSION]!r}"
         )
+    workspace_postcss_versions = re.findall(
+        r"^\s{2}postcss:\s*[\"']?([0-9]+\.[0-9]+\.[0-9]+)[\"']?\s*$",
+        workspace,
+        re.MULTILINE,
+    )
+    if workspace_postcss_versions != [POSTCSS_VERSION]:
+        errors.append(
+            "pnpm-workspace.yaml postcss overrides are "
+            f"{workspace_postcss_versions!r}; expected only {[POSTCSS_VERSION]!r}"
+        )
+    release_age_section = re.search(
+        r"^minimumReleaseAgeExclude:\s*\n((?:^[ \t]+.*(?:\n|$))*)",
+        workspace,
+        re.MULTILINE,
+    )
+    release_age_entries = (
+        re.findall(
+            r"^[ \t]*-[ \t]*[\"']?([^\"'\s]+)[\"']?[ \t]*$",
+            release_age_section.group(1),
+            re.MULTILINE,
+        )
+        if release_age_section is not None
+        else []
+    )
+    expected_release_age_entries = [f"postcss@{POSTCSS_VERSION}"]
+    if release_age_entries != expected_release_age_entries:
+        errors.append(
+            "pnpm-workspace.yaml minimumReleaseAgeExclude entries are "
+            f"{release_age_entries!r}; expected only {expected_release_age_entries!r}"
+        )
     invariant_allow_build = (
         f'"{INVARIANT_PROTOCOL_PACKAGE}@{INVARIANT_PROTOCOL_LOCATOR}": true'
     )
@@ -105,9 +212,7 @@ def main() -> int:
         )
     workspace_invariant_shas = re.findall(
         r"^\s*[\"']?"
-        + re.escape(
-            f"{INVARIANT_PROTOCOL_PACKAGE}@{INVARIANT_PROTOCOL_LOCATOR_PREFIX}"
-        )
+        + re.escape(f"{INVARIANT_PROTOCOL_PACKAGE}@{INVARIANT_PROTOCOL_LOCATOR_PREFIX}")
         + r"([0-9a-f]{40})[\"']?:",
         workspace,
         re.MULTILINE,
@@ -141,13 +246,33 @@ def main() -> int:
             f"expected only {[ESBUILD_VERSION]!r}"
         )
     if f"  esbuild: {ESBUILD_VERSION}" not in pnpm_lock:
-        errors.append("pnpm-lock.yaml esbuild override does not match pnpm-workspace.yaml")
+        errors.append(
+            "pnpm-lock.yaml esbuild override does not match pnpm-workspace.yaml"
+        )
+    lock_postcss_versions = set(
+        re.findall(
+            r"^\s{2}postcss@([0-9]+\.[0-9]+\.[0-9]+):",
+            pnpm_lock,
+            re.MULTILINE,
+        )
+    )
+    if lock_postcss_versions != {POSTCSS_VERSION}:
+        errors.append(
+            "pnpm-lock.yaml postcss package versions are "
+            f"{sorted(lock_postcss_versions)!r}; "
+            f"expected only {[POSTCSS_VERSION]!r}"
+        )
+    if f"  postcss: {POSTCSS_VERSION}" not in pnpm_lock:
+        errors.append(
+            "pnpm-lock.yaml postcss override does not match pnpm-workspace.yaml"
+        )
     if f"specifier: {INVARIANT_PROTOCOL_SPEC}" not in pnpm_lock:
-        errors.append("pnpm-lock.yaml invariantprotocol specifier does not match package.json")
+        errors.append(
+            "pnpm-lock.yaml invariantprotocol specifier does not match package.json"
+        )
     lock_invariant_spec_shas = set(
         re.findall(
-            re.escape("github:jim-technologies/invariantprotocol#")
-            + r"([0-9a-f]{40})",
+            re.escape("github:jim-technologies/invariantprotocol#") + r"([0-9a-f]{40})",
             pnpm_lock,
         )
     )
@@ -158,7 +283,9 @@ def main() -> int:
             f"expected only {[INVARIANT_PROTOCOL_SHA]!r}"
         )
     if f"version: {INVARIANT_PROTOCOL_LOCATOR}" not in pnpm_lock:
-        errors.append("pnpm-lock.yaml invariantprotocol resolution does not match the pin")
+        errors.append(
+            "pnpm-lock.yaml invariantprotocol resolution does not match the pin"
+        )
     invariant_lock_header = (
         f"  '{INVARIANT_PROTOCOL_PACKAGE}@{INVARIANT_PROTOCOL_LOCATOR}':"
     )
@@ -200,7 +327,9 @@ def main() -> int:
         if not python_license.is_file():
             errors.append(f"python/{license_file} must be included for Git builds")
         elif python_license.read_bytes() != root_license.read_bytes():
-            errors.append(f"python/{license_file} must be byte-identical to {license_file}")
+            errors.append(
+                f"python/{license_file} must be byte-identical to {license_file}"
+            )
 
     medallion_packages = [
         item for item in uv_lock["package"] if item.get("name") == "medallion"
@@ -216,7 +345,7 @@ def main() -> int:
         uv_version = medallion_package.get("version", "<missing>")
         if medallion_package.get("source") != {"editable": "."}:
             errors.append(
-                "python/uv.lock medallion package must use source = { editable = \".\" }"
+                'python/uv.lock medallion package must use source = { editable = "." }'
             )
 
     actual_versions = {
@@ -240,7 +369,6 @@ def main() -> int:
             f"go.mod must declare an exact Go patch version, got {go_version!r}"
         )
     else:
-        flox_manifest = read_toml(".flox/env/manifest.toml")
         expected_toolchain = f"go{go_version}+auto"
         actual_toolchain = flox_manifest.get("vars", {}).get("GOTOOLCHAIN")
         if actual_toolchain != expected_toolchain:
@@ -258,12 +386,14 @@ def main() -> int:
             nested_go_mods.append(path.relative_to(ROOT))
     nested_go_mods.sort()
     if nested_go_mods:
-        errors.append(f"nested Go modules are not allowed: {nested_go_mods}")
+        errors.append(f"unexpected nested Go modules: {nested_go_mods}")
 
     readme = (ROOT / "README.md").read_text()
     for marker in ("`VERSION`", "`vX.Y.Z`"):
         if marker not in readme:
-            errors.append(f"README.md must document the lockstep release marker {marker}")
+            errors.append(
+                f"README.md must document the lockstep release marker {marker}"
+            )
     for line_number, line in enumerate(readme.splitlines(), 1):
         if line.strip().startswith("npm install") and "--allow-git=all" not in line:
             errors.append(
@@ -307,6 +437,22 @@ def main() -> int:
         actual_tag = os.environ.get("GITHUB_REF_NAME")
         if actual_tag != expected_tag:
             errors.append(f"release tag is {actual_tag!r}; expected {expected_tag!r}")
+        elif os.environ.get("GITHUB_ACTIONS") == "true":
+            tag_type = subprocess.run(
+                ["git", "cat-file", "-t", f"refs/tags/{actual_tag}"],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if tag_type.returncode != 0:
+                errors.append(
+                    f"release tag {actual_tag!r} is unavailable in the CI checkout"
+                )
+            elif tag_type.stdout.strip() != "tag":
+                errors.append(
+                    f"release tag {actual_tag!r} must be an annotated Git tag"
+                )
 
     if errors:
         print("version consistency check failed:", file=sys.stderr)

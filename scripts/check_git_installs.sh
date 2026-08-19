@@ -2,6 +2,19 @@
 
 set -euo pipefail
 
+mode="${1:-all}"
+if (($# > 1)); then
+  echo "usage: $0 [all|typescript]" >&2
+  exit 2
+fi
+case "$mode" in
+  all | typescript) ;;
+  *)
+    echo "usage: $0 [all|typescript]" >&2
+    exit 2
+    ;;
+esac
+
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 version="$(tr -d '[:space:]' <"$root/VERSION")"
 tmp="$(mktemp -d)"
@@ -55,39 +68,76 @@ for ref in "$sha" "$tag"; do
   suffix="${ref:0:12}"
   echo "Checking Git installs from ${ref}"
 
-  echo "==> Go"
-  go_consumer="$tmp/go-consumer-$suffix"
-  mkdir -p "$go_consumer" "$tmp/gopath"
-  (
-    cd "$go_consumer"
-    go mod init example.com/medallion-git-install >/dev/null
-    env \
-      GIT_ALLOW_PROTOCOL=file:https \
-      GIT_CONFIG_GLOBAL="$git_config" \
-      GIT_CONFIG_NOSYSTEM=1 \
-      GOFLAGS=-mod=mod \
-      GOPATH="$tmp/gopath" \
-      GOPRIVATE=github.com/jim-technologies/medallion-sdk \
-      GOPROXY=https://proxy.golang.org,direct \
-      go get "github.com/jim-technologies/medallion-sdk/go@${ref}"
-    env \
-      GIT_ALLOW_PROTOCOL=file:https \
-      GIT_CONFIG_GLOBAL="$git_config" \
-      GIT_CONFIG_NOSYSTEM=1 \
-      GOFLAGS=-mod=readonly \
-      GOPATH="$tmp/gopath" \
-      GOPRIVATE=github.com/jim-technologies/medallion-sdk \
-      GOPROXY=https://proxy.golang.org,direct \
-      go build github.com/jim-technologies/medallion-sdk/go
-  )
+  if [[ "$mode" == "all" ]]; then
+    echo "==> Go"
+    go_consumer="$tmp/go-consumer-$suffix"
+    mkdir -p "$go_consumer" "$tmp/gopath"
+    (
+      cd "$go_consumer"
+      go mod init example.com/medallion-git-install >/dev/null
+      env \
+        GIT_ALLOW_PROTOCOL=file:https \
+        GIT_CONFIG_GLOBAL="$git_config" \
+        GIT_CONFIG_NOSYSTEM=1 \
+        GOFLAGS=-mod=mod \
+        GOPATH="$tmp/gopath" \
+        GOPRIVATE=github.com/jim-technologies/medallion-sdk \
+        GOPROXY=https://proxy.golang.org,direct \
+        go get "github.com/jim-technologies/medallion-sdk/go@${ref}"
+      env \
+        GIT_ALLOW_PROTOCOL=file:https \
+        GIT_CONFIG_GLOBAL="$git_config" \
+        GIT_CONFIG_NOSYSTEM=1 \
+        GOFLAGS=-mod=readonly \
+        GOPATH="$tmp/gopath" \
+        GOPRIVATE=github.com/jim-technologies/medallion-sdk \
+        GOPROXY=https://proxy.golang.org,direct \
+        go build github.com/jim-technologies/medallion-sdk/go
+      sdk_module_dir="$(
+        env \
+          GIT_ALLOW_PROTOCOL=file:https \
+          GIT_CONFIG_GLOBAL="$git_config" \
+          GIT_CONFIG_NOSYSTEM=1 \
+          GOFLAGS=-mod=readonly \
+          GOPATH="$tmp/gopath" \
+          GOPRIVATE=github.com/jim-technologies/medallion-sdk \
+          GOPROXY=https://proxy.golang.org,direct \
+          go list -m -f '{{.Dir}}' github.com/jim-technologies/medallion-sdk
+      )"
+      mapfile -t contract_directories < <(
+        find "$sdk_module_dir/proto" -mindepth 1 -maxdepth 1 -type d \
+          -name '*contract*' -printf '%f\n' | sort
+      )
+      if [[ "${contract_directories[*]}" != "external-ingestion-contract" ]]; then
+        echo "Go module archive has unexpected contract directories: ${contract_directories[*]}" >&2
+        exit 1
+      fi
+      if [[ ! -d "$sdk_module_dir/proto/external-ingestion-contract/v1" ]]; then
+        echo "Go module archive is missing the minimal ingestion contract" >&2
+        exit 1
+      fi
+      mapfile -t descriptors < <(
+        find "$sdk_module_dir/proto" -maxdepth 1 -type f \
+          -name '*.descriptor.binpb' -printf '%f\n' | sort
+      )
+      if [[ "${descriptors[*]}" != "external-ingestion-v1.descriptor.binpb" ]]; then
+        echo "Go module archive has unexpected service descriptors: ${descriptors[*]}" >&2
+        exit 1
+      fi
+      python3 "$root/scripts/check_package_artifacts.py" \
+        --scan-tree "$sdk_module_dir"
+      python3 "$root/scripts/check_package_artifacts.py" \
+        --check-contract-tree \
+        "$sdk_module_dir/proto/external-ingestion-contract/v1"
+    )
 
-  echo "==> Python"
-  python_venv="$tmp/python-venv-$suffix"
-  uv venv --quiet --seed --python 3.14 "$python_venv"
-  "$python_venv/bin/python" -m pip install --quiet \
-    --disable-pip-version-check \
-    "git+file://${source_repo}@${ref}#subdirectory=python"
-  EXPECTED_VERSION="$version" "$python_venv/bin/python" - <<'PY'
+    echo "==> Python"
+    python_venv="$tmp/python-venv-$suffix"
+    uv venv --quiet --seed --python 3.14 "$python_venv"
+    "$python_venv/bin/python" -m pip install --quiet \
+      --disable-pip-version-check \
+      "git+file://${source_repo}@${ref}#subdirectory=python"
+    EXPECTED_VERSION="$version" "$python_venv/bin/python" - <<'PY'
 import importlib.metadata
 import os
 
@@ -96,6 +146,18 @@ import medallion
 assert importlib.metadata.version("medallion") == os.environ["EXPECTED_VERSION"]
 assert medallion.MedallionClient is not None
 PY
+    installed_python_root="$(
+      "$python_venv/bin/python" - <<'PY'
+from pathlib import Path
+
+import medallion
+
+print(Path(medallion.__file__).resolve().parent)
+PY
+    )"
+    python3 "$root/scripts/check_package_artifacts.py" \
+      --scan-tree "$installed_python_root"
+  fi
 
   echo "==> TypeScript"
   npm_consumer="$tmp/npm-consumer-$suffix"
@@ -122,7 +184,22 @@ if (typeof MedallionClient !== "function") {
   throw new Error("MedallionClient export is unavailable");
 }
 JS
+    node <<'JS'
+const { MedallionClient } = require("@jimtech/medallion");
+
+if (typeof MedallionClient !== "function") {
+  throw new Error("CommonJS MedallionClient export is unavailable");
+}
+JS
+    if [[ "$mode" == "all" ]]; then
+      python3 "$root/scripts/check_package_artifacts.py" \
+        --scan-tree "$npm_consumer/node_modules/@jimtech/medallion"
+    fi
   )
 done
 
-echo "Git SHA and root-tag installs passed for Go, Python, and TypeScript"
+if [[ "$mode" == "all" ]]; then
+  echo "Git SHA and root-tag installs passed for Go, Python, and TypeScript"
+else
+  echo "Git SHA and root-tag installs passed for TypeScript"
+fi

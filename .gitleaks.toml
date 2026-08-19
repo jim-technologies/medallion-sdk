@@ -4,6 +4,6 @@ useDefault = true
 [[allowlists]]
 description = "Generated SDK artifacts containing embedded protobuf descriptors"
 paths = [
-  '''^src/(connect|ontology|storage)-descriptor[.]ts$''',
+  '''^src/connect-descriptor[.]ts$''',
   '''^dist/''',
 ]

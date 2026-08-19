@@ -15,6 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_FILES = (
+    ".ci/node-24/.flox/env/manifest.toml",
     ".flox/env/manifest.toml",
     "LICENSE",
     "NOTICE",
@@ -59,6 +60,7 @@ class VersionScriptsTest(unittest.TestCase):
         process_env = os.environ.copy()
         # Fixture checks provide their own synthetic release context. Do not
         # inherit an outer tag-triggered GitHub Actions run.
+        process_env.pop("GITHUB_ACTIONS", None)
         process_env.pop("GITHUB_REF_TYPE", None)
         process_env.pop("GITHUB_REF_NAME", None)
         process_env["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -79,6 +81,52 @@ class VersionScriptsTest(unittest.TestCase):
             for relative in VERSION_MIRRORS
         }
 
+    def create_fixture_tag(self, *, annotated: bool) -> str:
+        subprocess.run(
+            ["git", "init", "--quiet"],
+            cwd=self.fixture,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "add", "--all"],
+            cwd=self.fixture,
+            check=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.name=Version test",
+                "-c",
+                "user.email=version-test@example.invalid",
+                "commit",
+                "--quiet",
+                "-m",
+                "Version test fixture",
+            ],
+            cwd=self.fixture,
+            check=True,
+        )
+        version = (self.fixture / "VERSION").read_text().strip()
+        tag = f"v{version}"
+        if annotated:
+            tag_arguments = [
+                "git",
+                "-c",
+                "user.name=Version test",
+                "-c",
+                "user.email=version-test@example.invalid",
+                "tag",
+                "--annotate",
+                "--message",
+                "Version test tag",
+                tag,
+            ]
+        else:
+            tag_arguments = ["git", "tag", tag]
+        subprocess.run(tag_arguments, cwd=self.fixture, check=True)
+        return tag
+
     def test_setter_updates_every_mirror_and_tag_check(self) -> None:
         result = self.run_script("set_version.py", "0.2.3")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -86,8 +134,12 @@ class VersionScriptsTest(unittest.TestCase):
         package = json.loads((self.fixture / "package.json").read_text())
         self.assertEqual((self.fixture / "VERSION").read_text().strip(), "0.2.3")
         self.assertEqual(package["version"], "0.2.3")
-        self.assertIn('version = "0.2.3"', (self.fixture / "python/pyproject.toml").read_text())
-        self.assertIn('version = "0.2.3"', (self.fixture / "python/uv.lock").read_text())
+        self.assertIn(
+            'version = "0.2.3"', (self.fixture / "python/pyproject.toml").read_text()
+        )
+        self.assertIn(
+            'version = "0.2.3"', (self.fixture / "python/uv.lock").read_text()
+        )
 
         tagged = self.run_script(
             "check_versions.py",
@@ -108,6 +160,47 @@ class VersionScriptsTest(unittest.TestCase):
                 result = self.run_script("set_version.py", version)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(self.mirror_snapshot(), before)
+
+    def test_checker_accepts_annotated_ci_release_tag(self) -> None:
+        tag = self.create_fixture_tag(annotated=True)
+
+        result = self.run_script(
+            "check_versions.py",
+            env={
+                "GITHUB_ACTIONS": "true",
+                "GITHUB_REF_TYPE": "tag",
+                "GITHUB_REF_NAME": tag,
+            },
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_checker_rejects_lightweight_ci_release_tag(self) -> None:
+        tag = self.create_fixture_tag(annotated=False)
+
+        result = self.run_script(
+            "check_versions.py",
+            env={
+                "GITHUB_ACTIONS": "true",
+                "GITHUB_REF_TYPE": "tag",
+                "GITHUB_REF_NAME": tag,
+            },
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must be an annotated Git tag", result.stderr)
+
+    def test_checker_rejects_unavailable_ci_release_tag(self) -> None:
+        version = (self.fixture / "VERSION").read_text().strip()
+
+        result = self.run_script(
+            "check_versions.py",
+            env={
+                "GITHUB_ACTIONS": "true",
+                "GITHUB_REF_TYPE": "tag",
+                "GITHUB_REF_NAME": f"v{version}",
+            },
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("is unavailable in the CI checkout", result.stderr)
 
     def test_checker_detects_drift(self) -> None:
         package_path = self.fixture / "package.json"
@@ -140,9 +233,47 @@ class VersionScriptsTest(unittest.TestCase):
 
         result = self.run_script("check_versions.py")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn(
-            ".flox/env/manifest.toml GOTOOLCHAIN", result.stderr
+        self.assertIn(".flox/env/manifest.toml GOTOOLCHAIN", result.stderr)
+
+    def test_checker_rejects_unexpected_nested_go_module(self) -> None:
+        nested = self.fixture / "unexpected/go.mod"
+        nested.parent.mkdir(parents=True)
+        nested.write_text("module example.com/unexpected\n\ngo 1.26.5\n")
+
+        result = self.run_script("check_versions.py")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unexpected nested Go modules", result.stderr)
+
+    def test_checker_rejects_node_type_major_drift(self) -> None:
+        package_path = self.fixture / "package.json"
+        package = json.loads(package_path.read_text())
+        package["devDependencies"]["@types/node"] = "26.1.1"
+        package_path.write_text(json.dumps(package, indent=2) + "\n")
+
+        result = self.run_script("check_versions.py")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("@types/node major", result.stderr)
+
+    def test_checker_rejects_minimum_node_environment_drift(self) -> None:
+        manifest_path = self.fixture / ".ci/node-24/.flox/env/manifest.toml"
+        manifest_path.write_text(
+            manifest_path.read_text().replace("nodejs_24", "nodejs_26")
         )
+
+        result = self.run_script("check_versions.py")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(".ci/node-24 Flox environment", result.stderr)
+
+    def test_checker_rejects_missing_minimum_node_environment(self) -> None:
+        package_path = self.fixture / "package.json"
+        package = json.loads(package_path.read_text())
+        package["engines"]["node"] = ">=25"
+        package["devDependencies"]["@types/node"] = "25.0.0"
+        package_path.write_text(json.dumps(package, indent=2) + "\n")
+
+        result = self.run_script("check_versions.py")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(".ci/node-25 Flox environment must exist", result.stderr)
 
     def test_checker_rejects_documented_go_version_drift(self) -> None:
         readme_path = self.fixture / "README.md"
@@ -183,7 +314,9 @@ class VersionScriptsTest(unittest.TestCase):
     def test_checker_rejects_unsafe_npm_git_install_docs(self) -> None:
         readme_path = self.fixture / "README.md"
         readme_path.write_text(
-            readme_path.read_text().replace("npm install --allow-git=all", "npm install")
+            readme_path.read_text().replace(
+                "npm install --allow-git=all", "npm install"
+            )
         )
 
         result = self.run_script("check_versions.py")
@@ -202,9 +335,7 @@ class VersionScriptsTest(unittest.TestCase):
 
         result = self.run_script("check_versions.py")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn(
-            "pnpm-workspace.yaml invariantprotocol build pins", result.stderr
-        )
+        self.assertIn("pnpm-workspace.yaml invariantprotocol build pins", result.stderr)
 
     def test_checker_rejects_stale_invariant_lock_pin(self) -> None:
         package = json.loads((self.fixture / "package.json").read_text())
@@ -229,9 +360,7 @@ class VersionScriptsTest(unittest.TestCase):
 
         result = self.run_script("check_versions.py")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn(
-            "pnpm-lock.yaml invariantprotocol resolutions", result.stderr
-        )
+        self.assertIn("pnpm-lock.yaml invariantprotocol resolutions", result.stderr)
 
     def test_checker_rejects_stale_invariant_lock_specifier(self) -> None:
         package = json.loads((self.fixture / "package.json").read_text())
@@ -249,9 +378,7 @@ class VersionScriptsTest(unittest.TestCase):
 
         result = self.run_script("check_versions.py")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn(
-            "pnpm-lock.yaml invariantprotocol specifier pins", result.stderr
-        )
+        self.assertIn("pnpm-lock.yaml invariantprotocol specifier pins", result.stderr)
 
     def test_checker_rejects_esbuild_override_drift(self) -> None:
         workspace_path = self.fixture / "pnpm-workspace.yaml"
@@ -275,6 +402,46 @@ class VersionScriptsTest(unittest.TestCase):
         result = self.run_script("check_versions.py")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("esbuild package versions", result.stderr)
+
+    def test_checker_rejects_postcss_override_drift(self) -> None:
+        workspace_path = self.fixture / "pnpm-workspace.yaml"
+        workspace_path.write_text(
+            workspace_path.read_text().replace(
+                'postcss: "8.5.24"',
+                'postcss: "0.0.0"',
+            )
+        )
+
+        result = self.run_script("check_versions.py")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("postcss overrides", result.stderr)
+
+    def test_checker_rejects_postcss_lock_drift(self) -> None:
+        lock_path = self.fixture / "pnpm-lock.yaml"
+        lock_path.write_text(
+            lock_path.read_text().replace(
+                "  postcss@8.5.24:",
+                "  postcss@0.0.0:",
+                1,
+            )
+        )
+
+        result = self.run_script("check_versions.py")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("postcss package versions", result.stderr)
+
+    def test_checker_rejects_postcss_release_age_drift(self) -> None:
+        workspace_path = self.fixture / "pnpm-workspace.yaml"
+        workspace_path.write_text(
+            workspace_path.read_text().replace(
+                "- postcss@8.5.24",
+                "- postcss@0.0.0",
+            )
+        )
+
+        result = self.run_script("check_versions.py")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("minimumReleaseAgeExclude entries", result.stderr)
 
     def test_checker_rejects_python_license_drift(self) -> None:
         (self.fixture / "python/NOTICE").write_text("stale notice\n")

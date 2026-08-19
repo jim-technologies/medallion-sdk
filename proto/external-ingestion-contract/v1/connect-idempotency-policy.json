@@ -1,0 +1,20 @@
+{
+  "classifications": {
+    "read_only": {
+      "methods": [
+        "ListCdcEvents",
+        "ListAuditEvents"
+      ],
+      "rationale": "These verification calls read previously ingested events without committing a mutation."
+    },
+    "record_idempotent_batch": {
+      "methods": [
+        "PublishCdcEvents",
+        "PublishAuditEvents"
+      ],
+      "rationale": "Every event carries a stable source idempotency key and exact batch replay preserves content and ordering."
+    }
+  },
+  "schema_version": 1,
+  "service": "medallion.connect.v1.MedallionConnectService"
+}

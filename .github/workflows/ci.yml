@@ -28,14 +28,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Install Flox
         uses: flox/install-flox-action@3b80351ae97bbe063f264dc88fbd505507054963 # v2.5.3
         with:
           disable-metrics: "true"
+
+      - name: Verify the public SDK boundary
+        run: flox activate -- make check-public
+
+      - name: Verify the vendored ingestion contract offline
+        run: flox activate -- make contract-check
+
+      - name: Require immutable contract provenance for a release tag
+        if: ${{ github.ref_type == 'tag' }}
+        run: flox activate -- make contract-release-check
 
       - run: flox activate -- make check
 
@@ -44,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -60,9 +71,13 @@ jobs:
             node --version
             pnpm --version
             pnpm install --frozen-lockfile
+            pnpm check:public
+            node scripts/sync_external_ingestion_contract.mjs --check
             pnpm lint
             pnpm test
             pnpm build
+            pnpm check:examples
+            bash scripts/check_git_installs.sh typescript
           '
 
   security:
@@ -70,7 +85,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -86,7 +101,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -106,14 +121,14 @@ jobs:
     environment: sdk-smoke
     env:
       MEDALLION_SMOKE_BASE_URL: ${{ secrets.MEDALLION_SMOKE_BASE_URL }}
-      MEDALLION_SMOKE_ACCESS_TOKEN: ${{ secrets.MEDALLION_SMOKE_ACCESS_TOKEN }}
-      MEDALLION_SMOKE_ORGANIZATION_ID: ${{ secrets.MEDALLION_SMOKE_ORGANIZATION_ID }}
+      MEDALLION_SMOKE_API_KEY: ${{ secrets.MEDALLION_SMOKE_API_KEY }}
+      MEDALLION_SMOKE_WORKSPACE_ID: ${{ secrets.MEDALLION_SMOKE_WORKSPACE_ID }}
       MEDALLION_SMOKE_EXPECTED_INGESTER_PRINCIPAL: ${{ secrets.MEDALLION_SMOKE_EXPECTED_INGESTER_PRINCIPAL }}
       MEDALLION_SMOKE_CONNECTOR_ID: ${{ secrets.MEDALLION_SMOKE_CONNECTOR_ID }}
-      MEDALLION_SMOKE_DENIED_ORGANIZATION_ID: ${{ secrets.MEDALLION_SMOKE_DENIED_ORGANIZATION_ID }}
+      MEDALLION_SMOKE_DENIED_WORKSPACE_ID: ${{ secrets.MEDALLION_SMOKE_DENIED_WORKSPACE_ID }}
       MEDALLION_SMOKE_EVIDENCE_URL: ${{ secrets.MEDALLION_SMOKE_EVIDENCE_URL }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 

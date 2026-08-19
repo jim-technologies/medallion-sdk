@@ -1,0 +1,86 @@
+{
+  "$id": "urn:medallion:external-ingestion-sdk:v1:manifest",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "const": "schemas/external-ingestion-sdk-v1.schema.json"
+    },
+    "descriptor": {
+      "const": "descriptor.binpb"
+    },
+    "descriptor_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "methods": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "client_streaming": {
+            "const": false
+          },
+          "name": {
+            "enum": [
+              "PublishCdcEvents",
+              "PublishAuditEvents",
+              "ListCdcEvents",
+              "ListAuditEvents"
+            ]
+          },
+          "path": {
+            "pattern": "^/medallion\\.connect\\.v1\\.MedallionConnectService/(PublishCdcEvents|PublishAuditEvents|ListCdcEvents|ListAuditEvents)$",
+            "type": "string"
+          },
+          "request_type": {
+            "pattern": "^medallion\\.connect\\.v1\\.(PublishCdcEventsRequest|PublishAuditEventsRequest|ListCdcEventsRequest|ListAuditEventsRequest)$",
+            "type": "string"
+          },
+          "response_type": {
+            "pattern": "^medallion\\.connect\\.v1\\.(PublishCdcEventsResponse|PublishAuditEventsResponse|ListCdcEventsResponse|ListAuditEventsResponse)$",
+            "type": "string"
+          },
+          "server_streaming": {
+            "const": false
+          }
+        },
+        "required": [
+          "client_streaming",
+          "name",
+          "path",
+          "request_type",
+          "response_type",
+          "server_streaming"
+        ],
+        "type": "object"
+      },
+      "maxItems": 4,
+      "minItems": 4,
+      "type": "array"
+    },
+    "package": {
+      "const": "medallion.connect.v1"
+    },
+    "profile": {
+      "const": "external_ingestion_sdk_v1"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "service": {
+      "const": "medallion.connect.v1.MedallionConnectService"
+    }
+  },
+  "required": [
+    "$schema",
+    "descriptor",
+    "descriptor_sha256",
+    "methods",
+    "package",
+    "profile",
+    "schema_version",
+    "service"
+  ],
+  "title": "External-ingestion SDK v1 manifest",
+  "type": "object"
+}

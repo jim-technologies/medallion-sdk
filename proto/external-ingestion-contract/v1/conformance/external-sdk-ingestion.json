@@ -1,0 +1,159 @@
+{
+  "$schema": "schemas/fixture-document.schema.json",
+  "category": "external_sdk_ingestion",
+  "fixtures": [
+    {
+      "expected": {
+        "body": {
+          "acceptedCount": 1,
+          "duplicateCount": 1,
+          "events": [
+            {
+              "eventId": "9007199254740993",
+              "idempotencyKey": "cdc:fixture:accepted"
+            },
+            {
+              "duplicate": true,
+              "eventId": "9007199254740994",
+              "idempotencyKey": "cdc:fixture:duplicate"
+            }
+          ]
+        },
+        "headers": {
+          "content-type": "application/json"
+        },
+        "httpStatus": 200,
+        "receiptDispositions": [
+          "accepted",
+          "duplicate"
+        ]
+      },
+      "id": "ingestion.publish-cdc.accepted-and-duplicate",
+      "input": {
+        "authFixtureId": "auth.api-key-workspace-bound",
+        "body": {
+          "connectorId": "connector_fixture",
+          "events": [
+            {
+              "actorPrincipal": "source:fixture",
+              "description": "fixture CDC event",
+              "entityId": "order_accepted",
+              "entityType": "order",
+              "idempotencyKey": "cdc:fixture:accepted",
+              "occurredAt": "2000-01-01T00:00:00Z",
+              "operation": "CDC_OPERATION_INSERT",
+              "payloadJson": "{\"amount\":\"42.00\"}",
+              "sourceEventId": "source_cdc_accepted",
+              "streamName": "orders"
+            },
+            {
+              "actorPrincipal": "source:fixture",
+              "description": "fixture CDC duplicate",
+              "entityId": "order_duplicate",
+              "entityType": "order",
+              "idempotencyKey": "cdc:fixture:duplicate",
+              "occurredAt": "2000-01-01T00:00:00Z",
+              "operation": "CDC_OPERATION_UPDATE",
+              "payloadJson": "{\"status\":\"complete\"}",
+              "sourceEventId": "source_cdc_duplicate",
+              "streamName": "orders"
+            }
+          ]
+        },
+        "headers": {
+          "content-type": "application/json",
+          "x-medallion-workspace-id": "ws_01jz9q5g6rsf7r5ar4rah1b2c3"
+        }
+      },
+      "kind": "transport_exchange",
+      "protocol": {
+        "method": "PublishCdcEvents",
+        "path": "/medallion.connect.v1.MedallionConnectService/PublishCdcEvents",
+        "service": "medallion.connect.v1.MedallionConnectService"
+      },
+      "tags": [
+        "accepted-receipt",
+        "duplicate-receipt",
+        "idempotency",
+        "int64-string"
+      ]
+    },
+    {
+      "expected": {
+        "body": {
+          "acceptedCount": 1,
+          "duplicateCount": 1,
+          "events": [
+            {
+              "eventId": "9223372036854775806",
+              "idempotencyKey": "audit:fixture:accepted"
+            },
+            {
+              "duplicate": true,
+              "eventId": "9223372036854775805",
+              "idempotencyKey": "audit:fixture:duplicate"
+            }
+          ]
+        },
+        "headers": {
+          "content-type": "application/json"
+        },
+        "httpStatus": 200,
+        "receiptDispositions": [
+          "accepted",
+          "duplicate"
+        ]
+      },
+      "id": "ingestion.publish-audit.accepted-and-duplicate",
+      "input": {
+        "authFixtureId": "auth.api-key-workspace-bound",
+        "body": {
+          "connectorId": "connector_fixture",
+          "events": [
+            {
+              "action": "approve",
+              "actorPrincipal": "source:fixture",
+              "description": "fixture audit event",
+              "idempotencyKey": "audit:fixture:accepted",
+              "occurredAt": "2000-01-01T00:00:00Z",
+              "outcome": "AUDIT_EVENT_OUTCOME_SUCCEEDED",
+              "payloadJson": "{\"decision\":\"approved\"}",
+              "resourceId": "order_accepted",
+              "resourceType": "order",
+              "sourceEventId": "source_audit_accepted"
+            },
+            {
+              "action": "approve",
+              "actorPrincipal": "source:fixture",
+              "description": "fixture audit duplicate",
+              "idempotencyKey": "audit:fixture:duplicate",
+              "occurredAt": "2000-01-01T00:00:00Z",
+              "outcome": "AUDIT_EVENT_OUTCOME_SUCCEEDED",
+              "payloadJson": "{\"decision\":\"approved\"}",
+              "resourceId": "order_duplicate",
+              "resourceType": "order",
+              "sourceEventId": "source_audit_duplicate"
+            }
+          ]
+        },
+        "headers": {
+          "content-type": "application/json",
+          "x-medallion-workspace-id": "ws_01jz9q5g6rsf7r5ar4rah1b2c3"
+        }
+      },
+      "kind": "transport_exchange",
+      "protocol": {
+        "method": "PublishAuditEvents",
+        "path": "/medallion.connect.v1.MedallionConnectService/PublishAuditEvents",
+        "service": "medallion.connect.v1.MedallionConnectService"
+      },
+      "tags": [
+        "accepted-receipt",
+        "duplicate-receipt",
+        "idempotency",
+        "int64-string"
+      ]
+    }
+  ],
+  "schemaVersion": 1
+}

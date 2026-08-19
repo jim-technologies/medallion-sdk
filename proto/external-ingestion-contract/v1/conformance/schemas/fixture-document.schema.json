@@ -1,0 +1,95 @@
+{
+  "$defs": {
+    "fixture": {
+      "additionalProperties": false,
+      "properties": {
+        "expected": {
+          "type": "object"
+        },
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "type": "string"
+        },
+        "input": {
+          "type": "object"
+        },
+        "kind": {
+          "const": "transport_exchange"
+        },
+        "protocol": {
+          "additionalProperties": false,
+          "properties": {
+            "method": {
+              "enum": [
+                "PublishCdcEvents",
+                "PublishAuditEvents",
+                "ListCdcEvents",
+                "ListAuditEvents"
+              ]
+            },
+            "path": {
+              "pattern": "^/medallion\\.connect\\.v1\\.MedallionConnectService/(PublishCdcEvents|PublishAuditEvents|ListCdcEvents|ListAuditEvents)$",
+              "type": "string"
+            },
+            "service": {
+              "enum": [
+                "medallion.connect.v1.MedallionConnectService"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "path",
+            "service"
+          ],
+          "type": "object"
+        },
+        "tags": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_-]*$",
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "expected",
+        "id",
+        "input",
+        "kind",
+        "protocol"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:medallion:external-ingestion-sdk:v1:fixture-document",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "const": "schemas/fixture-document.schema.json"
+    },
+    "category": {
+      "const": "external_sdk_ingestion"
+    },
+    "fixtures": {
+      "items": {
+        "$ref": "#/$defs/fixture"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "schemaVersion": {
+      "const": 1
+    }
+  },
+  "required": [
+    "$schema",
+    "category",
+    "fixtures",
+    "schemaVersion"
+  ],
+  "title": "External-ingestion SDK conformance fixtures",
+  "type": "object"
+}

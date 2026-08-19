@@ -15,7 +15,7 @@ PIP_AUDIT_VERSION ?= 2.10.1
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install check lock-check version-check version-set generated-check artifact-check git-install-check check-public test test-version test-package-artifacts test-ts test-go test-python test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python lint-proto lint-shell lint-workflows format format-ts format-go format-python format-proto format-shell audit audit-node audit-go audit-python secret-check deps proto-bindings proto-descriptor run clean
+.PHONY: help install check lock-check version-check version-set contract-sync contract-check contract-release-check generated-check artifact-check git-install-check check-public check-examples test test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python lint-proto lint-shell lint-workflows format format-ts format-go format-python format-proto format-shell audit audit-node audit-go audit-python secret-check deps proto-bindings proto-descriptor run clean
 
 help: ## Show available targets.
 	@awk 'BEGIN {FS = ":.*## "; printf "Medallion SDK targets:\n"} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -29,7 +29,7 @@ install: ## Install development dependencies for all languages.
 	$(GO) mod download
 	cd python && $(UV) sync --locked
 
-check: lock-check version-check generated-check check-public lint test build artifact-check ## Run every deterministic CI validation gate.
+check: lock-check version-check generated-check check-public lint test build check-examples artifact-check ## Run every deterministic CI validation gate.
 
 lock-check: node_modules/.medallion-install-stamp ## Verify all language dependency locks are synchronized.
 	$(GO) mod tidy -diff
@@ -42,10 +42,22 @@ version-set: ## Synchronize every SDK version (usage: make version-set VERSION=X
 	@test -n "$(VERSION)" || { echo "VERSION is required"; exit 2; }
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/set_version.py "$(VERSION)"
 
-generated-check: node_modules/.medallion-install-stamp ## Verify generated protobuf bindings and descriptors have no drift.
+contract-sync: node_modules/.medallion-install-stamp ## Sync a sanitized SDK contract export (MEDALLION_SDK_CONTRACT_ROOT), then regenerate.
+	node scripts/sync_external_ingestion_contract.mjs --sync
+	$(MAKE) proto-bindings proto-descriptor
+	node scripts/sync_external_ingestion_contract.mjs --check
 	scripts/check_generated.sh
 
-artifact-check: build ## Verify Git-install package payloads and license metadata.
+contract-check: node_modules/.medallion-install-stamp ## Verify vendored external-ingestion artifacts and wire parity offline.
+	node scripts/sync_external_ingestion_contract.mjs --check
+
+contract-release-check: node_modules/.medallion-install-stamp ## Require an immutable sanitized SDK contract attestation before tagging.
+	node scripts/sync_external_ingestion_contract.mjs --check-release
+
+generated-check: contract-check node_modules/.medallion-install-stamp ## Verify generated protobuf bindings and descriptors have no drift.
+	scripts/check_generated.sh
+
+artifact-check: build ## Verify Git-install package payloads and exact bundled license coverage.
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/check_package_artifacts.py
 
 git-install-check: ## Install every SDK from the exact tree by SHA and root tag.
@@ -54,13 +66,20 @@ git-install-check: ## Install every SDK from the exact tree by SHA and root tag.
 check-public: node_modules/.medallion-install-stamp ## Scan public SDK surfaces for private/internal references.
 	$(PNPM) check:public
 
-test: test-version test-package-artifacts test-ts test-go test-python ## Run all tests.
+check-examples: build ## Type-check the runnable TypeScript integration examples.
+	$(PNPM) check:examples
+
+test: test-version test-contract-sync test-package-artifacts test-ts test-go test-python ## Run all tests.
 
 test-version: ## Test version synchronization and release-tag guardrails.
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/test_versions.py
 
+test-contract-sync: node_modules/.medallion-install-stamp ## Test external-ingestion synchronization and drift detection.
+	node --test scripts/test_external_ingestion_contract.mjs
+
 test-package-artifacts: ## Test package-artifact compatibility helpers.
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/test_package_artifacts.py
+	node --test scripts/test_third_party_licenses.mjs
 
 test-ts: node_modules/.medallion-install-stamp ## Run TypeScript tests.
 	$(PNPM) test
@@ -71,7 +90,7 @@ test-go: ## Run Go tests.
 test-python: ## Run Python tests.
 	cd python && $(UV) run --locked python -m unittest discover tests
 
-test-deployed: node_modules/.medallion-install-stamp ## Run opt-in deployed smoke test against a locked-down tenant.
+test-deployed: node_modules/.medallion-install-stamp ## Run opt-in deployed smoke test against a locked-down workspace.
 	$(PNPM) test:deployed
 
 build: build-ts build-go build-python ## Build all SDK packages.
@@ -161,10 +180,10 @@ deps: ## Refresh dependencies within declared compatibility ranges.
 	cd python && $(UV) lock --upgrade
 
 proto-bindings: node_modules/.medallion-install-stamp ## Regenerate public Go and Python Connect protobuf bindings.
-	$(PNPM) exec buf generate --template buf.gen.yaml --path proto/medallion/connect/v1/connect.proto
+	$(PNPM) exec buf generate proto/external-ingestion-v1.descriptor.binpb --template buf.gen.yaml --path medallion/connect/v1/connect.proto
 
 proto-descriptor: node_modules/.medallion-install-stamp ## Regenerate TypeScript invariantprotocol descriptors.
-	$(PNPM) proto:descriptor
+	node scripts/embed-connect-descriptor.mjs
 
 run: build-ts ## Smoke-test importing the built TypeScript SDK.
 	node --input-type=module -e 'import("./dist/index.js").then((m) => { if (!m.MedallionClient) throw new Error("missing MedallionClient export"); })'

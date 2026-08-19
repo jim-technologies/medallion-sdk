@@ -1,12 +1,23 @@
-import { type DescField, type DescMessage, toJson } from "@bufbuild/protobuf";
-import { Server, type Tool } from "@jim-technologies/invariant-protocol";
+import {
+  type DescField,
+  type DescMessage,
+  type DescMethod,
+  fromJson,
+  type JsonValue,
+  toJson,
+} from "@bufbuild/protobuf";
+import { ParsedDescriptor } from "@jim-technologies/invariant-protocol";
 
+import { auditEventFromWire } from "./audit.js";
+import { cdcEventFromWire } from "./cdc.js";
 import { connectDescriptorBytes } from "./connect-descriptor.js";
 import { MedallionError } from "./errors.js";
-import { ontologyDescriptorBytes } from "./ontology-descriptor.js";
+import { batchResponse, optionalListText } from "./ingestion.js";
+import { preflightConnectRequest } from "./protocol-preflight.js";
 import type { RequestClient, ResponseEnvelope } from "./request.js";
-import { storageDescriptorBytes } from "./storage-descriptor.js";
 import type {
+  ConnectAuditEvent,
+  ConnectCdcEvent,
   ConnectListAuditEventsRequest,
   ConnectListAuditEventsResponse,
   ConnectListCdcEventsRequest,
@@ -15,167 +26,250 @@ import type {
   ConnectPublishAuditEventsResponse,
   ConnectPublishCdcEventsRequest,
   ConnectPublishCdcEventsResponse,
-  ConnectRegisterConnectorRequest,
-  ConnectRegisterConnectorResponse,
   RequestOptions,
 } from "./types.js";
 
-const CONNECT_JSON_HEADERS = {
-  "Connect-Protocol-Version": "1",
-};
 const CONNECT_SERVICE_NAME = "medallion.connect.v1.MedallionConnectService";
-const ONTOLOGY_SERVICE_NAME = "medallion.ontology.v1.MedallionOntologyService";
-const STORAGE_SERVICE_NAME = "medallion.storage.v1.StorageService";
 
 let connectRuntime: InvariantProtocolRuntime | undefined;
-let ontologyRuntime: InvariantProtocolRuntime | undefined;
-let storageRuntime: InvariantProtocolRuntime | undefined;
 
 export class ProtocolConnectClient {
+  readonly #requests: RequestClient;
+  readonly #workspaceId: string;
   private readonly runtime: InvariantProtocolRuntime;
 
-  constructor(private readonly requests: RequestClient) {
+  constructor(requests: RequestClient, workspaceId: string) {
+    this.#requests = requests;
+    this.#workspaceId = workspaceId;
     this.runtime = invariantConnectRuntime();
-  }
-
-  registerConnector(
-    request: ConnectRegisterConnectorRequest,
-    options: RequestOptions = {},
-  ): Promise<ResponseEnvelope<ConnectRegisterConnectorResponse>> {
-    return this.rpc("RegisterConnector", request, options, {
-      idempotencyKey: request.idempotency_key,
-    });
   }
 
   publishCdcEvents(
     request: ConnectPublishCdcEventsRequest,
     options: RequestOptions = {},
   ): Promise<ResponseEnvelope<ConnectPublishCdcEventsResponse>> {
-    return this.rpc("PublishCdcEvents", request, options, {
-      idempotencyKey: request.events[0]?.idempotency_key,
-    });
+    return this.#rpc("PublishCdcEvents", request, options, true);
   }
 
   listCdcEvents(
     request: ConnectListCdcEventsRequest,
     options: RequestOptions = {},
   ): Promise<ResponseEnvelope<ConnectListCdcEventsResponse>> {
-    return this.rpc("ListCdcEvents", request, options);
+    return this.#rpc("ListCdcEvents", request, options, true);
   }
 
   publishAuditEvents(
     request: ConnectPublishAuditEventsRequest,
     options: RequestOptions = {},
   ): Promise<ResponseEnvelope<ConnectPublishAuditEventsResponse>> {
-    return this.rpc("PublishAuditEvents", request, options, {
-      idempotencyKey: request.events[0]?.idempotency_key,
-    });
+    return this.#rpc("PublishAuditEvents", request, options, true);
   }
 
   listAuditEvents(
     request: ConnectListAuditEventsRequest,
     options: RequestOptions = {},
   ): Promise<ResponseEnvelope<ConnectListAuditEventsResponse>> {
-    return this.rpc("ListAuditEvents", request, options);
+    return this.#rpc("ListAuditEvents", request, options, true);
   }
 
-  executeConnectorAction<TResponse = unknown>(
-    request: Record<string, unknown>,
-    options: RequestOptions = {},
-  ): Promise<ResponseEnvelope<TResponse>> {
-    return this.rpc("ExecuteConnectorAction", request, options, {
-      idempotencyKey:
-        typeof request.idempotency_key === "string"
-          ? request.idempotency_key
-          : undefined,
-    });
-  }
-
-  private async rpc<TResponse>(
+  async #rpc<TResponse>(
     methodName: string,
     body: unknown,
     options: RequestOptions,
-    requestOptions: { idempotencyKey?: string } = {},
+    retrySafe: boolean,
   ): Promise<ResponseEnvelope<TResponse>> {
-    const tool = this.runtime.tool(methodName);
-    const response = await this.requests.requestJson<unknown>({
+    const method = this.runtime.method(methodName);
+    const normalizedBody = this.runtime.normalizeInput(method, body);
+    preflightConnectRequest(methodName, normalizedBody);
+    const encodedBody = this.runtime.encodeInput(method, normalizedBody);
+    const response = await this.#requests.requestJson<unknown>({
       method: "POST",
-      path: this.runtime.path(tool),
-      body: this.runtime.encodeInput(tool, body),
-      idempotencyKey: requestOptions.idempotencyKey,
-      headers: CONNECT_JSON_HEADERS,
+      path: this.runtime.path(method),
+      body: encodedBody,
       signal: options.signal,
       timeoutMs: options.timeoutMs,
+      connectProtocol: true,
+      retrySafe,
     });
 
+    const decoded = this.runtime.decodeOutput<TResponse>(
+      method,
+      response.body,
+      response.requestId,
+    );
+    validateProtocolResponse(
+      methodName,
+      encodedBody,
+      decoded,
+      this.#workspaceId,
+      response.requestId,
+    );
     return {
       requestId: response.requestId,
-      body: this.runtime.decodeOutput<TResponse>(tool, response.body),
+      body: decoded,
     };
   }
 }
 
+function validateProtocolResponse(
+  methodName: string,
+  request: unknown,
+  response: unknown,
+  workspaceId: string,
+  requestId?: string,
+): void {
+  if (
+    methodName === "PublishCdcEvents" ||
+    methodName === "PublishAuditEvents"
+  ) {
+    const events =
+      request !== null && typeof request === "object"
+        ? (request as { events?: Array<{ idempotencyKey?: unknown }> }).events
+        : undefined;
+    const expectedKeys = (events ?? []).map((event) =>
+      String(event.idempotencyKey),
+    );
+    void batchResponse(
+      response as
+        | ConnectPublishCdcEventsResponse
+        | ConnectPublishAuditEventsResponse,
+      expectedKeys,
+      requestId,
+    );
+    return;
+  }
+  if (methodName !== "ListCdcEvents" && methodName !== "ListAuditEvents") {
+    return;
+  }
+  if (response === null || typeof response !== "object") return;
+  const events = (response as { events?: unknown }).events;
+  if (events === undefined) return;
+  if (!Array.isArray(events)) {
+    throw new MedallionError("Medallion returned a malformed event list.", {
+      code: "MEDALLION_INVALID_LIST_RESPONSE",
+      requestId,
+    });
+  }
+  optionalListText(
+    (response as { next_page_cursor?: unknown }).next_page_cursor,
+    `${methodName}.nextCursor`,
+    2_048,
+    requestId,
+  );
+  for (const [index, event] of events.entries()) {
+    if (event === null || typeof event !== "object") {
+      throw new MedallionError(
+        `Medallion returned a malformed event at ${methodName}.events[${index}].`,
+        { code: "MEDALLION_INVALID_LIST_RESPONSE", requestId },
+      );
+    }
+    if (methodName === "ListCdcEvents") {
+      cdcEventFromWire(event as ConnectCdcEvent, workspaceId, requestId);
+    } else {
+      auditEventFromWire(event as ConnectAuditEvent, workspaceId, requestId);
+    }
+  }
+}
+
 class InvariantProtocolRuntime {
-  private readonly server: Server;
-  private readonly toolPrefix: string;
+  private readonly parsed: ParsedDescriptor;
   private readonly pathPrefix: string;
+  private readonly serviceName: string;
+  private readonly ignoreUnknownResponseFields: boolean;
 
   constructor(options: {
     descriptor: Uint8Array;
     serviceName: string;
     pathPrefix?: string;
+    ignoreUnknownResponseFields?: boolean;
   }) {
-    this.server = Server.fromBytes(options.descriptor);
-    this.server.connectHttp("http://127.0.0.1", {
-      serviceName: options.serviceName,
-    });
-    this.toolPrefix = `${options.serviceName.split(".").at(-1)}.`;
+    this.parsed = ParsedDescriptor.fromBytes(options.descriptor);
+    this.serviceName = options.serviceName;
     this.pathPrefix = normalizePathPrefix(options.pathPrefix);
+    this.ignoreUnknownResponseFields =
+      options.ignoreUnknownResponseFields ?? false;
+
+    if (!this.parsed.services.has(this.serviceName)) {
+      throw new MedallionError(
+        `Service ${this.serviceName} is not present in the vendored invariantprotocol descriptor.`,
+        { code: "MEDALLION_PROTOCOL_METHOD_NOT_FOUND" },
+      );
+    }
   }
 
-  tool(methodName: string): Tool {
-    const tool = this.server.tools.get(`${this.toolPrefix}${methodName}`);
-    if (tool === undefined) {
+  method(methodName: string): DescMethod {
+    const method = this.parsed.services
+      .get(this.serviceName)
+      ?.methods.get(methodName)?.desc;
+    if (method === undefined) {
       throw new MedallionError(
         `Method ${methodName} is not present in the vendored invariantprotocol descriptor.`,
         { code: "MEDALLION_PROTOCOL_METHOD_NOT_FOUND" },
       );
     }
-    return tool;
-  }
-
-  path(tool: Tool): string {
-    return `${this.pathPrefix}/${tool.serviceFullName}/${tool.methodName}`;
-  }
-
-  encodeInput(tool: Tool, input: unknown): unknown {
-    try {
-      const message = this.server.coerceMessage(
-        tool.inputDesc,
-        normalizeProtoJson(tool.inputDesc, input),
-      );
-      return toJson(tool.inputDesc, message, {
-        registry: this.server.parsed.registry,
-      });
-    } catch (error) {
+    if (method.methodKind !== "unary") {
       throw new MedallionError(
-        `Invalid request for ${tool.serviceFullName}.${tool.methodName}.`,
-        { code: "MEDALLION_PROTOCOL_ENCODE_FAILED", cause: error },
+        `Method ${this.serviceName}.${method.name} is streaming and is not supported by this SDK client.`,
+        { code: "MEDALLION_PROTOCOL_METHOD_UNSUPPORTED" },
+      );
+    }
+    return method;
+  }
+
+  path(method: DescMethod): string {
+    return `${this.pathPrefix}/${this.serviceName}/${method.name}`;
+  }
+
+  encodeInput(method: DescMethod, input: unknown): unknown {
+    try {
+      const message = fromJson(
+        method.input,
+        normalizeProtoJson(method.input, input) as JsonValue,
+        { registry: this.parsed.registry },
+      );
+      return toJson(method.input, message, {
+        registry: this.parsed.registry,
+      });
+    } catch {
+      throw new MedallionError(
+        `Invalid request for ${this.serviceName}.${method.name}.`,
+        { code: "MEDALLION_PROTOCOL_ENCODE_FAILED" },
       );
     }
   }
 
-  decodeOutput<TResponse>(tool: Tool, output: unknown): TResponse {
+  normalizeInput(method: DescMethod, input: unknown): unknown {
+    return normalizeProtoJson(method.input, input);
+  }
+
+  decodeOutput<TResponse>(
+    method: DescMethod,
+    output: unknown,
+    requestId?: string,
+  ): TResponse {
     try {
-      const message = this.server.coerceMessage(
-        tool.outputDesc,
-        normalizeProtoJson(tool.outputDesc, output ?? {}),
+      if (output === null || output === undefined) {
+        throw new TypeError("RPC response body is required.");
+      }
+      const message = fromJson(
+        method.output,
+        normalizeProtoJson(method.output, output) as JsonValue,
+        {
+          registry: this.parsed.registry,
+          ignoreUnknownFields: this.ignoreUnknownResponseFields,
+        },
       );
-      return this.server.toJson(tool, message) as TResponse;
-    } catch (error) {
+      return toJson(method.output, message, {
+        registry: this.parsed.registry,
+        useProtoFieldName: true,
+      }) as TResponse;
+    } catch {
       throw new MedallionError(
-        `Invalid response from ${tool.serviceFullName}.${tool.methodName}.`,
-        { code: "MEDALLION_PROTOCOL_DECODE_FAILED", cause: error },
+        `Invalid response from ${this.serviceName}.${method.name}.`,
+        {
+          code: "MEDALLION_PROTOCOL_DECODE_FAILED",
+          requestId,
+        },
       );
     }
   }
@@ -185,25 +279,9 @@ function invariantConnectRuntime(): InvariantProtocolRuntime {
   connectRuntime ??= new InvariantProtocolRuntime({
     descriptor: connectDescriptorBytes(),
     serviceName: CONNECT_SERVICE_NAME,
+    ignoreUnknownResponseFields: true,
   });
   return connectRuntime;
-}
-
-function invariantOntologyRuntime(): InvariantProtocolRuntime {
-  ontologyRuntime ??= new InvariantProtocolRuntime({
-    descriptor: ontologyDescriptorBytes(),
-    serviceName: ONTOLOGY_SERVICE_NAME,
-    pathPrefix: "/rpc",
-  });
-  return ontologyRuntime;
-}
-
-function invariantStorageRuntime(): InvariantProtocolRuntime {
-  storageRuntime ??= new InvariantProtocolRuntime({
-    descriptor: storageDescriptorBytes(),
-    serviceName: STORAGE_SERVICE_NAME,
-  });
-  return storageRuntime;
 }
 
 function normalizePathPrefix(value: string | undefined): string {
@@ -272,120 +350,4 @@ function normalizeFieldValue(field: DescField, value: unknown): unknown {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-export class ProtocolOntologyClient {
-  private readonly runtime: InvariantProtocolRuntime;
-
-  constructor(private readonly requests: RequestClient) {
-    this.runtime = invariantOntologyRuntime();
-  }
-
-  query<TResponse = unknown>(
-    request: Record<string, unknown>,
-    options: RequestOptions = {},
-  ): Promise<ResponseEnvelope<TResponse>> {
-    return this.rpc("Query", request, options);
-  }
-
-  planAction<TResponse = unknown>(
-    actionName: string,
-    request: Record<string, unknown>,
-    options: RequestOptions = {},
-  ): Promise<ResponseEnvelope<TResponse>> {
-    return this.rpc(
-      "PlanAction",
-      { ...request, action_name: actionName },
-      options,
-    );
-  }
-
-  executeAction<TResponse = unknown>(
-    actionName: string,
-    request: Record<string, unknown>,
-    options: RequestOptions = {},
-  ): Promise<ResponseEnvelope<TResponse>> {
-    return this.rpc(
-      "ExecuteAction",
-      { ...request, action_name: actionName },
-      options,
-      {
-        idempotencyKey:
-          typeof request.idempotency_key === "string"
-            ? request.idempotency_key
-            : undefined,
-      },
-    );
-  }
-
-  private async rpc<TResponse>(
-    methodName: string,
-    body: unknown,
-    options: RequestOptions,
-    requestOptions: { idempotencyKey?: string } = {},
-  ): Promise<ResponseEnvelope<TResponse>> {
-    const tool = this.runtime.tool(methodName);
-    const response = await this.requests.requestJson<unknown>({
-      method: "POST",
-      path: this.runtime.path(tool),
-      body: this.runtime.encodeInput(tool, body),
-      idempotencyKey: requestOptions.idempotencyKey,
-      headers: CONNECT_JSON_HEADERS,
-      signal: options.signal,
-      timeoutMs: options.timeoutMs,
-    });
-
-    return {
-      requestId: response.requestId,
-      body: this.runtime.decodeOutput<TResponse>(tool, response.body),
-    };
-  }
-}
-
-export class ProtocolStorageClient {
-  private readonly runtime: InvariantProtocolRuntime;
-
-  constructor(private readonly requests: RequestClient) {
-    this.runtime = invariantStorageRuntime();
-  }
-
-  upload<TResponse = unknown>(
-    request: Record<string, unknown>,
-    options: RequestOptions & {
-      idempotencyKey?: string;
-    } = {},
-  ): Promise<ResponseEnvelope<TResponse>> {
-    return this.rpc("Upload", request, options, {
-      idempotencyKey: options.idempotencyKey,
-    });
-  }
-
-  private async rpc<TResponse>(
-    methodName: string,
-    body: unknown,
-    options: RequestOptions,
-    requestOptions: { idempotencyKey?: string } = {},
-  ): Promise<ResponseEnvelope<TResponse>> {
-    const tool = this.runtime.tool(methodName);
-    const response = await this.requests.requestJson<unknown>({
-      method: "POST",
-      path: this.runtime.path(tool),
-      body: this.runtime.encodeInput(tool, body),
-      idempotencyKey: requestOptions.idempotencyKey,
-      headers: CONNECT_JSON_HEADERS,
-      signal: options.signal,
-      timeoutMs: options.timeoutMs,
-    });
-
-    return {
-      requestId: response.requestId,
-      body: this.runtime.decodeOutput<TResponse>(tool, response.body),
-    };
-  }
-}
-
-export interface ProtocolClients {
-  connect: ProtocolConnectClient;
-  ontology: ProtocolOntologyClient;
-  storage: ProtocolStorageClient;
 }

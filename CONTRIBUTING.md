@@ -31,19 +31,18 @@ Before a v2 or later release, migrate the Go module and imports to the required
 
 ## Scope
 
-The TypeScript implementation supports the broad public client surface:
+Every language implementation supports the same bounded customer-ingestion
+surface:
 
 - audit events
 - CDC events
-- datasource registration
-- audit trail reads
-- ontology queries
-- action planning/execution
-- storage upload
+- audit and CDC readback for verification and reconciliation
 
-Keep ergonomic wrappers over the descriptor-backed low-level clients, and keep route compatibility tests in sync with public backend contracts.
-
-Go and Python currently cover the Connect-backed server integration path. Their low-level Connect types should stay generated from the vendored public protobuf contract.
+The generated Connect service, low-level clients, and ergonomic wrappers must
+contain exactly `PublishCdcEvents`, `PublishAuditEvents`, `ListCdcEvents`, and
+`ListAuditEvents`. Do not add a generic RPC dispatcher, connector provisioning,
+platform administration, first-party application APIs, actions, secrets, or
+storage APIs to this repository.
 
 When vendored proto contracts change, regenerate the TypeScript descriptors:
 
@@ -51,14 +50,16 @@ When vendored proto contracts change, regenerate the TypeScript descriptors:
 flox activate -- make proto-bindings proto-descriptor generated-check
 ```
 
-The vendored protos are deliberately bounded initial client subsets, not the
-entire administration or internal APIs. Every shared message, field, enum, RPC
-signature, and validation constraint must remain identical to its canonical
-service contract, including additive response fields used by an included RPC.
+The local generated proto is the exact reachable closure of those four RPCs,
+not the entire administration or internal API. Every included message, field,
+enum, RPC signature, and validation constraint must remain identical to the
+reviewed, sanitized external-ingestion contract export.
 
 ## Public Surface Review
 
-Public docs, examples, package metadata, vendored proto comments, and tests must not include private repository references, internal deployment topology, real private hostnames, secrets, or private customer details. Public Medallion service contract names such as `medallion-connect`, `medallion-ontology`, and `medallion-storage` are allowed when they describe the SDK API.
+Public docs, examples, package metadata, vendored proto comments, and tests must
+not include private repository references, internal deployment topology, real
+private hostnames, secrets, or private customer details.
 
 Run the public-surface check before changing those files:
 
@@ -76,6 +77,13 @@ flox activate -- make check
 flox activate -- make audit
 ```
 
+The TypeScript CommonJS build generates `dist/THIRD_PARTY_LICENSES.txt` from
+the exact package inputs in the esbuild metafile. The artifact check compares
+that file to a fresh inventory and rejects missing, extra, or stale bundled
+package entries. When JavaScript dependencies or bundling rules change, review
+the generated inventory as part of `flox activate -- make artifact-check`; do
+not maintain its package list by hand.
+
 ## Release Checklist
 
 Before creating the one root `vX.Y.Z` release tag:
@@ -84,14 +92,17 @@ Before creating the one root `vX.Y.Z` release tag:
    version mirror.
 2. Regenerate protocol bindings and descriptors with
    `flox activate -- make proto-bindings proto-descriptor`.
-3. Run `flox activate -- make check`.
-4. Run `flox activate -- make git-install-check`; this installs the exact tree
+3. Sync a reviewed, immutable external-ingestion contract export and run
+   `flox activate -- make contract-release-check`; a mutable or unattested
+   export is never acceptable on a release tag.
+4. Run `flox activate -- make check`.
+5. Run `flox activate -- make git-install-check`; this installs the exact tree
    by both full commit SHA and the synthetic root release tag in clean Go,
    Python, and TypeScript consumers.
-5. Run `flox activate -- make audit` to scan the locked Node, Go, and Python
+6. Run `flox activate -- make audit` to scan the locked Node, Go, and Python
    dependencies and the source tree.
-6. Confirm the tree contains no secrets or unrelated generated output, commit
+7. Confirm the tree contains no secrets or unrelated generated output, commit
    it, and push it.
-7. Create exactly one annotated root tag, `vX.Y.Z`, on that reviewed commit.
+8. Create exactly one annotated root tag, `vX.Y.Z`, on that reviewed commit.
    Do not create language-prefixed tags and do not publish to npm, PyPI,
    crates.io, or another language registry.
