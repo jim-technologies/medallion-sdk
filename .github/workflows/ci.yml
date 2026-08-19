@@ -39,7 +39,7 @@ jobs:
           disable-metrics: "true"
 
       - name: Verify the public SDK boundary
-        run: flox activate -- make check-public
+        run: flox activate -- make public-surface
 
       - name: Verify the vendored ingestion contract offline
         run: flox activate -- make contract-check

@@ -61,10 +61,10 @@ Public docs, examples, package metadata, vendored proto comments, and tests must
 not include private repository references, internal deployment topology, real
 private hostnames, secrets, or private customer details.
 
-Run the public-surface check before changing those files:
+Run the public-surface guard before changing those files:
 
 ```sh
-flox activate -- make check-public
+flox activate -- make public-surface
 ```
 
 ## Checks
