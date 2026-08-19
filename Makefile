@@ -2,6 +2,7 @@ SHELL := bash
 .SHELLFLAGS := -eu -o pipefail -c
 
 PNPM ?= pnpm
+BUF ?= buf
 GO ?= go
 UV ?= uv
 PYTHON ?= python3
@@ -79,6 +80,7 @@ contract-release-gate: node_modules/.medallion-install-stamp ## Require the immu
 generated-check: contract-check node_modules/.medallion-install-stamp ## Verify generated protobuf bindings and descriptors have no drift.
 	scripts/check_generated.sh
 
+
 artifact-check: build ## Verify Git-install package payloads and exact bundled license coverage.
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/check_package_artifacts.py
 
@@ -143,9 +145,9 @@ lint-python: ## Lint, format-check, and byte-compile authored Python code.
 	cd python && $(RUFF) format --check src tests
 	cd python && $(UV) run --locked python -m compileall -q src tests
 
-lint-proto: node_modules/.medallion-install-stamp ## Lint and format-check vendored protobuf contracts.
-	$(PNPM) exec buf lint
-	$(PNPM) exec buf format proto --diff --exit-code
+lint-proto: ## Lint and format-check vendored protobuf contracts.
+	$(BUF) lint
+	$(BUF) format proto --diff --exit-code
 
 lint-shell: ## Lint and format-check repository shell scripts.
 	$(SHELLCHECK) scripts/*.sh
@@ -166,8 +168,8 @@ fmt-python: ## Apply safe Python lint fixes and formatting.
 	cd python && $(RUFF) check --fix src tests
 	cd python && $(RUFF) format src tests
 
-fmt-proto: node_modules/.medallion-install-stamp ## Format vendored protobuf contracts.
-	$(PNPM) exec buf format proto --write
+fmt-proto: ## Format vendored protobuf contracts.
+	$(BUF) format proto --write
 
 fmt-shell: ## Format repository shell scripts.
 	$(SHFMT) -w -i 2 -ci scripts/*.sh
@@ -205,8 +207,8 @@ deps: ## Refresh dependencies within declared compatibility ranges.
 
 generate: proto-bindings proto-descriptor ## Regenerate all schema-derived code; validate fails if committed output is stale.
 
-proto-bindings: node_modules/.medallion-install-stamp ## Regenerate public Go and Python Connect protobuf bindings.
-	$(PNPM) exec buf generate proto/external-ingestion-v1.descriptor.binpb --template buf.gen.yaml --path medallion/connect/v1/connect.proto
+proto-bindings: ## Regenerate public Go and Python Connect protobuf bindings.
+	$(BUF) generate proto/external-ingestion-v1.descriptor.binpb --template buf.gen.yaml --path medallion/connect/v1/connect.proto
 
 proto-descriptor: node_modules/.medallion-install-stamp ## Regenerate TypeScript invariantprotocol descriptors.
 	node scripts/embed-connect-descriptor.mjs

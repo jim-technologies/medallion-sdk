@@ -28,6 +28,9 @@ shellcheck = { pkg-path = "shellcheck", pkg-group = "repo-tools" }
 shfmt = { pkg-path = "shfmt", pkg-group = "repo-tools" }
 actionlint = { pkg-path = "actionlint", pkg-group = "repo-tools" }
 gitleaks = { pkg-path = "gitleaks", pkg-group = "repo-tools" }
+# The catalog has no x86_64-darwin build of buf 1.72.0, so the proto
+# toolchain resolves only for the systems listed here.
+buf = { pkg-path = "buf", version = "1.72.0", pkg-group = "buf", systems = ["aarch64-darwin", "aarch64-linux", "x86_64-linux"] }
 
 [vars]
 GOTOOLCHAIN = "go1.26.5+auto"

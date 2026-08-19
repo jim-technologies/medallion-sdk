@@ -65,7 +65,7 @@ const PYTHON_ERROR_POLICY_RELATIVE =
 const SDK_GO_PACKAGE =
   "github.com/jim-technologies/medallion-sdk/go/gen/medallion/connect/v1;connectv1";
 const ERROR_INFO_DOMAIN = "medallion.jimtech.io";
-const BUF = path.join(SDK_ROOT, "node_modules/.bin/buf");
+const BUF = process.env.BUF || "buf";
 const RETIRED_SCOPE_FIELD = ["organization", "id"].join("_");
 
 const ARTIFACT_ROLES = Object.freeze({
@@ -932,14 +932,14 @@ function validateReleaseAttestation(state) {
 }
 
 function runBuf(args, label) {
-  if (!existsSync(BUF)) {
-    fail(`missing ${path.relative(SDK_ROOT, BUF)}; activate Flox and install`);
-  }
   const result = spawnSync(BUF, args, {
     cwd: SDK_ROOT,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   });
+  if (result.error) {
+    fail(`cannot run ${BUF}: ${result.error.message}; activate Flox`);
+  }
   if (result.status !== 0) {
     fail(`${label} failed: ${(result.stderr || result.stdout).trim()}`);
   }

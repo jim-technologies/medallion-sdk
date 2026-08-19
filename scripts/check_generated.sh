@@ -13,6 +13,11 @@ trap cleanup EXIT
 
 cd "$root"
 
+command -v buf >/dev/null || {
+  echo "buf is not on PATH; run inside 'flox activate'" >&2
+  exit 1
+}
+
 mapfile -t descriptors < <(find proto -maxdepth 1 -type f -name '*.descriptor.binpb' -print | sort)
 if [[ "${descriptors[*]}" != "proto/external-ingestion-v1.descriptor.binpb" ]]; then
   echo "proto must contain exactly the external-ingestion v1 descriptor" >&2
@@ -20,7 +25,7 @@ if [[ "${descriptors[*]}" != "proto/external-ingestion-v1.descriptor.binpb" ]]; 
   exit 1
 fi
 
-"$tool_root/node_modules/.bin/buf" generate proto/external-ingestion-v1.descriptor.binpb \
+buf generate proto/external-ingestion-v1.descriptor.binpb \
   --template "$root/buf.gen.yaml" \
   --path medallion/connect/v1/connect.proto \
   --output "$tmp/generated"
