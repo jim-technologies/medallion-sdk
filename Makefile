@@ -16,7 +16,7 @@ PIP_AUDIT_VERSION ?= 2.10.1
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install validate lock-check version-check version-set release contract-sync contract-check contract-release-check contract-release-gate generated-check artifact-check git-install-check public-surface check-public check-examples test test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python lint-proto lint-shell lint-workflows fmt fmt-ts fmt-go fmt-python fmt-proto fmt-shell audit audit-node audit-go audit-python secret-check deps generate proto-bindings proto-descriptor run clean
+.PHONY: help install validate lock-check version-check version-set release contract-sync contract-check contract-release-check contract-release-gate generated-check breaking-check artifact-check git-install-check public-surface check-public check-examples test test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python lint-proto lint-shell lint-workflows fmt fmt-ts fmt-go fmt-python fmt-proto fmt-shell audit audit-node audit-go audit-python secret-check deps generate proto-bindings proto-descriptor run clean
 
 help: ## Show available targets.
 	@awk 'BEGIN {FS = ":.*## "; printf "Medallion SDK targets:\n"} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -30,7 +30,7 @@ install: ## Install development dependencies for all languages.
 	$(GO) mod download
 	cd python && $(UV) sync --locked
 
-validate: lock-check version-check generated-check contract-release-gate public-surface lint test build check-examples artifact-check ## Run the full local gate; exactly what CI runs.
+validate: lock-check version-check generated-check breaking-check contract-release-gate public-surface lint test build check-examples artifact-check ## Run the full local gate; exactly what CI runs.
 
 lock-check: node_modules/.medallion-install-stamp ## Verify all language dependency locks are synchronized.
 	$(GO) mod tidy -diff
@@ -80,6 +80,8 @@ contract-release-gate: node_modules/.medallion-install-stamp ## Require the immu
 generated-check: contract-check node_modules/.medallion-install-stamp ## Verify generated protobuf bindings and descriptors have no drift.
 	scripts/check_generated.sh
 
+breaking-check: ## Verify protobuf contracts stay backward-compatible with the main baseline.
+	scripts/check_proto_breaking.sh
 
 artifact-check: build ## Verify Git-install package payloads and exact bundled license coverage.
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/check_package_artifacts.py
