@@ -322,7 +322,7 @@ Use Flox for generation and verification:
 ```bash
 flox activate -- make contract-sync
 flox activate -- make contract-check
-flox activate -- make check
+flox activate -- make validate
 flox activate -- make git-install-check
 flox activate -- make audit
 ```

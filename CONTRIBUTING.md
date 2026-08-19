@@ -6,7 +6,7 @@ This is a public SDK repository. Keep contributions free of secrets, private rep
 
 ```sh
 flox activate -- make install
-flox activate -- make check
+flox activate -- make validate
 flox activate -- make audit
 ```
 
@@ -73,7 +73,7 @@ Before opening a change, run:
 
 ```sh
 flox activate -- make format
-flox activate -- make check
+flox activate -- make validate
 flox activate -- make audit
 ```
 
@@ -95,7 +95,7 @@ Before creating the one root `vX.Y.Z` release tag:
 3. Sync a reviewed, immutable external-ingestion contract export and run
    `flox activate -- make contract-release-check`; a mutable or unattested
    export is never acceptable on a release tag.
-4. Run `flox activate -- make check`.
+4. Run `flox activate -- make validate`.
 5. Run `flox activate -- make git-install-check`; this installs the exact tree
    by both full commit SHA and the synthetic root release tag in clean Go,
    Python, and TypeScript consumers.

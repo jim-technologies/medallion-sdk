@@ -23,8 +23,8 @@ permissions:
   contents: read
 
 jobs:
-  check:
-    name: Cross-language check
+  validate:
+    name: Cross-language validate
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -48,7 +48,7 @@ jobs:
         if: ${{ github.ref_type == 'tag' }}
         run: flox activate -- make contract-release-check
 
-      - run: flox activate -- make check
+      - run: flox activate -- make validate
 
   node-24:
     name: Node 24 compatibility
