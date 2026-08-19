@@ -8,7 +8,6 @@ overrides:
 # invariantprotocol is Git-distributed and builds its TypeScript output during
 # installation. Keep this exact commit allowlisted with the dependency pin.
 allowBuilds:
-  '@bufbuild/buf': set this to true or false
   "@jim-technologies/invariant-protocol@https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/f924e602582402476f257571852fabb0e1e1cf43": true
   "esbuild": true
   "protobufjs": false
