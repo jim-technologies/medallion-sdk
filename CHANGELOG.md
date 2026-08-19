@@ -6,6 +6,9 @@ annotated `vX.Y.Z` tag.
 
 ## [Unreleased]
 
+- Enforce the buf conventions in the gate: comment linting on public RPCs,
+  messages, and fields, breaking-change detection against the `main` baseline
+  inside `make validate`, and Buf pinned in the Flox manifest instead of npm.
 - Adopt the jim-technologies open-source Makefile contract
   (`MAKEFILE-CONTRACT.md`): the gate verb is `make validate`, formatting is
   `make fmt`, schema regeneration is `make generate`, and `make release` is a

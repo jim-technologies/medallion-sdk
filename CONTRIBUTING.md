@@ -64,6 +64,11 @@ TypeScript descriptors:
 flox activate -- make generate generated-check
 ```
 
+`make validate` also runs breaking-change detection against the `main`
+baseline (`make breaking-check`). The published packages are version-suffixed
+(`medallion.connect.v1`); a breaking major ships as a new package, never an
+in-place edit of an existing one.
+
 The local generated proto is the exact reachable closure of those four RPCs,
 not the entire administration or internal API. Every included message, field,
 enum, RPC signature, and validation constraint must remain identical to the

@@ -24,3 +24,17 @@ offline copy. SDK consumers do not need Buf or Flox.
 Ordinary checks accept a consistent candidate export. `make
 contract-release-check` remains blocked until that export is replaced by a
 producer-issued immutable release attestation.
+
+## Conventions
+
+- Package names always carry a version suffix (`medallion.<domain>.v1`); a
+  breaking major is a new package, never an in-place edit of an existing one.
+- `buf lint` enforces the standard rules plus comment coverage on public RPCs,
+  messages, and fields. The vendored `connect.proto` is exempt from the
+  comment rules only because it is rendered from the sanitized descriptor,
+  which must omit source comments; its documentation is reviewed in the
+  contract export.
+- Breaking-change detection (`buf breaking`, FILE rules) runs inside
+  `make validate` against the `main` baseline because this contract is
+  consumed outside the repository.
+- Buf itself is pinned in `.flox/env/manifest.toml`; CI never installs it.
