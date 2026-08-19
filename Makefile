@@ -15,7 +15,7 @@ PIP_AUDIT_VERSION ?= 2.10.1
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install validate lock-check version-check version-set contract-sync contract-check contract-release-check generated-check artifact-check git-install-check public-surface check-public check-examples test test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python lint-proto lint-shell lint-workflows fmt fmt-ts fmt-go fmt-python fmt-proto fmt-shell audit audit-node audit-go audit-python secret-check deps proto-bindings proto-descriptor run clean
+.PHONY: help install validate lock-check version-check version-set contract-sync contract-check contract-release-check generated-check artifact-check git-install-check public-surface check-public check-examples test test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python lint-proto lint-shell lint-workflows fmt fmt-ts fmt-go fmt-python fmt-proto fmt-shell audit audit-node audit-go audit-python secret-check deps generate proto-bindings proto-descriptor run clean
 
 help: ## Show available targets.
 	@awk 'BEGIN {FS = ":.*## "; printf "Medallion SDK targets:\n"} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -180,6 +180,8 @@ deps: ## Refresh dependencies within declared compatibility ranges.
 	GOFLAGS=-mod=mod $(GO) get -u ./go/...
 	GOFLAGS=-mod=mod $(GO) mod tidy
 	cd python && $(UV) lock --upgrade
+
+generate: proto-bindings proto-descriptor ## Regenerate all schema-derived code; validate fails if committed output is stale.
 
 proto-bindings: node_modules/.medallion-install-stamp ## Regenerate public Go and Python Connect protobuf bindings.
 	$(PNPM) exec buf generate proto/external-ingestion-v1.descriptor.binpb --template buf.gen.yaml --path medallion/connect/v1/connect.proto

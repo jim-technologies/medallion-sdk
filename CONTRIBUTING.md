@@ -44,10 +44,11 @@ contain exactly `PublishCdcEvents`, `PublishAuditEvents`, `ListCdcEvents`, and
 platform administration, first-party application APIs, actions, secrets, or
 storage APIs to this repository.
 
-When vendored proto contracts change, regenerate the TypeScript descriptors:
+When vendored proto contracts change, regenerate the language bindings and
+TypeScript descriptors:
 
 ```sh
-flox activate -- make proto-bindings proto-descriptor generated-check
+flox activate -- make generate generated-check
 ```
 
 The local generated proto is the exact reachable closure of those four RPCs,
@@ -91,7 +92,7 @@ Before creating the one root `vX.Y.Z` release tag:
 1. Run `flox activate -- make version-set VERSION=X.Y.Z` and review every
    version mirror.
 2. Regenerate protocol bindings and descriptors with
-   `flox activate -- make proto-bindings proto-descriptor`.
+   `flox activate -- make generate`.
 3. Sync a reviewed, immutable external-ingestion contract export and run
    `flox activate -- make contract-release-check`; a mutable or unattested
    export is never acceptable on a release tag.
