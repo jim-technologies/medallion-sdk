@@ -72,7 +72,7 @@ flox activate -- make check-public
 Before opening a change, run:
 
 ```sh
-flox activate -- make format
+flox activate -- make fmt
 flox activate -- make validate
 flox activate -- make audit
 ```

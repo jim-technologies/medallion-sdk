@@ -15,7 +15,7 @@ PIP_AUDIT_VERSION ?= 2.10.1
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install validate lock-check version-check version-set contract-sync contract-check contract-release-check generated-check artifact-check git-install-check check-public check-examples test test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python lint-proto lint-shell lint-workflows format format-ts format-go format-python format-proto format-shell audit audit-node audit-go audit-python secret-check deps proto-bindings proto-descriptor run clean
+.PHONY: help install validate lock-check version-check version-set contract-sync contract-check contract-release-check generated-check artifact-check git-install-check check-public check-examples test test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python lint-proto lint-shell lint-workflows fmt fmt-ts fmt-go fmt-python fmt-proto fmt-shell audit audit-node audit-go audit-python secret-check deps proto-bindings proto-descriptor run clean
 
 help: ## Show available targets.
 	@awk 'BEGIN {FS = ":.*## "; printf "Medallion SDK targets:\n"} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -130,22 +130,22 @@ lint-shell: ## Lint and format-check repository shell scripts.
 lint-workflows: ## Validate GitHub Actions syntax and expressions.
 	$(ACTIONLINT) .github/workflows/*.yml
 
-format: format-ts format-go format-python format-proto format-shell ## Apply every repository formatter.
+fmt: fmt-ts fmt-go fmt-python fmt-proto fmt-shell ## Rewrite formatting in place, every language in the repo.
 
-format-ts: node_modules/.medallion-install-stamp ## Format TypeScript and JSON.
+fmt-ts: node_modules/.medallion-install-stamp ## Format TypeScript and JSON.
 	$(PNPM) format
 
-format-go: ## Format Go code.
+fmt-go: ## Format Go code.
 	find go -type f -name '*.go' -exec gofmt -w {} +
 
-format-python: ## Apply safe Python lint fixes and formatting.
+fmt-python: ## Apply safe Python lint fixes and formatting.
 	cd python && $(RUFF) check --fix src tests
 	cd python && $(RUFF) format src tests
 
-format-proto: node_modules/.medallion-install-stamp ## Format vendored protobuf contracts.
+fmt-proto: node_modules/.medallion-install-stamp ## Format vendored protobuf contracts.
 	$(PNPM) exec buf format proto --write
 
-format-shell: ## Format repository shell scripts.
+fmt-shell: ## Format repository shell scripts.
 	$(SHFMT) -w -i 2 -ci scripts/*.sh
 
 audit: audit-node audit-go audit-python secret-check ## Scan dependencies and the tree for known vulnerabilities and secrets.
