@@ -12,6 +12,14 @@ flox activate -- make audit
 
 Consumers do not need Flox. Flox is the sole contributor and CI toolchain
 bootstrap; do not add language setup actions or host-installed quality tools.
+CI runs exactly `flox activate -- make validate`, and a weekly secretless
+workflow runs `flox activate -- make audit`; every toolchain comes from
+`.flox/env/manifest.toml`. On a release tag the same gate additionally
+requires the immutable contract attestation and the annotated-tag checks.
+
+The deployed smoke test (`make test-deployed`) is never run by CI. Invoke it
+from a maintainer machine with caller-supplied `MEDALLION_SMOKE_*` environment
+variables; `scripts/check_smoke_env.sh` verifies the set is complete.
 
 ## Versions and Releases
 
