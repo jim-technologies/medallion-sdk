@@ -51,7 +51,7 @@
     "test:deployed": "vitest run test/deployed-smoke.test.ts"
   },
   "dependencies": {
-    "@bufbuild/protobuf": "2.13.0",
+    "@bufbuild/protobuf": "2.14.0",
     "@jim-technologies/invariant-protocol": "github:jim-technologies/invariantprotocol#f924e602582402476f257571852fabb0e1e1cf43",
     "@opentelemetry/api": "1.9.1"
   },
