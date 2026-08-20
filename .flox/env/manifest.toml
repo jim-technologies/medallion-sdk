@@ -30,10 +30,10 @@ actionlint = { pkg-path = "actionlint", pkg-group = "repo-tools" }
 gitleaks = { pkg-path = "gitleaks", pkg-group = "repo-tools" }
 # The catalog has no x86_64-darwin build of buf 1.72.0, so the proto
 # toolchain resolves only for the systems listed here. The pin stays at
-# 1.72.0 while the fleet locks 1.71.0 because the committed contract-sync
-# protos are this version's `buf format` output and the validate gate's
-# `buf format --diff --exit-code` only passes when the active formatter
-# reproduces them byte-for-byte.
+# 1.72.0 because the committed contract-sync protos are this version's
+# `buf format` output and the validate gate's `buf format --diff
+# --exit-code` only passes when the active formatter reproduces them
+# byte-for-byte.
 buf = { pkg-path = "buf", version = "1.72.0", pkg-group = "buf", systems = ["aarch64-darwin", "aarch64-linux", "x86_64-linux"] }
 
 [vars]
