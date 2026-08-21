@@ -16,7 +16,7 @@ PIP_AUDIT_VERSION ?= 2.10.1
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install validate lock-check version-check version-set release contract-sync contract-check contract-release-check contract-release-gate generated-check breaking-check artifact-check git-install-check public-surface check-public check-examples test test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python lint-proto lint-shell lint-workflows fmt fmt-ts fmt-go fmt-python fmt-proto fmt-shell audit audit-node audit-go audit-python secret-check deps generate proto-bindings proto-descriptor run clean
+.PHONY: help install validate lock-check version-check version-set release contract-sync contract-check contract-release-check contract-release-gate generated-check breaking-check artifact-check git-install-check public-surface check-examples test test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python lint-proto lint-shell lint-workflows fmt fmt-ts fmt-go fmt-python fmt-proto fmt-shell audit audit-node audit-go audit-python secret-check deps generate proto-bindings proto-descriptor run clean
 
 help: ## Show available targets.
 	@awk 'BEGIN {FS = ":.*## "; printf "Medallion SDK targets:\n"} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -89,10 +89,9 @@ artifact-check: build ## Verify Git-install package payloads and exact bundled l
 git-install-check: ## Install every SDK from the exact tree by SHA and root tag.
 	scripts/check_git_installs.sh
 
-public-surface: check-public secret-check ## Enforce the public-surface guard: private-reference scan plus secret scan.
-
-check-public: node_modules/.medallion-install-stamp ## Scan public SDK surfaces for private/internal references.
-	$(PNPM) check:public
+public-surface: secret-check ## Guard the public surface: tracked content, paths, and unpushed commit messages, plus a credential scan.
+	scripts/public-surface-check
+	scripts/public-surface-check-test
 
 check-examples: build ## Type-check the runnable TypeScript integration examples.
 	$(PNPM) check:examples

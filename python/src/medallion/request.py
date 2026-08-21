@@ -263,7 +263,7 @@ class _RequestClient:
         canonical_path = path if path.startswith("/") else "/" + path
         if canonical_path not in _CANONICAL_RPC_PATHS:
             raise MedallionError(
-                "Only the four canonical Medallion Connect ingestion RPCs are supported.",
+                "Only the four canonical medallion.connect.v1 ingestion RPCs are supported.",
                 code="MEDALLION_UNSUPPORTED_RPC",
             )
         request_path = canonical_path

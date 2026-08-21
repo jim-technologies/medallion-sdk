@@ -6,6 +6,11 @@ annotated `vX.Y.Z` tag.
 
 ## [Unreleased]
 
+- Replace the SDK-specific public-surface script with the shared guard every
+  public jim-technologies repository runs. It scans tracked content, tracked
+  paths, and the commit messages a push would publish; exceptions live in
+  `.public-surface-allow` and this repository's extra denials, including the
+  scope names retired from the v1 contract, in `.public-surface-deny`.
 - Enforce the buf conventions in the gate: comment linting on public RPCs,
   messages, and fields, breaking-change detection against the `main` baseline
   inside `make validate`, and Buf pinned in the Flox manifest instead of npm.

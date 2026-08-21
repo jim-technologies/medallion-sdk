@@ -21,6 +21,12 @@ router: targets delegate to native tooling or guard; logic lives in scripts.
 infrastructure names, or references to private repositories appear anywhere
 in code, docs, examples, or the Makefile itself.
 
+The guard also reads the commit messages a push would publish, so a private
+name in a subject or body fails the gate before the branch leaves the machine.
+Exceptions live in `.public-surface-allow` at the repository root, one line
+each, and every one carries the reason it is justified; denials this
+repository adds beyond the fleet baseline live in `.public-surface-deny`.
+
 ## Explicitly FORBIDDEN
 
 - `make deploy` — libraries deploy nowhere.

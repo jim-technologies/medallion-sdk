@@ -80,11 +80,30 @@ Public docs, examples, package metadata, vendored proto comments, and tests must
 not include private repository references, internal deployment topology, real
 private hostnames, secrets, or private customer details.
 
+`scripts/public-surface-check` enforces that. It scans three streams: the
+content of every tracked file, every tracked path, and the commit messages a
+push would publish. A finding against a commit message means the message must
+be rewritten before the branch is pushed; fixing the file is not enough.
+
 Run the public-surface guard before changing those files:
 
 ```sh
 flox activate -- make public-surface
 ```
+
+Findings are redacted so a public CI log never republishes what the guard
+caught; run `PUBLIC_SURFACE_SHOW_MATCH=1 scripts/public-surface-check` locally
+to see them in full, and `--full-history` to audit every commit rather than
+the unpushed range.
+
+A finding that is genuinely public gets one line in `.public-surface-allow`
+(`category | path-glob | reason | pattern`), and the reason is mandatory. The
+guard re-runs every category probe after loading those rules, so a rule broad
+enough to switch a category off is rejected rather than obeyed. Denials this
+repository adds on top of the fleet baseline - the scope names and backend
+names retired from the v1 contract - live in `.public-surface-deny` in the
+same format. `scripts/public-surface-check-test` runs alongside the guard and
+fails the gate if the guard itself stops working.
 
 ## Checks
 

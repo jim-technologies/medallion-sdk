@@ -1,0 +1,47 @@
+# .public-surface-deny - denials this repository adds on top of the fleet
+# baseline in scripts/public-surface-check.
+#
+# Same four fields as .public-surface-allow:
+#
+#     category | path-glob | reason | pattern
+#
+# Each rule's pattern joins the scan as its own category, and its reason is
+# printed as the remediation text when the rule fires, so write the reason as
+# an instruction to whoever tripped it.
+#
+# These rules carry the repository-specific checks that the previous
+# node implementation of this guard made, so adopting the fleet guard lost no
+# coverage. Patterns use %HH hex escapes: naming a banned term here in full
+# would plant it on the public surface this file exists to protect.
+
+# ---------------------------------------------------------------------------
+# Scope names retired from the v1 ingestion contract. They named a private
+# multi-occupancy model the published contract does not have; the schema keeps
+# them reserved so they can never be reused, and nothing else may name them.
+#
+# The first rule matches the snake-case and camel-case spellings, and the
+# second the retired header as one contiguous string. That is deliberate:
+# scripts/check_package_artifacts.py and python/tests/test_descriptors.py
+# enforce the same retirement over built payloads and hold the names as
+# split fragments so they do not plant them, and a looser separator class
+# here would flag those two checkers for doing their job.
+# ---------------------------------------------------------------------------
+retired-scope | * | This scope field was retired from the v1 contract. Use workspace_id. The old name stays reserved in the schema and must not reappear in code, docs, examples or commit messages. | (^|[^a-z0-9_])(%74enant|organi%7Aation)%5f?id($|[^a-z0-9_])
+retired-scope | * | The scope-selection request header was retired with that field. The published contract selects a workspace with a request field, not a header. | x-%6aimtech-%74enant-id
+
+# ---------------------------------------------------------------------------
+# Names of private backend machinery that the SDK once carried and no longer
+# should. Describe the behaviour a caller sees instead of naming the thing
+# that implements it.
+# ---------------------------------------------------------------------------
+retired-name | * | This contract policy name belongs to the private backend, not to the published SDK. Document the guarantee a caller gets instead. | %6fntology-idempotency-policy
+retired-name | * | This provenance field named the private repository a contract was exported from. The published contract carries no provenance. | %73ource%5frepository
+retired-name | * | This handoff file listed first-party application profiles. The published SDK ships no profile list. | %63onsumer-profiles\.json
+retired-name | * | First-party application profile names stay in the private application repositories that define them. | first[-%5f]party[-%5f]%74erminal
+
+# ---------------------------------------------------------------------------
+# Vocabulary that only makes sense to someone inside this organisation. A
+# public repository is read by strangers.
+# ---------------------------------------------------------------------------
+internal-wording | * | Internal deployment and orchestration tooling is not part of the published SDK surface. Name the capability, not the tool. | (^|[^a-z0-9_])%6eomad($|[^a-z0-9_])
+internal-wording | * | Internal project vocabulary does not belong in public docs, code or commit messages. Write what a stranger would need to read. | (^|[^a-z0-9_])(%64ogfood[a-z]*|%66irst-client|%6donorepo|%70reshared)($|[^a-z0-9_])

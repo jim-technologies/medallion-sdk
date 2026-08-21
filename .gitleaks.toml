@@ -7,3 +7,16 @@ paths = [
   '''^src/connect-descriptor[.]ts$''',
   '''^dist/''',
 ]
+
+# The public-surface guard's self-test plants one violation of every shape the
+# guard denies - a provider token, an integrity digest, a high-entropy
+# assignment - into throwaway repositories under a temporary directory, and
+# asserts each one is reported. Those fixtures are synthetic by construction:
+# a test that proved the guard catches a real credential would have to commit
+# one. The file is a verbatim copy of the fleet guard's self-test, so it is
+# diffable against every other repository in the organisation.
+[[allowlists]]
+description = "Synthetic credential fixtures in the public-surface guard self-test"
+paths = [
+  '''^scripts/public-surface-check-test$''',
+]

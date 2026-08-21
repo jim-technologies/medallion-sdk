@@ -1,0 +1,32 @@
+# .public-surface-allow - justified exceptions to scripts/public-surface-check.
+#
+# One rule per line, four fields:
+#
+#     category | path-glob | reason | pattern
+#
+# A rule masks exactly the text its pattern matches, only under the paths its
+# glob matches, only for its category. Everything else on the same line is
+# still checked. Patterns use %HH hex escapes where spelling a term in full
+# would otherwise trip the guard's own scan of this file.
+#
+# Run `scripts/public-surface-check --help` for the full syntax.
+
+# ---------------------------------------------------------------------------
+# The public API this repository exists to publish.
+#
+# The whole point of this SDK is to put the medallion.connect.v1 ingestion
+# contract in a stranger's hands, so its package name is public by design. The
+# generated Go, Python and TypeScript bindings spell it two ways - dotted in
+# the descriptors and underscored in identifiers - and both are the package
+# name. The space-separated brand phrase is not: it names a product rather
+# than the published package, and it stays off this surface.
+# ---------------------------------------------------------------------------
+codename | * | the ingestion package this repository is published to distribute; its name is the contract | %6dedallion[._]connect
+codename | * | the one service in that public package, as the generated bindings and descriptor name it | %6dedallionconnect[a-z]*service
+
+# ---------------------------------------------------------------------------
+# Retired names that survive only as schema reservations. A reservation is the
+# record that a field number and name are permanently spent, so it is the fix
+# for the retired name, not a leak of it.
+# ---------------------------------------------------------------------------
+retired-scope | proto/* | a reserved name in the schema is what permanently retires it; removing the reservation would let it be reused | reserved "organi%7Aation%5fid"
