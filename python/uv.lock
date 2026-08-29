@@ -28,14 +28,14 @@ requires-dist = [
     { name = "opentelemetry-api", specifier = ">=1.44.0,<2" },
     { name = "polars", marker = "extra == 'polars'", specifier = ">=1.20,<2" },
     { name = "protobuf", specifier = ">=7.35.1,<8" },
-    { name = "pyarrow", marker = "extra == 'polars'", specifier = ">=19,<24" },
+    { name = "pyarrow", marker = "extra == 'polars'", specifier = ">=19,<26" },
 ]
 provides-extras = ["polars"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "polars", specifier = ">=1.20,<2" },
-    { name = "pyarrow", specifier = ">=19,<24" },
+    { name = "pyarrow", specifier = ">=19,<26" },
 ]
 
 [[package]]

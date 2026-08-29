@@ -34,7 +34,7 @@ dependencies = [
 # query results collected with to_polars(), and Arrow IPC payloads.
 polars = [
   "polars>=1.20,<2",
-  "pyarrow>=19,<24",
+  "pyarrow>=19,<26",
 ]
 
 [dependency-groups]
@@ -43,7 +43,7 @@ polars = [
 # medallion[polars].
 dev = [
   "polars>=1.20,<2",
-  "pyarrow>=19,<24",
+  "pyarrow>=19,<26",
 ]
 
 [project.urls]
