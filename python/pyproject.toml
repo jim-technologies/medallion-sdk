@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "medallion"
-version = "0.2.0"
-description = "Server-side Python SDK for Medallion CDC and audit ingestion."
+version = "0.3.0"
+description = "Server-side Python SDK for getting data into and out of Medallion: datasets, batch appends, and SQL queries."
 readme = "README.md"
 requires-python = ">=3.14"
 license = "Apache-2.0"
@@ -13,7 +13,7 @@ license-files = ["LICENSE", "NOTICE"]
 authors = [
   { name = "Jim Technologies" }
 ]
-keywords = ["medallion", "cdc", "audit", "ingestion", "sdk"]
+keywords = ["medallion", "datasets", "ingestion", "clickhouse", "arrow", "cdc", "audit", "sdk"]
 classifiers = [
   "Private :: Do Not Upload",
   "Development Status :: 3 - Alpha",

@@ -1,8 +1,8 @@
 {
   "name": "@jimtech/medallion",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "Server-side TypeScript SDK for Medallion CDC and audit ingestion.",
+  "description": "Server-side TypeScript SDK for getting data into and out of Medallion: datasets, batch appends, and SQL queries.",
   "license": "Apache-2.0",
   "type": "module",
   "repository": {
