@@ -43,6 +43,9 @@ type protoEnvelope struct {
 
 type postOptions struct {
 	retrySafe bool
+	// idempotencyKey rides as the Stripe-style Idempotency-Key header for
+	// whole-batch replay protection; empty sends no such header.
+	idempotencyKey string
 }
 
 const (
@@ -192,6 +195,9 @@ func (c *requestClient) postProtoWithOptions(ctx context.Context, path string, r
 			return protoEnvelope{}, &Error{Code: "MEDALLION_INVALID_OPTIONS", Message: "Medallion base URL is invalid", Cause: err}
 		}
 		c.setRequestHeaders(httpReq, ctx, workspaceID)
+		if options.idempotencyKey != "" {
+			httpReq.Header.Set("Idempotency-Key", options.idempotencyKey)
+		}
 
 		httpResp, requestErr := c.http.Do(httpReq)
 		if requestErr != nil {

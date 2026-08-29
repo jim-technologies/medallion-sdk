@@ -18,9 +18,14 @@ const (
 )
 
 type Client struct {
+	// Ingest is the thin client for the medallion.ingest.v1 tabular surface.
+	Ingest *IngestClient
+	// Connect carries the deprecated medallion.connect.v1 publish surface.
 	Connect *ConnectClient
-	Audit   *AuditClient
-	CDC     *CDCClient
+	// Audit publishes over the deprecated medallion.connect.v1 surface.
+	Audit *AuditClient
+	// CDC publishes over the deprecated medallion.connect.v1 surface.
+	CDC *CDCClient
 }
 
 func NewClient(cfg ClientConfig) (*Client, error) {
@@ -30,6 +35,7 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 	}
 	connect := &ConnectClient{requests: requests, defaultConnectorID: strings.TrimSpace(cfg.DefaultConnectorID)}
 	return &Client{
+		Ingest:  &IngestClient{requests: requests},
 		Connect: connect,
 		Audit:   &AuditClient{connect: connect, defaultConnectorID: cfg.DefaultConnectorID},
 		CDC:     &CDCClient{connect: connect, defaultConnectorID: cfg.DefaultConnectorID},
