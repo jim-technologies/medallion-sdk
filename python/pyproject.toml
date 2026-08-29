@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "medallion"
-version = "0.3.0"
+version = "0.3.1"
 description = "Server-side Python SDK for getting data into and out of Medallion: datasets, batch appends, and SQL queries."
 readme = "README.md"
 requires-python = ">=3.14"

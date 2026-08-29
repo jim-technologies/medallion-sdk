@@ -1,6 +1,6 @@
 {
   "name": "@jimtech/medallion",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "Server-side TypeScript SDK for getting data into and out of Medallion: datasets, batch appends, and SQL queries.",
   "license": "Apache-2.0",
