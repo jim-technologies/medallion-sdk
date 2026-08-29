@@ -422,3 +422,179 @@ export interface ConnectListCdcEventsResponse {
   events?: ConnectCdcEvent[];
   next_page_cursor?: string;
 }
+
+/** One JSON row on the ingest wire: BigQuery's insertId + json analog. */
+export interface IngestRow {
+  insert_id?: string;
+  /** Exactly one JSON object rendered as text. */
+  json: string;
+}
+
+/** Arrow rows as one base64 Arrow IPC stream in the protobuf JSON codec. */
+export interface IngestArrowRecordBatch {
+  serialized_record_batch?: string;
+}
+
+export interface IngestAppendRequest {
+  dataset_id: string;
+  json_rows?: { rows: IngestRow[] };
+  arrow_rows?: IngestArrowRecordBatch;
+}
+
+export interface IngestRowError {
+  index?: number;
+  reason?: string;
+  message?: string;
+}
+
+export interface IngestAppendResponse {
+  insert_errors?: IngestRowError[];
+  accepted_rows?: string | number;
+  duplicate?: boolean;
+}
+
+export type IngestResultFormat =
+  | "RESULT_FORMAT_UNSPECIFIED"
+  | "RESULT_FORMAT_JSON"
+  | "RESULT_FORMAT_ARROW_IPC";
+
+export interface IngestQueryRequest {
+  query: string;
+  timeout_ms?: number;
+  dry_run?: boolean;
+  max_results?: number;
+  format?: IngestResultFormat;
+}
+
+export interface IngestColumnSchema {
+  name?: string;
+  type?: string;
+}
+
+export interface IngestResultSchema {
+  columns?: IngestColumnSchema[];
+}
+
+export interface IngestQueryResults {
+  query_id?: string;
+  completed?: boolean;
+  schema?: IngestResultSchema;
+  rows_json?: string[];
+  arrow_rows?: IngestArrowRecordBatch;
+  next_page_token?: string;
+  total_rows?: string | number;
+  total_bytes_processed?: string | number;
+}
+
+export interface IngestQueryResponse {
+  results?: IngestQueryResults;
+}
+
+export interface IngestGetQueryResultsRequest {
+  query_id: string;
+  page_token?: string;
+  timeout_ms?: number;
+  max_results?: number;
+  format?: IngestResultFormat;
+}
+
+export interface IngestDataset {
+  dataset_id?: string;
+  description?: string;
+  create_time?: string;
+}
+
+export interface IngestCreateDatasetRequest {
+  dataset_id: string;
+  description?: string;
+}
+
+export interface IngestDatasetResponse {
+  dataset?: IngestDataset;
+}
+
+export interface IngestListDatasetsRequest {
+  page_size?: number;
+  page_token?: string;
+}
+
+export interface IngestListDatasetsResponse {
+  datasets?: IngestDataset[];
+  next_page_token?: string;
+}
+
+/** Options accepted by ingest calls that carry an Idempotency-Key header. */
+export interface IngestWriteOptions extends RequestOptions {
+  /**
+   * Stable batch deduplication key sent as the Idempotency-Key header.
+   * Generated automatically when omitted; pass the same key to make a manual
+   * replay of the same batch safe.
+   */
+  idempotencyKey?: string;
+}
+
+/** One appended row: a plain JSON object of column values. */
+export type DatasetRow = { readonly [column: string]: JsonValue };
+
+export interface DatasetAppendOptions extends IngestWriteOptions {
+  /**
+   * Optional per-row deduplication identifiers, index-aligned with the
+   * submitted JSON rows and passed through as each row's insert_id.
+   */
+  insertIds?: readonly (string | undefined)[];
+}
+
+export interface DatasetRowError {
+  index: number;
+  reason?: string;
+  message?: string;
+}
+
+export interface DatasetAppendResult extends ResponseMetadata {
+  /** The Idempotency-Key value this batch was sent with. */
+  idempotencyKey: string;
+  /** Rows durably accepted by this request. */
+  acceptedRows: number;
+  /** True when the whole batch replayed an already accepted Idempotency-Key. */
+  duplicate: boolean;
+  /** Per-row rejections; empty when every submitted row was accepted. */
+  rowErrors: DatasetRowError[];
+}
+
+export interface DatasetQueryOptions extends RequestOptions {
+  /** Synchronous server-side wait budget per request, in milliseconds. */
+  serverTimeoutMs?: number;
+  /** Validate and estimate the statement without executing it. */
+  dryRun?: boolean;
+  /** Largest number of rows per result page. */
+  maxResults?: number;
+  /** Result row encoding; JSON parsed rows by default. */
+  format?: "json" | "arrow";
+}
+
+export interface DatasetColumn {
+  name: string;
+  /** Declared ClickHouse type of the column. */
+  type: string;
+}
+
+export interface DatasetCreateInput {
+  datasetId: string;
+  description?: string;
+}
+
+export interface Dataset {
+  datasetId: string;
+  description?: string;
+  createTime?: string;
+}
+
+export interface DatasetListOptions {
+  pageSize?: number;
+  pageToken?: string;
+}
+
+export interface DatasetPage extends ResponseMetadata {
+  datasets: Dataset[];
+  nextPageToken?: string;
+}

@@ -33,6 +33,11 @@ export interface JsonRequestOptions {
   timeoutMs?: number;
   connectProtocol?: boolean;
   retrySafe?: boolean;
+  /**
+   * SDK-controlled Idempotency-Key header value for whole-batch replay
+   * protection. Caller-supplied headers can never set it.
+   */
+  idempotencyKey?: string;
 }
 
 export interface ResponseEnvelope<TBody> {
@@ -427,7 +432,10 @@ export class RequestClient {
   }
 
   private defaultHeaders(
-    options: Pick<JsonRequestOptions, "headers" | "connectProtocol">,
+    options: Pick<
+      JsonRequestOptions,
+      "headers" | "connectProtocol" | "idempotencyKey"
+    >,
     timeoutMs: number,
   ): Headers {
     const headers = new Headers();
@@ -460,6 +468,14 @@ export class RequestClient {
       this.#workspaceId,
       "workspaceId",
     );
+    if (options.idempotencyKey !== undefined) {
+      setValidatedHeader(
+        headers,
+        "Idempotency-Key",
+        options.idempotencyKey,
+        "idempotencyKey",
+      );
+    }
     if (options.connectProtocol) {
       headers.set("Connect-Protocol-Version", "1");
       headers.set("Connect-Timeout-Ms", String(timeoutMs));

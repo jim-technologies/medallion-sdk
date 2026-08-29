@@ -11,9 +11,17 @@ describe("MedallionClient", () => {
       fetch: vi.fn(),
     });
 
-    expect(Object.keys(client).sort()).toEqual(["audit", "cdc", "connect"]);
+    expect(Object.keys(client).sort()).toEqual([
+      "audit",
+      "cdc",
+      "connect",
+      "datasets",
+      "ingest",
+    ]);
     expect(client.audit.record).toBeTypeOf("function");
     expect(client.cdc.record).toBeTypeOf("function");
+    expect(client.datasets.append).toBeTypeOf("function");
+    expect(client.datasets.query).toBeTypeOf("function");
     expect(Object.getOwnPropertyNames(ProtocolConnectClient.prototype)).toEqual(
       [
         "constructor",

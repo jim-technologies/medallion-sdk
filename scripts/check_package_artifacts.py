@@ -125,10 +125,13 @@ TYPESCRIPT_DIST_MODULES = frozenset(
         "cdc",
         "client",
         "connect-descriptor",
+        "datasets",
         "error-policy",
         "errors",
         "ids",
         "index",
+        "ingest",
+        "ingest-descriptor",
         "ingestion",
         "payload",
         "protocol-preflight",
@@ -156,6 +159,9 @@ PYTHON_RUNTIME_FILES = frozenset(
         "medallion/connect/__init__.py",
         "medallion/connect/v1/__init__.py",
         "medallion/connect/v1/connect_pb2.py",
+        "medallion/ingest/__init__.py",
+        "medallion/ingest/v1/__init__.py",
+        "medallion/ingest/v1/ingest_pb2.py",
     }
 )
 

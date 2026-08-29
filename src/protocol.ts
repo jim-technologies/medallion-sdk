@@ -171,7 +171,7 @@ function validateProtocolResponse(
   }
 }
 
-class InvariantProtocolRuntime {
+export class InvariantProtocolRuntime {
   private readonly parsed: ParsedDescriptor;
   private readonly pathPrefix: string;
   private readonly serviceName: string;

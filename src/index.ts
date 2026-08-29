@@ -1,4 +1,5 @@
 export { MedallionClient } from "./client.js";
+export { DatasetQueryResult, DatasetsClient } from "./datasets.js";
 export type {
   ConnectErrorDetail,
   ConnectErrorReason,
@@ -10,6 +11,7 @@ export {
   MedallionError,
 } from "./errors.js";
 export { normalizeId, normalizeIdRecord } from "./ids.js";
+export { ProtocolIngestClient } from "./ingest.js";
 export { idempotencyKeyFromParts } from "./ingestion.js";
 export { ProtocolConnectClient } from "./protocol.js";
 export type { TracingConfig, TracingOptions } from "./tracing.js";
@@ -46,10 +48,35 @@ export type {
   ConnectPublishCdcEventsResponse,
   ConnectPublishedAuditEvent,
   ConnectPublishedCdcEvent,
+  Dataset,
+  DatasetAppendOptions,
+  DatasetAppendResult,
+  DatasetColumn,
+  DatasetCreateInput,
+  DatasetListOptions,
+  DatasetPage,
+  DatasetQueryOptions,
+  DatasetRow,
+  DatasetRowError,
   EventBatchResponse,
   EventRecordResponse,
   FetchLike,
   IdInput,
+  IngestAppendRequest,
+  IngestAppendResponse,
+  IngestCreateDatasetRequest,
+  IngestDataset,
+  IngestDatasetResponse,
+  IngestGetQueryResultsRequest,
+  IngestListDatasetsRequest,
+  IngestListDatasetsResponse,
+  IngestQueryRequest,
+  IngestQueryResponse,
+  IngestQueryResults,
+  IngestResultFormat,
+  IngestRow,
+  IngestRowError,
+  IngestWriteOptions,
   JsonPrimitive,
   JsonValue,
   KnownActorType,
