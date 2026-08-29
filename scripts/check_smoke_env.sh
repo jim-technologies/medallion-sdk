@@ -15,3 +15,9 @@ for name in "${required[@]}"; do
     exit 1
   fi
 done
+
+# The datasets live tier is opt-in on top of the connect smoke set; without a
+# target dataset it skips rather than fails.
+if [[ -z "${MEDALLION_SMOKE_INGEST_DATASET:-}" ]]; then
+  echo "note: MEDALLION_SMOKE_INGEST_DATASET is unset; the datasets live tests will skip" >&2
+fi
