@@ -16,10 +16,20 @@ PIP_AUDIT_VERSION ?= 2.10.1
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install validate lock-check version-check version-set release contract-sync contract-check contract-release-check contract-release-gate generated-check breaking-check artifact-check git-install-check public-surface check-examples test test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python lint-proto lint-shell lint-workflows fmt fmt-ts fmt-go fmt-python fmt-proto fmt-shell audit audit-node audit-go audit-python secret-check deps generate proto-bindings proto-descriptor run clean
+.PHONY: help help-all install validate lock-check version-check version-set release contract-sync contract-check contract-release-check contract-release-gate generated-check breaking-check artifact-check git-install-check public-surface check-examples test test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python lint-proto lint-shell lint-workflows fmt fmt-ts fmt-go fmt-python fmt-proto fmt-shell audit audit-node audit-go audit-python secret-check deps generate proto-bindings proto-descriptor run clean
 
-help: ## Show available targets.
-	@awk 'BEGIN {FS = ":.*## "; printf "Medallion SDK targets:\n"} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+help: ## One-screen help (make help-all for every target)
+	@echo "Daily:"
+	@echo "  make fmt        autofix formatting, every language"
+	@echo "  make test       all tests (TS, Go, Python)"
+	@echo "  make validate   the full offline gate; exactly what CI runs"
+	@echo "  make build      build all SDK packages"
+	@echo "  make generate   regenerate schema-derived code"
+	@echo ""
+	@echo "Everything else: make help-all"
+
+help-all: ## Every target with its description
+	@grep -hE '^[a-zA-Z0-9_-]+:.*##' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/'
 
 node_modules/.medallion-install-stamp: package.json pnpm-lock.yaml pnpm-workspace.yaml
 	$(PNPM) install --frozen-lockfile
