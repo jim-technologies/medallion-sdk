@@ -103,8 +103,13 @@ public-surface: secret-check ## Guard the public surface: tracked content, paths
 	scripts/public-surface-check
 	scripts/public-surface-check-test
 
-check-examples: build ## Type-check the runnable TypeScript integration examples.
+check-examples: build ## Check the runnable TypeScript, Go, and Python quickstart examples.
 	$(PNPM) check:examples
+	@unformatted="$$(gofmt -l examples)"; \
+	test -z "$$unformatted" || { echo "gofmt: examples need formatting:"; echo "$$unformatted"; exit 1; }
+	$(GO) vet ./examples/
+	$(RUFF) check --no-cache examples
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m compileall -q examples
 
 test: test-version test-contract-sync test-package-artifacts test-ts test-go test-python ## Run all tests.
 
