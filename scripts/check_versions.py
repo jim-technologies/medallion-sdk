@@ -25,8 +25,8 @@ INVARIANT_PROTOCOL_LOCATOR_PREFIX = (
     "https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/"
 )
 INVARIANT_PROTOCOL_LOCATOR = INVARIANT_PROTOCOL_LOCATOR_PREFIX + INVARIANT_PROTOCOL_SHA
-ESBUILD_VERSION = "0.28.1"
-POSTCSS_VERSION = "8.5.24"
+ESBUILD_VERSION = "0.28.2"
+POSTCSS_VERSION = "8.5.26"
 
 
 def read_json(path: str) -> dict[str, Any]:

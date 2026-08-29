@@ -384,7 +384,7 @@ class VersionScriptsTest(unittest.TestCase):
         workspace_path = self.fixture / "pnpm-workspace.yaml"
         workspace_path.write_text(
             workspace_path.read_text().replace(
-                'esbuild: "0.28.1"',
+                'esbuild: "0.28.2"',
                 'esbuild: "0.0.0"',
             )
         )
@@ -396,7 +396,7 @@ class VersionScriptsTest(unittest.TestCase):
     def test_checker_rejects_esbuild_lock_drift(self) -> None:
         lock_path = self.fixture / "pnpm-lock.yaml"
         lock_path.write_text(
-            lock_path.read_text().replace("  esbuild@0.28.1:", "  esbuild@0.0.0:", 1)
+            lock_path.read_text().replace("  esbuild@0.28.2:", "  esbuild@0.0.0:", 1)
         )
 
         result = self.run_script("check_versions.py")
@@ -407,7 +407,7 @@ class VersionScriptsTest(unittest.TestCase):
         workspace_path = self.fixture / "pnpm-workspace.yaml"
         workspace_path.write_text(
             workspace_path.read_text().replace(
-                'postcss: "8.5.24"',
+                'postcss: "8.5.26"',
                 'postcss: "0.0.0"',
             )
         )
@@ -420,7 +420,7 @@ class VersionScriptsTest(unittest.TestCase):
         lock_path = self.fixture / "pnpm-lock.yaml"
         lock_path.write_text(
             lock_path.read_text().replace(
-                "  postcss@8.5.24:",
+                "  postcss@8.5.26:",
                 "  postcss@0.0.0:",
                 1,
             )
@@ -434,7 +434,7 @@ class VersionScriptsTest(unittest.TestCase):
         workspace_path = self.fixture / "pnpm-workspace.yaml"
         workspace_path.write_text(
             workspace_path.read_text().replace(
-                "- postcss@8.5.24",
+                "- postcss@8.5.26",
                 "- postcss@0.0.0",
             )
         )

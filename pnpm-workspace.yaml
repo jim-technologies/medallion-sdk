@@ -2,8 +2,8 @@ packages:
   - "."
 
 overrides:
-  esbuild: "0.28.1"
-  postcss: "8.5.24"
+  esbuild: "0.28.2"
+  postcss: "8.5.26"
 
 # invariantprotocol is Git-distributed and builds its TypeScript output during
 # installation. Keep this exact commit allowlisted with the dependency pin.
@@ -14,4 +14,4 @@ allowBuilds:
 
 # Permit the patched PostCSS release through pnpm's minimum-release-age gate.
 minimumReleaseAgeExclude:
-  - postcss@8.5.24
+  - postcss@8.5.26
