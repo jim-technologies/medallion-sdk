@@ -50,15 +50,15 @@
     "test:deployed": "vitest run test/deployed-smoke.test.ts"
   },
   "dependencies": {
-    "@bufbuild/protobuf": "2.13.0",
+    "@bufbuild/protobuf": "2.14.0",
     "@jim-technologies/invariant-protocol": "github:jim-technologies/invariantprotocol#f924e602582402476f257571852fabb0e1e1cf43",
     "@opentelemetry/api": "1.9.1"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.5",
+    "@biomejs/biome": "2.5.11",
     "@types/node": "24.13.3",
     "tsup": "8.5.1",
     "typescript": "7.0.2",
-    "vitest": "4.1.10"
+    "vitest": "4.1.11"
   }
 }
