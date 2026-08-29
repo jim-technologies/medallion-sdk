@@ -99,6 +99,16 @@ CONNECT_RPC_METHODS = frozenset(
         "ListAuditEvents",
     }
 )
+INGEST_RPC_METHODS = frozenset(
+    {
+        "Append",
+        "Query",
+        "GetQueryResults",
+        "CreateDataset",
+        "GetDataset",
+        "ListDatasets",
+    }
+)
 ACTIVE_LEGACY_SCOPE_MARKERS = (
     b"tenant" + b"_id",
     b"tenant" + b"Id",
@@ -427,7 +437,10 @@ def check_go() -> None:
     }
     require_exact_files(
         descriptors,
-        {"proto/external-ingestion-v1.descriptor.binpb"},
+        {
+            "proto/external-ingestion-v1.descriptor.binpb",
+            "proto/ingest-v1.descriptor.binpb",
+        },
         "Go Git package descriptors",
     )
 
@@ -489,6 +502,21 @@ def check_go() -> None:
         rb"^func \(c \*ConnectClient\) ([A-Z][A-Za-z0-9]*)\(",
         CONNECT_RPC_METHODS,
         "Go ConnectClient methods",
+    )
+
+    generated_ingest = ROOT / "go/gen/medallion/ingest/v1/ingest.pb.go"
+    ingest_payload = generated_ingest.read_bytes()
+    reject_forbidden_ingestion_symbols(ingest_payload, "Go generated ingest binding")
+    require_ingestion_symbols(
+        ingest_payload,
+        tuple(method.encode() for method in sorted(INGEST_RPC_METHODS)),
+        "Go generated ingest binding",
+    )
+    require_exact_rpc_methods(
+        b"\n".join(source.read_bytes() for source in go_runtime_sources),
+        rb"^func \(c \*IngestClient\) ([A-Z][A-Za-z0-9]*)\(",
+        INGEST_RPC_METHODS,
+        "Go IngestClient methods",
     )
 
 

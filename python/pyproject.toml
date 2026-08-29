@@ -45,6 +45,7 @@ target-version = "py314"
 extend-exclude = [
   "src/buf/validate/validate_pb2.py",
   "src/medallion/connect/v1/connect_pb2.py",
+  "src/medallion/ingest/v1/ingest_pb2.py",
 ]
 
 [tool.ruff.lint]

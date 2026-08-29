@@ -19,8 +19,8 @@ command -v buf >/dev/null || {
 }
 
 mapfile -t descriptors < <(find proto -maxdepth 1 -type f -name '*.descriptor.binpb' -print | sort)
-if [[ "${descriptors[*]}" != "proto/external-ingestion-v1.descriptor.binpb" ]]; then
-  echo "proto must contain exactly the external-ingestion v1 descriptor" >&2
+if [[ "${descriptors[*]}" != "proto/external-ingestion-v1.descriptor.binpb proto/ingest-v1.descriptor.binpb" ]]; then
+  echo "proto must contain exactly the external-ingestion and ingest v1 descriptors" >&2
   printf 'found: %s\n' "${descriptors[*]:-(none)}" >&2
   exit 1
 fi
@@ -30,10 +30,24 @@ buf generate proto/external-ingestion-v1.descriptor.binpb \
   --path medallion/connect/v1/connect.proto \
   --output "$tmp/generated"
 
+buf generate proto \
+  --template "$root/buf.gen.yaml" \
+  --path proto/medallion/ingest/v1/ingest.proto \
+  --output "$tmp/generated"
+
+mkdir -p "$tmp/generated/proto"
+buf build proto \
+  --path proto/medallion/ingest/v1/ingest.proto \
+  --exclude-source-info \
+  -o "$tmp/generated/proto/ingest-v1.descriptor.binpb"
+
 generated_files=(
   "go/gen/medallion/connect/v1/connect.pb.go"
+  "go/gen/medallion/ingest/v1/ingest.pb.go"
+  "proto/ingest-v1.descriptor.binpb"
   "python/src/buf/validate/validate_pb2.py"
   "python/src/medallion/connect/v1/connect_pb2.py"
+  "python/src/medallion/ingest/v1/ingest_pb2.py"
 )
 for relative in "${generated_files[@]}"; do
   if ! cmp -s "$relative" "$tmp/generated/$relative"; then

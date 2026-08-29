@@ -20,6 +20,12 @@ const descriptors = [
     constant: "CONNECT_DESCRIPTOR_BASE64",
     functionName: "connectDescriptorBytes",
   },
+  {
+    descriptor: "proto/ingest-v1.descriptor.binpb",
+    output: "src/ingest-descriptor.ts",
+    constant: "INGEST_DESCRIPTOR_BASE64",
+    functionName: "ingestDescriptorBytes",
+  },
 ];
 
 for (const item of descriptors) {
