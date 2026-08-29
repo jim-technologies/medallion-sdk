@@ -39,6 +39,7 @@ mkdir -p "$tmp/generated/proto"
 buf build proto \
   --path proto/medallion/ingest/v1/ingest.proto \
   --exclude-source-info \
+  --as-file-descriptor-set \
   -o "$tmp/generated/proto/ingest-v1.descriptor.binpb"
 
 generated_files=(

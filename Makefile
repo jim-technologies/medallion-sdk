@@ -226,7 +226,7 @@ generate: proto-bindings proto-descriptor ## Regenerate all schema-derived code;
 proto-bindings: ## Regenerate public Go and Python Connect and ingest protobuf bindings.
 	$(BUF) generate proto/external-ingestion-v1.descriptor.binpb --template buf.gen.yaml --path medallion/connect/v1/connect.proto
 	$(BUF) generate proto --template buf.gen.yaml --path proto/medallion/ingest/v1/ingest.proto
-	$(BUF) build proto --path proto/medallion/ingest/v1/ingest.proto --exclude-source-info -o proto/ingest-v1.descriptor.binpb
+	$(BUF) build proto --path proto/medallion/ingest/v1/ingest.proto --exclude-source-info --as-file-descriptor-set -o proto/ingest-v1.descriptor.binpb
 
 proto-descriptor: node_modules/.medallion-install-stamp ## Regenerate TypeScript invariantprotocol descriptors.
 	node scripts/embed-connect-descriptor.mjs

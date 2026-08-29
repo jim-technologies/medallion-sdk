@@ -380,9 +380,14 @@ test("generated-code check detects language binding drift", () => {
     "go.sum",
     LOCAL_DESCRIPTOR_RELATIVE,
     "go/gen/medallion/connect/v1/connect.pb.go",
+    "go/gen/medallion/ingest/v1/ingest.pb.go",
+    "proto/ingest-v1.descriptor.binpb",
+    "proto/medallion/ingest/v1/ingest.proto",
     "python/src/buf/validate/validate_pb2.py",
     "python/src/medallion/connect/v1/connect_pb2.py",
+    "python/src/medallion/ingest/v1/ingest_pb2.py",
     "src/connect-descriptor.ts",
+    "src/ingest-descriptor.ts",
   ];
   try {
     for (const relative of required) {
