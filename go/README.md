@@ -11,15 +11,34 @@ That tag is created at the repository root; there are no language-specific Go,
 Python, or TypeScript tag namespaces. Pin a full Git commit SHA instead when a
 deployment requires commit-level immutability.
 
-The initial Go SDK supports exactly four low-level Connect RPCs:
-`PublishCdcEvents`, `ListCdcEvents`, `PublishAuditEvents`, and
-`ListAuditEvents`. It exposes no other RPC or broader control-plane surface.
+The Go SDK speaks two bounded surfaces and nothing else:
 
-`Connect` names the public ingestion RPC surface; it is not a separate base URL.
-An operator uses Medallion's control plane to provision the workspace,
-connector, API key, and Medallion API base URL before a server-side application
-starts the SDK. The SDK does not automate that provisioning or expose broader
-platform administration APIs.
+- `medallion.ingest.v1` — the tabular datasets, append, and query surface
+  (`Append`, `Query`, `GetQueryResults`, `CreateDataset`, `GetDataset`,
+  `ListDatasets`) through the deliberately thin `client.Ingest`, built on the
+  generated bindings in `go/gen/medallion/ingest/v1`. The richer convenience
+  layer ships Python-first.
+- `medallion.connect.v1` — the DEPRECATED CDC/audit publish surface
+  (`PublishCdcEvents`, `ListCdcEvents`, `PublishAuditEvents`,
+  `ListAuditEvents`), which keeps working for existing integrations.
+
+An operator uses Medallion's control plane to provision the workspace, API
+key, and Medallion API base URL (plus a connector ID for the deprecated
+publish surface) before a server-side application starts the SDK. The SDK
+does not automate that provisioning or expose broader platform administration
+APIs.
+
+## Datasets and queries
+
+`client.Ingest` passes generated protobuf requests through with header-only
+workspace identity. `Append` and `CreateDataset` always carry a Stripe-style
+`Idempotency-Key` header: the SDK generates one per call, or
+`medallion.WithIngestIdempotencyKey(ctx, key)` pins a caller key so an exact
+replay of the same batch is acknowledged as a duplicate. Queries pass one
+statement through verbatim in the declared ClickHouse SQL dialect; poll
+`GetQueryResults` while `completed` is false and follow `next_page_token`
+until it is empty. See [`examples/datasets.go`](../examples/datasets.go) for
+the complete flow.
 
 ## Configure a client
 

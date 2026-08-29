@@ -44,18 +44,22 @@ Before a v2 or later release, migrate the Go module and imports to the required
 
 ## Scope
 
-Every language implementation supports the same bounded customer-ingestion
-surface:
+Every language implementation supports the same two bounded customer surfaces:
 
-- audit events
-- CDC events
-- audit and CDC readback for verification and reconciliation
+- `medallion.ingest.v1` — the tabular datasets surface: dataset
+  create/get/list, idempotent batch appends, and read-back SQL queries in the
+  declared ClickHouse dialect. Its clients and wrappers must contain exactly
+  `Append`, `Query`, `GetQueryResults`, `CreateDataset`, `GetDataset`, and
+  `ListDatasets`.
+- `medallion.connect.v1` — the deprecated CDC/audit publish surface. Its
+  generated service, low-level clients, and ergonomic wrappers must contain
+  exactly `PublishCdcEvents`, `PublishAuditEvents`, `ListCdcEvents`, and
+  `ListAuditEvents`.
 
-The generated Connect service, low-level clients, and ergonomic wrappers must
-contain exactly `PublishCdcEvents`, `PublishAuditEvents`, `ListCdcEvents`, and
-`ListAuditEvents`. Do not add a generic RPC dispatcher, connector provisioning,
-platform administration, first-party application APIs, actions, secrets, or
-storage APIs to this repository.
+Do not add a generic RPC dispatcher, connector provisioning, platform
+administration, first-party application APIs, actions, secrets, an ORM or
+query builder over the SQL passthrough, an Iceberg client wrapper, or
+object-storage APIs to this repository.
 
 When vendored proto contracts change, regenerate the language bindings and
 TypeScript descriptors:

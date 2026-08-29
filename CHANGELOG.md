@@ -6,6 +6,26 @@ annotated `vX.Y.Z` tag.
 
 ## [Unreleased]
 
+- Add the `medallion.ingest.v1` tabular surface as the SDK's main act:
+  dataset create/get/list, `Append` (the insertAll analog with per-row
+  `insert_id` passthrough and per-row error surfacing), and
+  `Query`/`GetQueryResults` (the synchronous-first jobs.query analog with
+  transparent poll-and-paginate). Queries pass one statement through verbatim
+  in the declared ClickHouse SQL dialect; workspace identity rides only in
+  request headers, and appends and dataset creation carry an automatic
+  Stripe-style `Idempotency-Key` header for whole-batch replay protection.
+  The vendored ingest proto awaits its first sanitized upstream export; the
+  pin is recorded as pending in `proto/README.md`.
+- Ship the surface in all three languages: TypeScript `client.datasets` and
+  the low-level `client.ingest` with an async row iterator that never exposes
+  page tokens; Python `client.datasets` with the dataframe-first layer
+  (polars/pyarrow appends, `to_polars()` collection, `medallion[polars]`
+  extra); Go generated bindings with a deliberately thin `client.Ingest`.
+  Runnable quickstarts land in `examples/` for every language, and live tests
+  stay opt-in behind the `MEDALLION_SMOKE_*` environment.
+- Deprecate the `medallion.connect.v1` CDC/audit publish surface. The four
+  publish/list RPCs and their clients keep working unchanged; the README is
+  rewritten around getting data into and out of Medallion through datasets.
 - Replace the SDK-specific public-surface script with the shared guard every
   public jim-technologies repository runs. It scans tracked content, tracked
   paths, and the commit messages a push would publish; exceptions live in

@@ -1,24 +1,37 @@
-# Medallion external-ingestion SDK
+# Medallion SDK
 
-This repository is the thin, server-side customer SDK for publishing CDC and
-audit events into Medallion through the stable
-`medallion.connect.v1.MedallionConnectService` ingestion identity. Configure the
-Medallion API base URL supplied with your integration.
+This repository is the server-side customer SDK for getting data into and out
+of Medallion. Its main surface is `medallion.ingest.v1.MedallionIngestService`:
+named datasets, idempotent batch appends, and read-back SQL queries in the
+declared ClickHouse dialect. The shapes follow the widely understood BigQuery
+analogs — append is the insertAll analog, and queries are the modernized,
+synchronous-first jobs.query analog with transparent poll-and-paginate.
 
-Medallion control-plane workflows provision an integration and provide a
-workspace-bound API key, workspace ID, and connector ID. This SDK does not
-create credentials or connectors, and it is not an administration, storage,
-query, provider, OAuth, or provisioning client.
+The stable ingest v1 surface is exactly:
 
-The stable external-ingestion v1 surface is exactly:
+- `Append`
+- `Query`
+- `GetQueryResults`
+- `CreateDataset`
+- `GetDataset`
+- `ListDatasets`
 
-- `PublishCdcEvents`
-- `PublishAuditEvents`
-- `ListCdcEvents`
-- `ListAuditEvents`
+The older `medallion.connect.v1` CDC/audit publish surface is DEPRECATED. Its
+four RPCs keep working and stay documented [below](#deprecated-cdc-and-audit-publishing),
+but new integrations should land data through datasets.
 
-Customer code must run on a trusted server. Never put a Medallion API key in a
-browser, mobile application, or shipped client bundle.
+## Boundaries
+
+- **Server-side only.** Customer code must run on a trusted server. Never put
+  a Medallion API key in a browser, mobile application, or shipped client
+  bundle.
+- **Not an ORM and not a query builder.** SQL passes through verbatim as the
+  declared ClickHouse SQL; the SDK never rewrites, parameterizes, or
+  dialect-translates a statement.
+- **No Iceberg client wrapper.** A future read-only Iceberg catalog door is
+  served by standard clients such as PyIceberg, not by this SDK.
+- The SDK does not create credentials or workspaces, and it is not an
+  administration, storage, provider, OAuth, or provisioning client.
 
 ## Install from Git
 
@@ -32,8 +45,8 @@ invariantprotocol v0.14.0 (commit
 `f924e602582402476f257571852fabb0e1e1cf43`).
 
 ```bash
-pnpm add 'github:jim-technologies/medallion-sdk#v0.2.0'
-npm install --allow-git=all 'git+https://github.com/jim-technologies/medallion-sdk.git#v0.2.0'
+pnpm add 'github:jim-technologies/medallion-sdk#v0.3.0'
+npm install --allow-git=all 'git+https://github.com/jim-technologies/medallion-sdk.git#v0.3.0'
 ```
 
 Go and Python installation commands are documented in
@@ -54,8 +67,7 @@ const medallion = new MedallionClient({
   baseUrl: "https://api.example.com",
   apiKey: process.env.MEDALLION_API_KEY!,
   workspaceId: process.env.MEDALLION_WORKSPACE_ID!,
-  defaultConnectorId: process.env.MEDALLION_CONNECTOR_ID!,
-  timeoutMs: 20_000,
+  timeoutMs: 30_000,
 });
 ```
 
@@ -63,159 +75,112 @@ The SDK sends the API key only as `X-Medallion-API-Key` and the configured
 workspace only as `X-Medallion-Workspace-Id`. A bearer `accessToken` is also
 supported for an authorized server-side flow; configure exactly one of
 `apiKey` or `accessToken`. The SDK does not acquire or refresh tokens.
+Workspace identity is header-only on the ingest surface: no ingest request
+body carries a workspace field.
 
 The base URL must be the Medallion API HTTPS origin with no path, credentials,
 query, or fragment. Plain HTTP is accepted only for explicit loopback
 development. Canonical RPC paths are used directly; `/rpc`, REST aliases,
 redirects, and fallback hosts are not used.
 
-## Publish CDC
+## Datasets and appends
 
-Use a stable key derived from the source record or durable outbox row. Every
-event requires its own key.
-
-```ts
-const result = await medallion.cdc.record({
-  streamName: "orders",
-  entityType: "order",
-  entityId: "order_8421",
-  operation: "insert",
-  idempotencyKey: "orders:partition-7:offset-184392",
-  sourceEventId: "partition-7/184392",
-  occurredAt: "2026-08-03T18:04:12.123456789Z",
-  payload: { status: "created", totalCents: 4200 },
-});
-
-console.log({
-  eventId: result.events[0]?.eventId,
-  duplicate: result.events[0]?.duplicate,
-});
-```
-
-Durable event IDs are returned as decimal strings, so JavaScript never loses
-64-bit precision. Event payload objects are encoded as compact deterministic
-JSON without mutation. Cyclic values, non-finite numbers, and unsupported JSON
-values are rejected locally.
-
-A batch contains between 1 and 1,000 events. Input order and receipt order are
-preserved, and duplicate keys in one batch are rejected before network I/O.
+A dataset is a named tabular collection in the configured workspace. Create
+one, then append batches of JSON rows:
 
 ```ts
-const batch = await medallion.cdc.publishBatch({
-  events: [
-    {
-      streamName: "orders",
-      entityType: "order",
-      entityId: "order_8421",
-      operation: "update",
-      idempotencyKey: "orders:partition-7:offset-184393",
-      payload: { status: "paid" },
-    },
-    {
-      streamName: "orders",
-      entityType: "order",
-      entityId: "order_8422",
-      operation: "insert",
-      idempotencyKey: "orders:partition-7:offset-184394",
-      payload: { status: "created" },
-    },
+await medallion.datasets.create({
+  datasetId: "app_events",
+  description: "application events",
+});
+
+const appended = await medallion.datasets.append(
+  "app_events",
+  [
+    { level: "info", message: "service started", at: "2026-08-29T01:00:00Z" },
+    { level: "warn", message: "cache is cold", at: "2026-08-29T01:00:02Z" },
   ],
-});
+  { insertIds: ["boot:1", "boot:2"] },
+);
 
-for (const receipt of batch.events) {
-  console.log(receipt.idempotencyKey, receipt.eventId, receipt.duplicate);
+console.log(appended.acceptedRows, appended.idempotencyKey);
+for (const rowError of appended.rowErrors) {
+  console.error("rejected", rowError.index, rowError.reason);
 }
 ```
 
-## Publish audit events
+Every append (and dataset creation) carries a Stripe-style `Idempotency-Key`
+request header. The SDK generates one automatically and returns it; pass the
+same key back to replay the exact batch safely after a crash or timeout, and
+the server acknowledges the replay with `duplicate: true`. Optional
+`insertIds` pass a per-row deduplication identifier through as each row's
+`insert_id`, the BigQuery insertId analog.
 
-`actor` identifies the source/application actor. The authenticated principal
-is the service account submitting the event. `action` is a stable operation
-key; `outcome` records the authoritative result and must be concrete.
+Rows can also arrive as one pre-encoded Arrow IPC stream (`Uint8Array` in
+TypeScript, `bytes`, a `pyarrow` table, or a `polars.DataFrame` in Python).
+An append batch holds 1 through 50,000 rows; per-row failures are surfaced in
+`rowErrors` with the row's index and a stable machine-readable reason.
+
+## Queries
+
+`query()` runs one statement in the declared ClickHouse SQL dialect. The call
+is synchronous first: if the server finishes within the request's synchronous
+budget, rows come back immediately; otherwise the SDK transparently polls
+`GetQueryResults` until the query completes. Iterating the result walks every
+page — callers never touch a page token.
 
 ```ts
-const audit = await medallion.audit.record({
-  resourceType: "invoice",
-  resourceId: "invoice_314",
-  action: "invoice.approve",
-  outcome: "succeeded",
-  actor: { type: "user", id: "user_2718" },
-  idempotencyKey: "billing-outbox:982451653",
-  payload: {
-    approvalId: "approval_1618",
-    evidenceRef: "object://audit-evidence/approval_1618.json",
-  },
-});
+const result = await medallion.datasets.query(
+  "SELECT level, count() AS events FROM app_events GROUP BY level",
+  { serverTimeoutMs: 10_000 },
+);
 
-if (audit.duplicate) {
-  console.log("Already accepted as", audit.events[0]?.eventId);
+console.log(result.columns); // [{ name: "level", type: "String" }, ...]
+for await (const row of result) {
+  console.log(row.level, row.events);
 }
 ```
 
-Store large evidence externally and send a stable reference. Payload contents
-are not logged or traced by default.
+`dryRun: true` validates the statement and reports `totalBytesProcessed` and
+the result schema without executing it. `format: "arrow"` returns result pages
+as Arrow IPC streams via `result.arrowBatches()` instead of JSON rows. Query
+results are single-consumption; run the query again to re-read it.
 
-## Delivery, retries, and an outbox
+## Python first: dataframes in, dataframes out
 
-Delivery from your application is at least once. Medallion provides durable
-server-side idempotency and duplicate detection, so replaying the exact event
-with the same source-derived key is safe. This is not transport-level or
-end-to-end exactly-once delivery.
+Ingest users are data people, so the richest convenience layer ships in the
+Python SDK (install the `medallion[polars]` extra):
 
-When losing an event is unacceptable, write the business change and an outbox
-row in the same database transaction. A worker should publish that row, retain
-its stable key, and mark it delivered only after decoding a valid receipt.
-Replaying an unknown-outcome batch must preserve its exact content and order.
+```python
+import polars as pl
+from medallion import MedallionClient
 
-Automatic retry is disabled by default. Enable it deliberately; at most five
-total attempts are allowed. Retries use bounded exponential backoff with
-jitter, honor `Retry-After`, preserve the exact serialized bytes, and obey the
-request deadline and cancellation signal.
+client = MedallionClient(
+    base_url=os.environ["MEDALLION_BASE_URL"],
+    api_key=os.environ["MEDALLION_API_KEY"],
+    workspace_id=os.environ["MEDALLION_WORKSPACE_ID"],
+)
 
-```ts
-const retrying = new MedallionClient({
-  baseUrl: "https://api.example.com",
-  apiKey: process.env.MEDALLION_API_KEY!,
-  workspaceId: process.env.MEDALLION_WORKSPACE_ID!,
-  defaultConnectorId: process.env.MEDALLION_CONNECTOR_ID!,
-  timeoutMs: 30_000,
-  retry: {
-    maxAttempts: 3,
-    initialDelayMs: 200,
-    maxDelayMs: 2_000,
-    jitterRatio: 0.2,
-  },
-});
+frame = pl.DataFrame({"level": ["info", "warn"], "count": [1, 2]})
+client.datasets.append("app_events", frame)  # rides as one Arrow IPC stream
 
-const stableKey = "orders:partition-7:offset-184395";
-await retrying.cdc.record({
-  streamName: "orders",
-  entityType: "order",
-  entityId: "order_8423",
-  operation: "insert",
-  idempotencyKey: stableKey,
-  payload: { status: "created" },
-});
+frame = client.datasets.query(
+    "SELECT level, count() AS events FROM app_events GROUP BY level",
+    format="arrow",
+).to_polars()
 ```
 
-Validation, authentication, authorization, scope conflicts, entitlement
-failures, and idempotency mismatches are terminal. Unknown structured error
-reasons are preserved and never retried automatically.
+TypeScript has full base parity (append, query, dataset management); its
+dataframe conveniences follow when a real consumer needs them. Go ships
+generated bindings plus a deliberately thin client.
 
-## Structured errors and backpressure
+## Structured errors and retries
 
 ```ts
 import { MedallionApiError } from "@jimtech/medallion";
 
 try {
-  await medallion.cdc.record({
-    streamName: "orders",
-    entityType: "order",
-    entityId: "order_8424",
-    operation: "update",
-    idempotencyKey: "orders:partition-7:offset-184396",
-    payload: { status: "fulfilled" },
-  });
+  await medallion.datasets.append("app_events", rows);
 } catch (error) {
   if (error instanceof MedallionApiError) {
     console.error({
@@ -223,10 +188,6 @@ try {
       reason: error.errorInfoReason,
       requestId: error.requestId,
     });
-
-    if (error.errorInfoReason === "BACKPRESSURE") {
-      // Leave the durable outbox row pending and retry the exact event later.
-    }
   }
   throw error;
 }
@@ -234,86 +195,61 @@ try {
 
 Errors expose the Connect/gRPC code, HTTP status, sanitized message, request
 ID, decoded `google.rpc.ErrorInfo`, and unknown detail envelopes. They do not
-retain raw response bodies, credentials, or event payloads. Branch on code,
-domain, and reason—not human-readable message text.
+retain raw response bodies, credentials, or row payloads. Branch on code,
+domain, and reason — not human-readable message text.
 
-## Read back for verification
-
-Page cursors are opaque and confidential. Pass them back unchanged; do not
-decode, store in logs, or infer ordering from them.
-
-```ts
-const page = await medallion.cdc.list({
-  connectorId: process.env.MEDALLION_CONNECTOR_ID!,
-  streamName: "orders",
-  limit: 100,
-});
-
-for (const event of page.events) {
-  console.log(event.eventId, event.idempotencyKey);
-}
-
-for await (const event of medallion.audit.iterate({
-  resourceType: "invoice",
-  resourceId: "invoice_314",
-  limit: 100,
-})) {
-  console.log(event.eventId, event.action, event.outcome);
-}
-```
-
-`limit: 0` selects the server default of 100; the maximum is 500. Iterators
-continue across empty pages with a continuation cursor, reject repeated
-cursors, and enforce a maximum page count. The original workspace and filters
-remain fixed for the whole iteration.
+Automatic retry is disabled by default and capped at five total attempts.
+Retries use bounded exponential backoff with jitter, honor `Retry-After`,
+preserve the exact serialized bytes, and obey the request deadline and
+cancellation signal. Appends are retry-safe because the `Idempotency-Key`
+header makes an exact replay a duplicate, never a double write.
 
 ## Cancellation, deadlines, and tracing
 
 ```ts
 const controller = new AbortController();
 
-await medallion.audit.list(
-  { limit: 100 },
-  { signal: controller.signal, timeoutMs: 5_000 },
-);
-```
-
-`timeoutMs` is sent as `Connect-Timeout-Ms` and covers retries and backoff.
-Cancellation propagates through requests and retry waits.
-
-Tracing is optional and uses the application’s OpenTelemetry provider; the SDK
-does not install or require a dedicated exporter.
-
-```ts
-const traced = new MedallionClient({
-  baseUrl: "https://api.example.com",
-  apiKey: process.env.MEDALLION_API_KEY!,
-  workspaceId: process.env.MEDALLION_WORKSPACE_ID!,
-  defaultConnectorId: process.env.MEDALLION_CONNECTOR_ID!,
-  tracing: true,
+await medallion.datasets.query("SELECT count() FROM app_events", {
+  signal: controller.signal,
+  timeoutMs: 5_000,
 });
 ```
 
-Telemetry is limited to safe transport metadata. Credentials, authorization
-headers, cursors, and payload contents are never attached.
+`timeoutMs` is sent as `Connect-Timeout-Ms` and covers retries and backoff.
+Cancellation propagates through requests, polling, and retry waits.
 
-## Migration
+Tracing is optional and uses the application's OpenTelemetry provider; the
+SDK does not install or require a dedicated exporter. Telemetry is limited to
+safe transport metadata: credentials, tokens, row payloads, and SQL text are
+never attached.
 
-Replace a separately configured Connect URL with the Medallion API origin:
+## Deprecated: CDC and audit publishing
 
-```diff
- const medallion = new MedallionClient({
--  connectBaseUrl: process.env.MEDALLION_CONNECT_URL,
-+  baseUrl: process.env.MEDALLION_API_URL,
-   apiKey: process.env.MEDALLION_API_KEY,
-   workspaceId: process.env.MEDALLION_WORKSPACE_ID,
- });
+The `medallion.connect.v1.MedallionConnectService` surface — exactly
+`PublishCdcEvents`, `PublishAuditEvents`, `ListCdcEvents`, and
+`ListAuditEvents` — is deprecated but still served. Existing integrations
+keep working unchanged through `medallion.cdc`, `medallion.audit`, and the
+low-level `medallion.connect` clients:
+
+```ts
+const receipt = await medallion.cdc.record({
+  streamName: "orders",
+  entityType: "order",
+  entityId: "order_8421",
+  operation: "insert",
+  idempotencyKey: "orders:partition-7:offset-184392",
+  payload: { status: "created" },
+});
 ```
 
-Do not append `/rpc`; the SDK uses
-`/medallion.connect.v1.MedallionConnectService/<Method>` directly. Workspace
-selection is immutable at client construction, and event-level workspace or
-connector fields are not accepted.
+Publishing is at-least-once with durable server-side idempotency: replaying
+the exact event with the same source-derived key is safe. Batches hold 1
+through 1,000 events, receipts preserve input order, durable event IDs return
+as decimal strings, and page cursors on the list RPCs are opaque. When losing
+an event is unacceptable, pair the business write with an outbox row in one
+database transaction and mark it delivered only after decoding a valid
+receipt. The connect surface requires a provisioned `defaultConnectorId`;
+the datasets surface does not use connectors.
 
 ## Development
 
@@ -327,5 +263,7 @@ flox activate -- make git-install-check
 flox activate -- make audit
 ```
 
-The vendored, minimal external-ingestion contract permits normal offline
-checks. Release validation also requires its immutable release attestation.
+The vendored contracts permit normal offline checks. The ingest contract's
+upstream pin is pending its first sanitized export (see
+[`proto/README.md`](./proto/README.md)); release validation additionally
+requires the immutable release attestation.

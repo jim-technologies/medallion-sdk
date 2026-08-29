@@ -1,18 +1,22 @@
-# Medallion Python ingestion SDK
+# Medallion Python SDK
 
-This server-side SDK publishes customer CDC and audit events to the stable
-`medallion.connect.v1.MedallionConnectService` identity at the configured
-Medallion API base URL. It is intentionally limited to external ingestion.
+This server-side SDK gets data into and out of Medallion. Its main surface is
+`medallion.ingest.v1.MedallionIngestService` — datasets, idempotent batch
+appends (including polars DataFrames), and read-back SQL queries in the
+declared ClickHouse dialect with results collected straight into polars.
 
-The stable `external_ingestion_sdk_v1` profile contains exactly four RPCs:
-`PublishCdcEvents`, `PublishAuditEvents`, `ListCdcEvents`, and
-`ListAuditEvents`. Connector and credential provisioning remain control-plane
-operations and are intentionally absent here.
+The deprecated `medallion.connect.v1.MedallionConnectService` publish surface
+(`PublishCdcEvents`, `PublishAuditEvents`, `ListCdcEvents`,
+`ListAuditEvents`) keeps working and stays documented below. Connector and
+credential provisioning remain control-plane operations and are intentionally
+absent here.
 
-Install the SDK directly from Git:
+Install the SDK directly from Git (add the `polars` extra for the dataframe
+conveniences):
 
 ```sh
 uv add "medallion @ git+https://github.com/jim-technologies/medallion-sdk.git@vX.Y.Z#subdirectory=python"
+uv add "medallion[polars] @ git+https://github.com/jim-technologies/medallion-sdk.git@vX.Y.Z#subdirectory=python"
 ```
 
 All language SDKs use the repository-root version and the same `vX.Y.Z` tag.
@@ -43,9 +47,66 @@ different workspace, obtain an appropriately bound credential and construct a
 separate client. Per-call workspace overrides are intentionally unavailable.
 For an allowed service-account flow, use `access_token` instead of `api_key`;
 configuring both is rejected. Never put either credential in browser or mobile
-code.
+code. `default_connector_id` matters only for the deprecated publish surface;
+the datasets surface does not use connectors, and workspace identity rides
+only in request headers.
 
-## Publish CDC events
+## Datasets, appends, and queries
+
+A dataset is a named tabular collection in the configured workspace. Appends
+take plain dict rows, a `polars.DataFrame`, a `pyarrow.Table` or
+`RecordBatch`, or raw Arrow IPC `bytes`. Every append carries a Stripe-style
+`Idempotency-Key` header — generated automatically and returned — so the
+exact batch replays safely; per-row `insert_ids` pass through as each row's
+`insert_id`.
+
+```python
+client.datasets.create("app_events", description="application events")
+
+appended = client.datasets.append(
+    "app_events",
+    [
+        {"level": "info", "message": "service started"},
+        {"level": "warn", "message": "cache is cold"},
+    ],
+    insert_ids=["boot:1", "boot:2"],
+)
+print(appended.accepted_rows, appended.idempotency_key)
+for row_error in appended.row_errors:
+    print("rejected", row_error.index, row_error.reason)
+
+import polars as pl
+
+frame = pl.DataFrame({"level": ["info", "warn"], "count": [1, 2]})
+client.datasets.append("app_events", frame)  # one Arrow IPC stream
+```
+
+Queries run one statement in the declared ClickHouse SQL dialect, verbatim —
+this is not an ORM or a query builder. The call is synchronous first; while
+the server reports the query as running the SDK polls transparently, and
+iterating the result walks every page without exposing page tokens:
+
+```python
+result = client.datasets.query(
+    "SELECT level, count() AS events FROM app_events GROUP BY level",
+    server_timeout_ms=10_000,
+)
+print([(column.name, column.type) for column in result.columns])
+for row in result:
+    print(row["level"], row["events"])
+
+frame = client.datasets.query(
+    "SELECT level, count() AS events FROM app_events GROUP BY level",
+    format="arrow",
+).to_polars()
+```
+
+`dry_run=True` validates the statement and reports `total_bytes_processed`
+without executing it. Query results are single-consumption; run the query
+again to re-read it. `client.ingest` exposes the same six RPCs at the
+protobuf level (`ingest_pb2`).
+
+## Deprecated: publish CDC events
 
 Each event needs a stable, source-derived idempotency key of 1–512 UTF-8 bytes.
 Any non-empty valid Unicode string is accepted exactly as supplied, including
@@ -92,7 +153,7 @@ receipt = client.cdc.publish_batch(
 )
 ```
 
-## Publish audit events
+## Deprecated: publish audit events
 
 `actor` is the source application principal that performed the business action;
 it is distinct from the service account authenticating this request. `action`
@@ -177,7 +238,7 @@ Errors retain the Connect code, HTTP status, request ID, decoded
 a stable branching contract. Credentials and raw HTTP bodies are not retained
 in errors or tracing.
 
-## Read back events
+## Deprecated: read back events
 
 Raw page methods preserve the server's opaque cursor:
 
