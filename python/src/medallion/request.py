@@ -44,6 +44,12 @@ _CANONICAL_RPC_PATHS = frozenset(
         "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
         "/medallion.connect.v1.MedallionConnectService/PublishAuditEvents",
         "/medallion.connect.v1.MedallionConnectService/ListAuditEvents",
+        "/medallion.ingest.v1.MedallionIngestService/Append",
+        "/medallion.ingest.v1.MedallionIngestService/Query",
+        "/medallion.ingest.v1.MedallionIngestService/GetQueryResults",
+        "/medallion.ingest.v1.MedallionIngestService/CreateDataset",
+        "/medallion.ingest.v1.MedallionIngestService/GetDataset",
+        "/medallion.ingest.v1.MedallionIngestService/ListDatasets",
     }
 )
 _PROTECTED_HEADERS = frozenset(
@@ -55,6 +61,7 @@ _PROTECTED_HEADERS = frozenset(
         "content-length",
         "content-type",
         "host",
+        "idempotency-key",
         "x-medallion-api-key",
         "x-medallion-workspace-id",
     }
@@ -211,6 +218,7 @@ class _RequestClient:
         timeout: float | None = None,
         cancellation_event: Event | None = None,
         retry_safe: bool = False,
+        idempotency_key: str | None = None,
     ) -> ResponseEnvelope:
         # Serialize exactly once. Every retry sends the same bytes and ordering.
         payload = json_format.MessageToJson(
@@ -225,6 +233,7 @@ class _RequestClient:
             timeout=timeout,
             cancellation_event=cancellation_event,
             retry_safe=retry_safe,
+            idempotency_key=idempotency_key,
         )
         raw = envelope.body.get("__raw__")
         if not isinstance(raw, bytes) or not raw:
@@ -259,11 +268,12 @@ class _RequestClient:
         timeout: float | None,
         cancellation_event: Event | None,
         retry_safe: bool,
+        idempotency_key: str | None = None,
     ) -> ResponseEnvelope:
         canonical_path = path if path.startswith("/") else "/" + path
         if canonical_path not in _CANONICAL_RPC_PATHS:
             raise MedallionError(
-                "Only the four canonical medallion.connect.v1 ingestion RPCs are supported.",
+                "Only the canonical medallion.connect.v1 and medallion.ingest.v1 RPCs are supported.",
                 code="MEDALLION_UNSUPPORTED_RPC",
             )
         request_path = canonical_path
@@ -292,6 +302,8 @@ class _RequestClient:
                 headers = self._headers(
                     remaining,
                 )
+                if idempotency_key is not None:
+                    headers["Idempotency-Key"] = idempotency_key
                 trace_headers: dict[str, str] = {}
                 inject_trace_context(self._tracing, trace_headers)
                 if any(name.lower() in _PROTECTED_HEADERS for name in trace_headers):

@@ -139,6 +139,10 @@ class DescriptorContractTest(unittest.TestCase):
             if path.is_file()
             and path.suffix in {".py", ".md"}
             and path.name not in {"connect_pb2.py", "validate_pb2.py"}
+            # Installed third-party environments (.venv) and tool caches are
+            # not authored surface; a dependency may legitimately spell a
+            # token this repository has retired.
+            and not any(part.startswith(".") for part in path.relative_to(ROOT).parts)
         ]
         for path in authored:
             text = path.read_text()

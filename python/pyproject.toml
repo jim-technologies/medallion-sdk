@@ -29,6 +29,23 @@ dependencies = [
   "protobuf>=7.35.1,<8",
 ]
 
+[project.optional-dependencies]
+# Dataframe conveniences for the datasets surface: polars append inputs,
+# query results collected with to_polars(), and Arrow IPC payloads.
+polars = [
+  "polars>=1.20,<2",
+  "pyarrow>=19,<24",
+]
+
+[dependency-groups]
+# The dataframe conveniences are exercised by the unit tests, so the dev
+# environment installs the same optional stack consumers get from
+# medallion[polars].
+dev = [
+  "polars>=1.20,<2",
+  "pyarrow>=19,<24",
+]
+
 [project.urls]
 Homepage = "https://github.com/jim-technologies/medallion-sdk"
 Repository = "https://github.com/jim-technologies/medallion-sdk"

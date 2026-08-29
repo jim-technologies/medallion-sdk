@@ -11,6 +11,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 
 from medallion.connect.v1 import connect_pb2
 
+from .datasets import DatasetsClient, IngestClient
 from .errors import MedallionError
 from .ids import (
     actor_from_principal,
@@ -77,6 +78,8 @@ class MedallionClient:
             retry=retry,
             tracing=tracing,
         )
+        self.ingest = IngestClient(requests)
+        self.datasets = DatasetsClient(self.ingest)
         self.connect = ConnectClient(requests)
         self.audit = AuditClient(
             self.connect,

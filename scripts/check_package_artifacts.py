@@ -149,6 +149,7 @@ PYTHON_RUNTIME_FILES = frozenset(
         "buf/validate/validate_pb2.py",
         "medallion/__init__.py",
         "medallion/client.py",
+        "medallion/datasets.py",
         "medallion/error_policy_generated.py",
         "medallion/errors.py",
         "medallion/ids.py",
