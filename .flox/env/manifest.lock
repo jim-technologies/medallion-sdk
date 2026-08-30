@@ -95,11 +95,101 @@
     "vars": {
       "GOENV": "off",
       "GOFLAGS": "-mod=readonly",
-      "GOTOOLCHAIN": "go1.26.5+auto"
+      "GOTOOLCHAIN": "go1.27.0+auto"
     },
     "options": {}
   },
   "packages": [
+    {
+      "attr_path": "buf",
+      "broken": false,
+      "derivation": "/nix/store/d3kx7wyfywpxxb1hfwiv7if94knhrj8l-buf-1.72.0.drv",
+      "description": "Create consistent Protobuf APIs that preserve compatibility and comply with design best-practices",
+      "install_id": "buf",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=9fbb54b33e91ee4ca368e35a78e0613c720600b3",
+      "name": "buf-1.72.0",
+      "pname": "buf",
+      "rev": "9fbb54b33e91ee4ca368e35a78e0613c720600b3",
+      "rev_count": 1062397,
+      "rev_date": "2026-08-26T09:33:39Z",
+      "scrape_date": "2026-08-28T05:02:08.702674Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "1.72.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/3jdzgvppg8cvfpbnkv1fb1cjd3g2bjdv-buf-1.72.0"
+      },
+      "system": "aarch64-darwin",
+      "group": "buf",
+      "priority": 5
+    },
+    {
+      "attr_path": "buf",
+      "broken": false,
+      "derivation": "/nix/store/kkis1z5z2gxy6k7fbqxrrsgvhq56l9xq-buf-1.72.0.drv",
+      "description": "Create consistent Protobuf APIs that preserve compatibility and comply with design best-practices",
+      "install_id": "buf",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=9fbb54b33e91ee4ca368e35a78e0613c720600b3",
+      "name": "buf-1.72.0",
+      "pname": "buf",
+      "rev": "9fbb54b33e91ee4ca368e35a78e0613c720600b3",
+      "rev_count": 1062397,
+      "rev_date": "2026-08-26T09:33:39Z",
+      "scrape_date": "2026-08-28T05:38:03.334313Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "1.72.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/0qws96pl25wzjqx68w544s9lkvm7jwml-buf-1.72.0"
+      },
+      "system": "aarch64-linux",
+      "group": "buf",
+      "priority": 5
+    },
+    {
+      "attr_path": "buf",
+      "broken": false,
+      "derivation": "/nix/store/jwmbqm9sy2y2dzahix8chmypfhm0zqqa-buf-1.72.0.drv",
+      "description": "Create consistent Protobuf APIs that preserve compatibility and comply with design best-practices",
+      "install_id": "buf",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=9fbb54b33e91ee4ca368e35a78e0613c720600b3",
+      "name": "buf-1.72.0",
+      "pname": "buf",
+      "rev": "9fbb54b33e91ee4ca368e35a78e0613c720600b3",
+      "rev_count": 1062397,
+      "rev_date": "2026-08-26T09:33:39Z",
+      "scrape_date": "2026-08-28T06:17:37.884671Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "1.72.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/ayci2h427579cj5ak1ibv54r3yvp1jmj-buf-1.72.0"
+      },
+      "system": "x86_64-linux",
+      "group": "buf",
+      "priority": 5
+    },
     {
       "attr_path": "actionlint",
       "broken": false,
@@ -393,6 +483,7 @@
       "unfree": false,
       "version": "9.11",
       "outputs_to_install": [
+        "out",
         "out",
         "out",
         "out",
@@ -1185,6 +1276,7 @@
         "out",
         "out",
         "out",
+        "out",
         "out"
       ],
       "outputs": {
@@ -1969,6 +2061,7 @@
       "unfree": false,
       "version": "1.26.4",
       "outputs_to_install": [
+        "out",
         "out",
         "out"
       ],
@@ -2793,93 +2886,6 @@
       },
       "system": "x86_64-linux",
       "group": "toplevel",
-      "priority": 5
-    },
-    {
-      "attr_path": "buf",
-      "broken": false,
-      "derivation": "/nix/store/2qpy625ix82zws5v076mz7imhm8swqzl-buf-1.72.0.drv",
-      "description": "Create consistent Protobuf APIs that preserve compatibility and comply with design best-practices",
-      "install_id": "buf",
-      "license": "Apache-2.0",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=e5bdc4a41d4c072fe1e3787eaa0320a384741d44",
-      "name": "buf-1.72.0",
-      "pname": "buf",
-      "rev": "e5bdc4a41d4c072fe1e3787eaa0320a384741d44",
-      "rev_count": 1055335,
-      "rev_date": "2026-08-16T06:49:45Z",
-      "scrape_date": "2026-08-17T04:55:26.128847Z",
-      "stabilities": [
-        "unstable"
-      ],
-      "unfree": false,
-      "version": "1.72.0",
-      "outputs_to_install": [
-        "out"
-      ],
-      "outputs": {
-        "out": "/nix/store/a4n4x8pycrnvgsx2ibhar7w2v5hx8mkc-buf-1.72.0"
-      },
-      "system": "aarch64-darwin",
-      "group": "buf",
-      "priority": 5
-    },
-    {
-      "attr_path": "buf",
-      "broken": false,
-      "derivation": "/nix/store/2z3hgb8b561qfxvqynyvq862j2bv9vlb-buf-1.72.0.drv",
-      "description": "Create consistent Protobuf APIs that preserve compatibility and comply with design best-practices",
-      "install_id": "buf",
-      "license": "Apache-2.0",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=e5bdc4a41d4c072fe1e3787eaa0320a384741d44",
-      "name": "buf-1.72.0",
-      "pname": "buf",
-      "rev": "e5bdc4a41d4c072fe1e3787eaa0320a384741d44",
-      "rev_count": 1055335,
-      "rev_date": "2026-08-16T06:49:45Z",
-      "scrape_date": "2026-08-17T05:24:50.500289Z",
-      "stabilities": [
-        "unstable"
-      ],
-      "unfree": false,
-      "version": "1.72.0",
-      "outputs_to_install": [
-        "out"
-      ],
-      "outputs": {
-        "out": "/nix/store/8wg03l4hkzdpzykabhxlnzvnn0fk16c0-buf-1.72.0"
-      },
-      "system": "aarch64-linux",
-      "group": "buf",
-      "priority": 5
-    },
-    {
-      "attr_path": "buf",
-      "broken": false,
-      "derivation": "/nix/store/0i7dln2j07aimiv977ixx0hrkk8z3d93-buf-1.72.0.drv",
-      "description": "Create consistent Protobuf APIs that preserve compatibility and comply with design best-practices",
-      "install_id": "buf",
-      "license": "Apache-2.0",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=e5bdc4a41d4c072fe1e3787eaa0320a384741d44",
-      "name": "buf-1.72.0",
-      "pname": "buf",
-      "rev": "e5bdc4a41d4c072fe1e3787eaa0320a384741d44",
-      "rev_count": 1055335,
-      "rev_date": "2026-08-16T06:49:45Z",
-      "scrape_date": "2026-08-17T05:57:50.598786Z",
-      "stabilities": [
-        "unstable"
-      ],
-      "unfree": false,
-      "version": "1.72.0",
-      "outputs_to_install": [
-        "out"
-      ],
-      "outputs": {
-        "out": "/nix/store/habzcgcqw7b556zmmqa20banyhqp4p2q-buf-1.72.0"
-      },
-      "system": "x86_64-linux",
-      "group": "buf",
       "priority": 5
     }
   ]

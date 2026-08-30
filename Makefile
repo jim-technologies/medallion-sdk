@@ -11,7 +11,7 @@ SHELLCHECK ?= shellcheck
 SHFMT ?= shfmt
 ACTIONLINT ?= actionlint
 GITLEAKS ?= gitleaks
-GOVULNCHECK_VERSION ?= v1.6.0
+GOVULNCHECK_VERSION ?= v1.7.0
 PIP_AUDIT_VERSION ?= 2.10.1
 
 .DEFAULT_GOAL := help

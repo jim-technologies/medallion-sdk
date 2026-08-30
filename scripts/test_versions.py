@@ -15,7 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_FILES = (
-    ".ci/node-24/.flox/env/manifest.toml",
+    ".ci/node-26/.flox/env/manifest.toml",
     ".flox/env/manifest.toml",
     "LICENSE",
     "NOTICE",
@@ -247,7 +247,7 @@ class VersionScriptsTest(unittest.TestCase):
     def test_checker_rejects_node_type_major_drift(self) -> None:
         package_path = self.fixture / "package.json"
         package = json.loads(package_path.read_text())
-        package["devDependencies"]["@types/node"] = "26.1.1"
+        package["devDependencies"]["@types/node"] = "28.1.1"
         package_path.write_text(json.dumps(package, indent=2) + "\n")
 
         result = self.run_script("check_versions.py")
@@ -255,25 +255,25 @@ class VersionScriptsTest(unittest.TestCase):
         self.assertIn("@types/node major", result.stderr)
 
     def test_checker_rejects_minimum_node_environment_drift(self) -> None:
-        manifest_path = self.fixture / ".ci/node-24/.flox/env/manifest.toml"
+        manifest_path = self.fixture / ".ci/node-26/.flox/env/manifest.toml"
         manifest_path.write_text(
-            manifest_path.read_text().replace("nodejs_24", "nodejs_26")
+            manifest_path.read_text().replace("nodejs_26", "nodejs_28")
         )
 
         result = self.run_script("check_versions.py")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn(".ci/node-24 Flox environment", result.stderr)
+        self.assertIn(".ci/node-26 Flox environment", result.stderr)
 
     def test_checker_rejects_missing_minimum_node_environment(self) -> None:
         package_path = self.fixture / "package.json"
         package = json.loads(package_path.read_text())
-        package["engines"]["node"] = ">=25"
-        package["devDependencies"]["@types/node"] = "25.0.0"
+        package["engines"]["node"] = ">=27"
+        package["devDependencies"]["@types/node"] = "27.0.0"
         package_path.write_text(json.dumps(package, indent=2) + "\n")
 
         result = self.run_script("check_versions.py")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn(".ci/node-25 Flox environment must exist", result.stderr)
+        self.assertIn(".ci/node-27 Flox environment must exist", result.stderr)
 
     def test_checker_rejects_documented_go_version_drift(self) -> None:
         readme_path = self.fixture / "README.md"

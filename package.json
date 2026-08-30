@@ -13,9 +13,9 @@
     "url": "https://github.com/jim-technologies/medallion-sdk/issues"
   },
   "homepage": "https://github.com/jim-technologies/medallion-sdk#readme",
-  "packageManager": "pnpm@11.13.1",
+  "packageManager": "pnpm@11.24.0",
   "engines": {
-    "node": ">=24"
+    "node": ">=26"
   },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -51,12 +51,12 @@
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.14.0",
-    "@jim-technologies/invariant-protocol": "github:jim-technologies/invariantprotocol#f924e602582402476f257571852fabb0e1e1cf43",
+    "@jim-technologies/invariant-protocol": "github:jim-technologies/invariantprotocol#535d6ca5cf41f6e1029da0946a754e6724a5cf69",
     "@opentelemetry/api": "1.9.1"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.11",
-    "@types/node": "24.13.3",
+    "@types/node": "26.4.0",
     "tsup": "8.5.1",
     "typescript": "7.0.2",
     "vitest": "4.1.11"

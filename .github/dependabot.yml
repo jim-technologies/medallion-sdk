@@ -6,7 +6,9 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 5
     ignore:
-      # Keep ambient Node types on the oldest runtime supported by the SDK.
+      # check_versions.py requires the @types/node major to equal the
+      # engines.node floor, so a major move is a coordinated edit across
+      # package.json, .ci/node-N, and the guard fixtures, not a lone bump.
       - dependency-name: "@types/node"
         update-types:
           - "version-update:semver-major"

@@ -204,7 +204,7 @@ class PrivateImplementationBoundaryTest(unittest.TestCase):
                 path = root / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("public")
-            ci_lock = root / ".ci/node-24/.flox/env/manifest.lock"
+            ci_lock = root / ".ci/node-26/.flox/env/manifest.lock"
             ci_lock.parent.mkdir(parents=True, exist_ok=True)
             ci_lock.write_bytes(b"medallion-" + b"onto" + b"logy")
             with self.assertRaisesRegex(

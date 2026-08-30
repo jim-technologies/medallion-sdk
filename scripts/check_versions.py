@@ -15,8 +15,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 SEMVER_COMPONENT = r"(?:0|[1-9][0-9]*)"
 SEMVER = re.compile(rf"{SEMVER_COMPONENT}\.{SEMVER_COMPONENT}\.{SEMVER_COMPONENT}")
-INVARIANT_PROTOCOL_VERSION = "0.14.0"
-INVARIANT_PROTOCOL_SHA = "f924e602582402476f257571852fabb0e1e1cf43"
+INVARIANT_PROTOCOL_VERSION = "0.16.3"
+INVARIANT_PROTOCOL_SHA = "535d6ca5cf41f6e1029da0946a754e6724a5cf69"
 INVARIANT_PROTOCOL_PACKAGE = "@jim-technologies/invariant-protocol"
 INVARIANT_PROTOCOL_SPEC = (
     "github:jim-technologies/invariantprotocol#" + INVARIANT_PROTOCOL_SHA

@@ -44,9 +44,9 @@ Git tag. They are installed from Git only; this project is not published to
 npm, PyPI, or another language registry.
 
 Release tags use `vX.Y.Z` and must match `VERSION` for TypeScript, Go, and
-Python. Repository development is pinned to Go 1.26.5, pnpm 11.13.1, and
-invariantprotocol v0.14.0 (commit
-`f924e602582402476f257571852fabb0e1e1cf43`).
+Python. Repository development is pinned to Go 1.27.0, pnpm 11.24.0, and
+invariantprotocol v0.16.3 (commit
+`535d6ca5cf41f6e1029da0946a754e6724a5cf69`).
 
 ```bash
 pnpm add 'github:jim-technologies/medallion-sdk#v0.3.0'

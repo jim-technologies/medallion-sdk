@@ -5,7 +5,12 @@ nodejs.pkg-path = "nodejs_26"
 pnpm.pkg-path = "pnpm"
 typescript-language-server.pkg-path = "typescript-language-server"
 # Flox supplies the portable bootstrap binary; Go's checksum-verified
-# toolchain selector below provides the patched release declared by go.mod.
+# toolchain selector below provides the patched release declared by go.mod,
+# so this pin only has to be new enough to perform that switch. It stays at
+# 1.26.4 for the same reason nodejs, python, uv, and protobuf sit one step
+# back: the catalog has no x86_64-darwin build of anything newer, and a
+# package group resolves every member against one catalog revision. Dropping
+# x86_64-darwin from this environment would release all five at once.
 go.pkg-path = "go"
 go.version = "1.26.4"
 python.pkg-path = "python314"
@@ -37,6 +42,6 @@ gitleaks = { pkg-path = "gitleaks", pkg-group = "repo-tools" }
 buf = { pkg-path = "buf", version = "1.72.0", pkg-group = "buf", systems = ["aarch64-darwin", "aarch64-linux", "x86_64-linux"] }
 
 [vars]
-GOTOOLCHAIN = "go1.26.5+auto"
+GOTOOLCHAIN = "go1.27.0+auto"
 GOFLAGS = "-mod=readonly"
 GOENV = "off"
