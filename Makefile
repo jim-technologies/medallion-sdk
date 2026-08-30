@@ -13,10 +13,13 @@ ACTIONLINT ?= actionlint
 GITLEAKS ?= gitleaks
 GOVULNCHECK_VERSION ?= v1.7.0
 PIP_AUDIT_VERSION ?= 2.10.1
+# The Temporaless release the workflows surface wraps. scripts/check_versions.py
+# holds this to the pin recorded in every language.
+TEMPORALESS_COMMIT ?= 03dbf90732a8a043d1de0587b16a1f163c6efcd1
 
 .DEFAULT_GOAL := help
 
-.PHONY: help help-all install validate lock-check version-check version-set release contract-sync contract-check contract-release-check contract-release-gate generated-check breaking-check artifact-check git-install-check public-surface check-examples test test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python lint-proto lint-shell lint-workflows fmt fmt-ts fmt-go fmt-python fmt-proto fmt-shell audit audit-node audit-go audit-python secret-check deps generate proto-bindings proto-descriptor run clean
+.PHONY: help help-all install validate lock-check version-check version-set release contract-sync contract-check contract-release-check contract-release-gate generated-check breaking-check artifact-check git-install-check public-surface check-examples test test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-workflows test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python lint-proto lint-shell lint-workflows fmt fmt-ts fmt-go fmt-python fmt-proto fmt-shell audit audit-node audit-go audit-python secret-check deps generate proto-bindings proto-descriptor run clean
 
 help: ## One-screen help (make help-all for every target)
 	@echo "Daily:"
@@ -111,7 +114,7 @@ check-examples: build ## Check the runnable TypeScript, Go, and Python quickstar
 	$(RUFF) check --no-cache examples
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m compileall -q examples
 
-test: test-version test-contract-sync test-package-artifacts test-ts test-go test-python ## Run all tests.
+test: test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-workflows ## Run all tests.
 
 test-version: ## Test version synchronization and release-tag guardrails.
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/test_versions.py
@@ -131,6 +134,9 @@ test-go: ## Run Go tests.
 
 test-python: ## Run Python tests.
 	cd python && $(UV) run --locked python -m unittest discover tests
+
+test-workflows: ## Test the durable-execution surface and its Temporaless compat pin, against a built wheel.
+	TEMPORALESS_COMMIT=$(TEMPORALESS_COMMIT) scripts/run_workflows_tests.sh
 
 test-deployed: node_modules/.medallion-install-stamp ## Run opt-in deployed smoke test against a locked-down workspace.
 	$(PNPM) test:deployed
@@ -157,9 +163,9 @@ lint-go: ## Format-check and vet Go code.
 	$(GO) vet ./go/...
 
 lint-python: ## Lint, format-check, and byte-compile authored Python code.
-	cd python && $(RUFF) check src tests
-	cd python && $(RUFF) format --check src tests
-	cd python && $(UV) run --locked python -m compileall -q src tests
+	cd python && $(RUFF) check src tests tests_workflows
+	cd python && $(RUFF) format --check src tests tests_workflows
+	cd python && $(UV) run --locked python -m compileall -q src tests tests_workflows
 
 lint-proto: ## Lint and format-check vendored protobuf contracts.
 	$(BUF) lint

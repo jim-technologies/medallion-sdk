@@ -21,3 +21,9 @@ done
 if [[ -z "${MEDALLION_SMOKE_INGEST_TABLE:-}" ]]; then
   echo "note: MEDALLION_SMOKE_INGEST_TABLE is unset; the tables live tests will skip" >&2
 fi
+
+# The durable-execution live tier additionally needs a deployment that serves
+# the temporaless.v1 storage services.
+if [[ -z "${MEDALLION_SMOKE_WORKFLOWS:-}" ]]; then
+  echo "note: MEDALLION_SMOKE_WORKFLOWS is unset; the workflows live tests will skip" >&2
+fi
