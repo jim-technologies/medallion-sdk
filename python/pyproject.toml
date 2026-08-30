@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "medallion"
-version = "0.3.1"
+version = "0.4.0"
 description = "Server-side Python SDK for getting data into and out of Medallion: tables, batch appends, and SQL queries."
 readme = "README.md"
 requires-python = ">=3.14"
@@ -36,11 +36,26 @@ polars = [
   "polars>=1.20,<2",
   "pyarrow>=19,<26",
 ]
+# Durable execution: the workflows factory hands back Temporaless's own
+# ConnectStore/ConnectQueryStore, so it needs that exact release. The pin is
+# an immutable commit; scripts/check_versions.py holds it to the version and
+# commit recorded in medallion.workflows, and the compat test fails when the
+# installed contract drifts from what this SDK wraps.
+workflows = [
+  "temporaless @ git+https://github.com/jim-technologies/temporaless.git@03dbf90732a8a043d1de0587b16a1f163c6efcd1#subdirectory=core/py",
+]
 
 [dependency-groups]
 # The dataframe conveniences are exercised by the unit tests, so the dev
 # environment installs the same optional stack consumers get from
 # medallion[polars].
+#
+# medallion[workflows] is deliberately absent here. Temporaless depends on
+# protovalidate, which needs a newer `buf.validate` than the one this SDK
+# vendors from its attested contract bundle. A wheel install resolves that to
+# the superset and both packages work, but an editable checkout shadows it
+# with the vendored projection. `make test-workflows` therefore runs the
+# workflows suite against a built wheel, the way a consumer installs it.
 dev = [
   "polars>=1.20,<2",
   "pyarrow>=19,<26",
@@ -51,11 +66,17 @@ Homepage = "https://github.com/jim-technologies/medallion-sdk"
 Repository = "https://github.com/jim-technologies/medallion-sdk"
 Issues = "https://github.com/jim-technologies/medallion-sdk/issues"
 
+[tool.hatch.metadata]
+# The workflows extra pins Temporaless to an immutable commit. This project is
+# git-install only, so a direct reference is the distribution model, not an
+# escape from one.
+allow-direct-references = true
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/medallion", "src/buf"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["/tests", "/uv.lock"]
+exclude = ["/tests", "/tests_workflows", "/uv.lock"]
 
 [tool.ruff]
 target-version = "py314"

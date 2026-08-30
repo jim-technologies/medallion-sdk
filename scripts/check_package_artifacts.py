@@ -50,6 +50,9 @@ ALLOWED_JIMTECH_REPOSITORIES = frozenset(
     {
         "invariantprotocol",
         "medallion-sdk",
+        # The workflows extra pins Temporaless's public repository; its storage
+        # clients are what that surface hands back.
+        "temporaless",
     }
 )
 FORBIDDEN_INGESTION_SYMBOLS = (
@@ -156,6 +159,7 @@ PYTHON_RUNTIME_FILES = frozenset(
         "medallion/py.typed",
         "medallion/request.py",
         "medallion/tables.py",
+        "medallion/workflows.py",
         "medallion/tracing.py",
         "medallion/types.py",
         "medallion/connect/__init__.py",
