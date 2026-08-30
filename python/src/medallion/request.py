@@ -44,12 +44,13 @@ _CANONICAL_RPC_PATHS = frozenset(
         "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
         "/medallion.connect.v1.MedallionConnectService/PublishAuditEvents",
         "/medallion.connect.v1.MedallionConnectService/ListAuditEvents",
-        "/medallion.ingest.v1.MedallionIngestService/Append",
-        "/medallion.ingest.v1.MedallionIngestService/Query",
+        "/medallion.ingest.v1.MedallionIngestService/CreateTable",
+        "/medallion.ingest.v1.MedallionIngestService/GetTable",
+        "/medallion.ingest.v1.MedallionIngestService/ListTables",
+        "/medallion.ingest.v1.MedallionIngestService/UpdateTable",
+        "/medallion.ingest.v1.MedallionIngestService/AppendRows",
+        "/medallion.ingest.v1.MedallionIngestService/RunQuery",
         "/medallion.ingest.v1.MedallionIngestService/GetQueryResults",
-        "/medallion.ingest.v1.MedallionIngestService/CreateDataset",
-        "/medallion.ingest.v1.MedallionIngestService/GetDataset",
-        "/medallion.ingest.v1.MedallionIngestService/ListDatasets",
     }
 )
 _PROTECTED_HEADERS = frozenset(

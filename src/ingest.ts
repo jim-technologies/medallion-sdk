@@ -5,16 +5,18 @@ import { ingestDescriptorBytes } from "./ingest-descriptor.js";
 import { InvariantProtocolRuntime } from "./protocol.js";
 import type { RequestClient, ResponseEnvelope } from "./request.js";
 import type {
-  IngestAppendRequest,
-  IngestAppendResponse,
-  IngestCreateDatasetRequest,
-  IngestDatasetResponse,
+  IngestAppendRowsRequest,
+  IngestAppendRowsResponse,
+  IngestCreateTableRequest,
   IngestGetQueryResultsRequest,
-  IngestListDatasetsRequest,
-  IngestListDatasetsResponse,
-  IngestQueryRequest,
+  IngestGetTableRequest,
+  IngestListTablesRequest,
+  IngestListTablesResponse,
   IngestQueryResponse,
-  IngestQueryResults,
+  IngestRunQueryRequest,
+  IngestTable,
+  IngestTableResponse,
+  IngestUpdateTableRequest,
   IngestWriteOptions,
   RequestOptions,
 } from "./types.js";
@@ -22,22 +24,40 @@ import type {
 const INGEST_SERVICE_NAME = "medallion.ingest.v1.MedallionIngestService";
 
 export const MAX_INGEST_BATCH_ROWS = 50_000;
-export const MAX_DATASET_ID_BYTES = 256;
-export const MAX_DATASET_DESCRIPTION_BYTES = 4_096;
 export const MAX_INSERT_ID_BYTES = 128;
-export const MAX_QUERY_BYTES = 1_048_576;
-export const MAX_QUERY_ID_BYTES = 1_024;
-export const MAX_INGEST_PAGE_TOKEN_BYTES = 2_048;
-export const MAX_QUERY_MAX_RESULTS = 100_000;
-export const MAX_INGEST_PAGE_SIZE = 500;
+export const MAX_REQUEST_ID_BYTES = 512;
+export const MAX_QUERY_BYTES = 262_144;
+export const MAX_QUERY_TIMEOUT_MS = 600_000;
+export const MAX_QUERY_PAGE_SIZE = 100_000;
+export const MAX_INGEST_PAGE_TOKEN_BYTES = 4_096;
+export const MAX_TABLE_PAGE_SIZE = 1_000;
+export const MAX_ARROW_PAYLOAD_BYTES = 16_777_216;
+export const MAX_TABLE_COLUMNS = 512;
+export const MAX_SORT_COLUMNS = 8;
 /** Stripe-convention bound for the Idempotency-Key header value. */
 export const MAX_IDEMPOTENCY_KEY_BYTES = 255;
 
-const RESULT_FORMATS = new Set([
-  "RESULT_FORMAT_UNSPECIFIED",
-  "RESULT_FORMAT_JSON",
-  "RESULT_FORMAT_ARROW_IPC",
-]);
+/** Lowercase table identifier, as the contract declares it. */
+export const TABLE_ID_PATTERN = /^[a-z][a-z0-9_]{0,62}$/;
+/** Lowercase column identifier, as the contract declares it. */
+export const COLUMN_NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
+const TABLE_NAME_PATTERN = /^tables\/[a-z][a-z0-9_]{0,62}$/;
+const QUERY_NAME_PATTERN = /^queries\/[0-9a-hjkmnp-tv-z]{26}$/;
+
+/** The BigQuery-style column types the tabular schema accepts. */
+export const TABLE_COLUMN_TYPES = [
+  "BOOL",
+  "INT64",
+  "FLOAT64",
+  "STRING",
+  "BYTES",
+  "TIMESTAMP",
+  "DATE",
+  "JSON",
+] as const;
+
+const COLUMN_TYPES = new Set<string>(TABLE_COLUMN_TYPES);
+const QUERY_STATES = new Set(["RUNNING", "SUCCEEDED", "FAILED"]);
 const BASE64_TEXT = /^[A-Za-z0-9+/]*={0,2}$/;
 
 let ingestRuntime: InvariantProtocolRuntime | undefined;
@@ -52,9 +72,10 @@ function invariantIngestRuntime(): InvariantProtocolRuntime {
 }
 
 /**
- * Low-level access to the six medallion.ingest.v1 RPCs. Every append and
- * dataset creation carries a Stripe-style Idempotency-Key header; one is
- * generated when the caller does not pass its own.
+ * Low-level access to the seven medallion.ingest.v1 RPCs. Every write carries
+ * a batch idempotency key: it is sent as a Stripe-style Idempotency-Key header
+ * and stamped into the request's `request_id`, which is the field the contract
+ * deduplicates on. One is generated when the caller does not pass its own.
  */
 export class ProtocolIngestClient {
   readonly #requests: RequestClient;
@@ -65,31 +86,100 @@ export class ProtocolIngestClient {
     this.runtime = invariantIngestRuntime();
   }
 
-  append(
-    request: IngestAppendRequest,
+  createTable(
+    request: IngestCreateTableRequest,
     options: IngestWriteOptions = {},
-  ): Promise<ResponseEnvelope<IngestAppendResponse>> {
-    preflightAppend(request);
-    const submittedRows = request.json_rows?.rows.length;
-    return this.#rpc<IngestAppendResponse>(
-      "Append",
+  ): Promise<ResponseEnvelope<IngestTableResponse>> {
+    requiredTableId(request.table_id, "tables.create.tableId");
+    preflightTable(request.table, "tables.create");
+    return this.#write<IngestTableResponse>(
+      "CreateTable",
       request,
       options,
-      ingestIdempotencyKey(options.idempotencyKey),
     ).then((response) => {
-      validateAppendResponse(response.body, submittedRows, response.requestId);
+      validateTableResponse(response.body, response.requestId);
       return response;
     });
   }
 
-  query(
-    request: IngestQueryRequest,
+  updateTable(
+    request: IngestUpdateTableRequest,
+    options: IngestWriteOptions = {},
+  ): Promise<ResponseEnvelope<IngestTableResponse>> {
+    requiredTableName(request.table?.name, "tables.update.name");
+    preflightTable(request.table, "tables.update");
+    return this.#write<IngestTableResponse>(
+      "UpdateTable",
+      request,
+      options,
+    ).then((response) => {
+      validateTableResponse(response.body, response.requestId);
+      return response;
+    });
+  }
+
+  getTable(
+    request: IngestGetTableRequest,
+    options: RequestOptions = {},
+  ): Promise<ResponseEnvelope<IngestTableResponse>> {
+    requiredTableName(request.name, "tables.get.name");
+    return this.#rpc<IngestTableResponse>("GetTable", request, options).then(
+      (response) => {
+        validateTableResponse(response.body, response.requestId);
+        return response;
+      },
+    );
+  }
+
+  listTables(
+    request: IngestListTablesRequest = {},
+    options: RequestOptions = {},
+  ): Promise<ResponseEnvelope<IngestListTablesResponse>> {
+    ingestPageSize(request.page_size);
+    optionalBoundedText(
+      request.page_token,
+      "tables.list.pageToken",
+      MAX_INGEST_PAGE_TOKEN_BYTES,
+      "MEDALLION_INVALID_PAGE_TOKEN",
+    );
+    return this.#rpc<IngestListTablesResponse>(
+      "ListTables",
+      request,
+      options,
+    ).then((response) => {
+      validateListTablesResponse(response.body, response.requestId);
+      return response;
+    });
+  }
+
+  appendRows(
+    request: IngestAppendRowsRequest,
+    options: IngestWriteOptions = {},
+  ): Promise<ResponseEnvelope<IngestAppendRowsResponse>> {
+    preflightAppendRows(request);
+    const submittedRows = request.rows?.length;
+    return this.#write<IngestAppendRowsResponse>(
+      "AppendRows",
+      request,
+      options,
+    ).then((response) => {
+      validateAppendRowsResponse(
+        response.body,
+        submittedRows,
+        response.requestId,
+      );
+      return response;
+    });
+  }
+
+  runQuery(
+    request: IngestRunQueryRequest,
     options: RequestOptions = {},
   ): Promise<ResponseEnvelope<IngestQueryResponse>> {
-    preflightQuery(request);
-    return this.#rpc<IngestQueryResponse>("Query", request, options).then(
+    preflightRunQuery(request);
+    return this.#rpc<IngestQueryResponse>("RunQuery", request, options).then(
       (response) => {
-        validateQueryResults(response.body.results, response.requestId);
+        validateQueryResponse(response.body, response.requestId);
         return response;
       },
     );
@@ -105,67 +195,26 @@ export class ProtocolIngestClient {
       request,
       options,
     ).then((response) => {
-      validateQueryResults(response.body.results, response.requestId);
+      validateQueryResponse(response.body, response.requestId);
       return response;
     });
   }
 
-  createDataset(
-    request: IngestCreateDatasetRequest,
-    options: IngestWriteOptions = {},
-  ): Promise<ResponseEnvelope<IngestDatasetResponse>> {
-    requiredDatasetId(request.dataset_id, "datasets.create.datasetId");
+  #write<TResponse>(
+    methodName: string,
+    body: { request_id?: string },
+    options: IngestWriteOptions,
+  ): Promise<ResponseEnvelope<TResponse>> {
+    const key = ingestIdempotencyKey(options.idempotencyKey);
     optionalBoundedText(
-      request.description,
-      "datasets.create.description",
-      MAX_DATASET_DESCRIPTION_BYTES,
-      "MEDALLION_INVALID_DATASET_ID",
+      body.request_id,
+      `${methodName}.requestId`,
+      MAX_REQUEST_ID_BYTES,
+      "MEDALLION_INVALID_IDEMPOTENCY_KEY",
     );
-    return this.#rpc<IngestDatasetResponse>(
-      "CreateDataset",
-      request,
-      options,
-      ingestIdempotencyKey(options.idempotencyKey),
-    ).then((response) => {
-      validateDatasetResponse(response.body, response.requestId);
-      return response;
-    });
-  }
-
-  getDataset(
-    request: { dataset_id: string },
-    options: RequestOptions = {},
-  ): Promise<ResponseEnvelope<IngestDatasetResponse>> {
-    requiredDatasetId(request.dataset_id, "datasets.get.datasetId");
-    return this.#rpc<IngestDatasetResponse>(
-      "GetDataset",
-      request,
-      options,
-    ).then((response) => {
-      validateDatasetResponse(response.body, response.requestId);
-      return response;
-    });
-  }
-
-  listDatasets(
-    request: IngestListDatasetsRequest = {},
-    options: RequestOptions = {},
-  ): Promise<ResponseEnvelope<IngestListDatasetsResponse>> {
-    ingestPageSize(request.page_size);
-    optionalBoundedText(
-      request.page_token,
-      "datasets.list.pageToken",
-      MAX_INGEST_PAGE_TOKEN_BYTES,
-      "MEDALLION_INVALID_PAGE_TOKEN",
-    );
-    return this.#rpc<IngestListDatasetsResponse>(
-      "ListDatasets",
-      request,
-      options,
-    ).then((response) => {
-      validateListDatasetsResponse(response.body, response.requestId);
-      return response;
-    });
+    const stamped =
+      (body.request_id ?? "").length > 0 ? body : { ...body, request_id: key };
+    return this.#rpc<TResponse>(methodName, stamped, options, key);
   }
 
   async #rpc<TResponse>(
@@ -217,72 +266,140 @@ export function ingestIdempotencyKey(value: string | undefined): string {
   return value;
 }
 
-export function requiredDatasetId(value: unknown, path: string): string {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new MedallionError(`${path} is required.`, {
-      code: "MEDALLION_INVALID_DATASET_ID",
-    });
-  }
-  if (new TextEncoder().encode(value).length > MAX_DATASET_ID_BYTES) {
+/** Validate a bare table identifier, as CreateTable declares it. */
+export function requiredTableId(value: unknown, path: string): string {
+  if (typeof value !== "string" || !TABLE_ID_PATTERN.test(value)) {
     throw new MedallionError(
-      `${path} must not exceed ${MAX_DATASET_ID_BYTES} bytes.`,
-      { code: "MEDALLION_INVALID_DATASET_ID" },
+      `${path} must be a lowercase identifier matching ${TABLE_ID_PATTERN.source}.`,
+      { code: "MEDALLION_INVALID_TABLE_ID" },
     );
   }
   return value;
 }
 
+/** Validate a "tables/{table}" resource name. */
+export function requiredTableName(value: unknown, path: string): string {
+  if (typeof value !== "string" || !TABLE_NAME_PATTERN.test(value)) {
+    throw new MedallionError(
+      `${path} must be a resource name matching ${TABLE_NAME_PATTERN.source}.`,
+      { code: "MEDALLION_INVALID_TABLE_ID" },
+    );
+  }
+  return value;
+}
+
+/** Turn a bare table id, or an already-qualified name, into "tables/{id}". */
+export function tableResourceName(tableId: string, path: string): string {
+  const bare =
+    typeof tableId === "string" && tableId.startsWith("tables/")
+      ? tableId.slice("tables/".length)
+      : tableId;
+  return `tables/${requiredTableId(bare, path)}`;
+}
+
 export function ingestPageSize(value: number | undefined): void {
   if (value === undefined || value === 0) return;
-  if (!Number.isInteger(value) || value < 1 || value > MAX_INGEST_PAGE_SIZE) {
+  if (!Number.isInteger(value) || value < 1 || value > MAX_TABLE_PAGE_SIZE) {
     throw new MedallionError(
-      `pageSize must be an integer from 1 through ${MAX_INGEST_PAGE_SIZE}.`,
+      `pageSize must be an integer from 1 through ${MAX_TABLE_PAGE_SIZE}.`,
       { code: "MEDALLION_INVALID_PAGE_SIZE" },
     );
   }
 }
 
-function preflightAppend(request: IngestAppendRequest): void {
-  requiredDatasetId(request.dataset_id, "datasets.append.datasetId");
-  const hasJsonRows = request.json_rows !== undefined;
+function preflightTable(table: IngestTable | undefined, path: string): void {
+  if (table === undefined || table === null) {
+    throw invalidSchema(`${path} requires a table declaration.`);
+  }
+  const columns = table.schema?.columns ?? [];
+  if (
+    !Array.isArray(columns) ||
+    columns.length < 1 ||
+    columns.length > MAX_TABLE_COLUMNS
+  ) {
+    throw invalidSchema(
+      `${path} requires between 1 and ${MAX_TABLE_COLUMNS} declared columns.`,
+    );
+  }
+  const names = new Set<string>();
+  for (const [index, column] of columns.entries()) {
+    const name = column.name ?? "";
+    if (!COLUMN_NAME_PATTERN.test(name)) {
+      throw invalidSchema(
+        `${path}.columns[${index}].name must match ${COLUMN_NAME_PATTERN.source}.`,
+      );
+    }
+    if (names.has(name)) {
+      throw invalidSchema(`${path} declares the column "${name}" twice.`);
+    }
+    names.add(name);
+    if (!COLUMN_TYPES.has(column.type ?? "")) {
+      throw invalidSchema(
+        `${path}.columns[${index}].type must be one of ${TABLE_COLUMN_TYPES.join(", ")}.`,
+      );
+    }
+  }
+  const timeColumn = table.time_column ?? "";
+  // UpdateTable accepts an empty time column meaning "unchanged".
+  if (timeColumn.length > 0 && !names.has(timeColumn)) {
+    throw invalidSchema(
+      `${path}.timeColumn must name one of the declared columns.`,
+    );
+  }
+  const sortColumns = table.sort_columns ?? [];
+  if (!Array.isArray(sortColumns) || sortColumns.length > MAX_SORT_COLUMNS) {
+    throw invalidSchema(
+      `${path}.sortColumns accepts at most ${MAX_SORT_COLUMNS} columns.`,
+    );
+  }
+  const seen = new Set<string>();
+  for (const column of sortColumns) {
+    if (!names.has(column) || seen.has(column)) {
+      throw invalidSchema(
+        `${path}.sortColumns must be distinct declared column names.`,
+      );
+    }
+    seen.add(column);
+  }
+}
+
+function preflightAppendRows(request: IngestAppendRowsRequest): void {
+  requiredTableName(request.table, "tables.append.table");
+  const hasJsonRows = (request.rows?.length ?? 0) > 0;
   const hasArrowRows = request.arrow_rows !== undefined;
   if (hasJsonRows === hasArrowRows) {
     throw new MedallionError(
-      "datasets.append requires exactly one of JSON rows or one Arrow record batch.",
+      "tables.append requires exactly one of JSON rows or one Arrow record batch.",
       { code: "MEDALLION_AMBIGUOUS_ROW_PAYLOAD" },
     );
   }
   if (hasJsonRows) {
-    const rows = request.json_rows?.rows;
-    if (
-      !Array.isArray(rows) ||
-      rows.length < 1 ||
-      rows.length > MAX_INGEST_BATCH_ROWS
-    ) {
+    const rows = request.rows ?? [];
+    if (rows.length > MAX_INGEST_BATCH_ROWS) {
       throw new MedallionError(
         `An append batch must contain between 1 and ${MAX_INGEST_BATCH_ROWS} rows.`,
         { code: "MEDALLION_INVALID_BATCH_SIZE" },
       );
     }
     for (const [index, row] of rows.entries()) {
-      const path = `datasets.append.rows[${index}]`;
+      const path = `tables.append.rows[${index}]`;
       optionalBoundedText(
         row.insert_id,
         `${path}.insertId`,
         MAX_INSERT_ID_BYTES,
         "MEDALLION_INVALID_ROW",
       );
-      requireJsonObjectText(row.json, `${path}.json`);
+      requireJsonObject(row.json, `${path}.json`);
     }
     return;
   }
   requireArrowPayloadText(
     request.arrow_rows?.serialized_record_batch,
-    "datasets.append.arrowRows",
+    "tables.append.arrowRows",
   );
 }
 
-function preflightQuery(request: IngestQueryRequest): void {
+function preflightRunQuery(request: IngestRunQueryRequest): void {
   if (typeof request.query !== "string" || request.query.trim().length === 0) {
     throw new MedallionError("query requires one SQL statement.", {
       code: "MEDALLION_INVALID_QUERY",
@@ -294,20 +411,30 @@ function preflightQuery(request: IngestQueryRequest): void {
       { code: "MEDALLION_INVALID_QUERY" },
     );
   }
-  preflightResultPageInputs(request, "query");
+  if (request.timeout_ms !== undefined) {
+    if (
+      !Number.isInteger(request.timeout_ms) ||
+      request.timeout_ms < 0 ||
+      request.timeout_ms > MAX_QUERY_TIMEOUT_MS
+    ) {
+      throw new MedallionError(
+        `query.serverTimeoutMs must be an integer from 0 through ${MAX_QUERY_TIMEOUT_MS}.`,
+        { code: "MEDALLION_INVALID_TIMEOUT" },
+      );
+    }
+  }
+  queryPageSize(request.page_size, "query");
 }
 
 function preflightGetQueryResults(request: IngestGetQueryResultsRequest): void {
-  optionalBoundedText(
-    request.query_id,
-    "query.results.queryId",
-    MAX_QUERY_ID_BYTES,
-    "MEDALLION_INVALID_QUERY",
-  );
-  if (typeof request.query_id !== "string" || request.query_id.length === 0) {
-    throw new MedallionError("query.results.queryId is required.", {
-      code: "MEDALLION_INVALID_QUERY",
-    });
+  if (
+    typeof request.name !== "string" ||
+    !QUERY_NAME_PATTERN.test(request.name)
+  ) {
+    throw new MedallionError(
+      `query.results.name must be a resource name matching ${QUERY_NAME_PATTERN.source}.`,
+      { code: "MEDALLION_INVALID_QUERY" },
+    );
   }
   optionalBoundedText(
     request.page_token,
@@ -315,60 +442,22 @@ function preflightGetQueryResults(request: IngestGetQueryResultsRequest): void {
     MAX_INGEST_PAGE_TOKEN_BYTES,
     "MEDALLION_INVALID_PAGE_TOKEN",
   );
-  preflightResultPageInputs(request, "query.results");
+  queryPageSize(request.page_size, "query.results");
 }
 
-function preflightResultPageInputs(
-  request: Pick<IngestQueryRequest, "timeout_ms" | "max_results" | "format">,
-  path: string,
-): void {
-  if (request.timeout_ms !== undefined) {
-    if (
-      !Number.isInteger(request.timeout_ms) ||
-      request.timeout_ms < 0 ||
-      request.timeout_ms > 2_147_483_647
-    ) {
-      throw new MedallionError(
-        `${path}.serverTimeoutMs must be an integer from 0 through 2147483647.`,
-        { code: "MEDALLION_INVALID_TIMEOUT" },
-      );
-    }
-  }
-  if (request.max_results !== undefined) {
-    if (
-      !Number.isInteger(request.max_results) ||
-      request.max_results < 0 ||
-      request.max_results > MAX_QUERY_MAX_RESULTS
-    ) {
-      throw new MedallionError(
-        `${path}.maxResults must be an integer from 0 through ${MAX_QUERY_MAX_RESULTS}.`,
-        { code: "MEDALLION_INVALID_PAGE_SIZE" },
-      );
-    }
-  }
-  if (request.format !== undefined && !RESULT_FORMATS.has(request.format)) {
-    throw new MedallionError(`${path}.format is invalid.`, {
-      code: "MEDALLION_INVALID_QUERY",
-    });
+function queryPageSize(value: number | undefined, path: string): void {
+  if (value === undefined) return;
+  if (!Number.isInteger(value) || value < 0 || value > MAX_QUERY_PAGE_SIZE) {
+    throw new MedallionError(
+      `${path}.pageSize must be an integer from 0 through ${MAX_QUERY_PAGE_SIZE}.`,
+      { code: "MEDALLION_INVALID_PAGE_SIZE" },
+    );
   }
 }
 
-function requireJsonObjectText(value: unknown, path: string): void {
-  if (typeof value !== "string" || value.length === 0) {
-    throw new MedallionError(`${path} must contain exactly one JSON object.`, {
-      code: "MEDALLION_INVALID_ROW",
-    });
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(value);
-  } catch {
-    throw new MedallionError(`${path} must contain exactly one JSON object.`, {
-      code: "MEDALLION_INVALID_ROW",
-    });
-  }
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new MedallionError(`${path} must contain exactly one JSON object.`, {
+function requireJsonObject(value: unknown, path: string): void {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new MedallionError(`${path} must be one JSON object of columns.`, {
       code: "MEDALLION_INVALID_ROW",
     });
   }
@@ -384,6 +473,12 @@ function requireArrowPayloadText(value: unknown, path: string): void {
     throw new MedallionError(
       `${path} must contain one base64 Arrow IPC stream.`,
       { code: "MEDALLION_INVALID_ROW" },
+    );
+  }
+  if ((value.length / 4) * 3 > MAX_ARROW_PAYLOAD_BYTES) {
+    throw new MedallionError(
+      `${path} must not exceed ${MAX_ARROW_PAYLOAD_BYTES} bytes.`,
+      { code: "MEDALLION_INVALID_BATCH_SIZE" },
     );
   }
 }
@@ -422,8 +517,8 @@ export function nonNegativeCount(
   return parsed;
 }
 
-function validateAppendResponse(
-  body: IngestAppendResponse,
+function validateAppendRowsResponse(
+  body: IngestAppendRowsResponse,
   submittedRows: number | undefined,
   requestId: string | undefined,
 ): void {
@@ -432,7 +527,7 @@ function validateAppendResponse(
     "append.acceptedRows",
     requestId,
   );
-  const errors = body.insert_errors ?? [];
+  const errors = body.row_errors ?? [];
   if (!Array.isArray(errors)) {
     throw invalidIngestResponse(
       "Medallion returned malformed append row errors.",
@@ -440,13 +535,7 @@ function validateAppendResponse(
     );
   }
   for (const error of errors) {
-    const index = error.index ?? 0;
-    if (!Number.isSafeInteger(index) || index < 0) {
-      throw invalidIngestResponse(
-        "Medallion returned an append row error without a valid row index.",
-        requestId,
-      );
-    }
+    const index = nonNegativeCount(error.index, "append.rowErrors", requestId);
     if (submittedRows !== undefined && index >= submittedRows) {
       throw invalidIngestResponse(
         "Medallion returned an append row error outside the submitted batch.",
@@ -462,73 +551,129 @@ function validateAppendResponse(
   }
 }
 
-function validateQueryResults(
-  results: IngestQueryResults | undefined,
+function validateQueryResponse(
+  body: IngestQueryResponse,
   requestId: string | undefined,
 ): void {
-  if (results === undefined || typeof results !== "object") {
+  if (body === undefined || typeof body !== "object") {
     throw invalidIngestResponse(
-      "Medallion returned a query acknowledgement without results.",
+      "Medallion returned a query acknowledgement without a body.",
       requestId,
     );
   }
-  const completed = results.completed ?? false;
-  if (typeof completed !== "boolean") {
+  const state = body.state ?? "";
+  if (!QUERY_STATES.has(state)) {
     throw invalidIngestResponse(
-      "Medallion returned a malformed query completion state.",
+      "Medallion returned an unknown query state.",
       requestId,
     );
   }
-  if (
-    results.query_id !== undefined &&
-    (typeof results.query_id !== "string" ||
-      new TextEncoder().encode(results.query_id).length > MAX_QUERY_ID_BYTES)
-  ) {
+  const name = body.name ?? "";
+  if (name.length > 0 && !QUERY_NAME_PATTERN.test(name)) {
     throw invalidIngestResponse(
-      "Medallion returned a malformed query identifier.",
+      "Medallion returned a malformed query resource name.",
       requestId,
     );
   }
-  if (!completed && (results.query_id ?? "").length === 0) {
+  if (state === "RUNNING" && name.length === 0) {
     throw invalidIngestResponse(
-      "Medallion returned an incomplete query without a query identifier to poll.",
+      "Medallion returned a running query without a resource name to poll.",
       requestId,
     );
   }
-  if (
-    results.next_page_token !== undefined &&
-    (typeof results.next_page_token !== "string" ||
-      new TextEncoder().encode(results.next_page_token).length >
-        MAX_INGEST_PAGE_TOKEN_BYTES)
-  ) {
-    throw invalidIngestResponse(
-      "Medallion returned a malformed query continuation token.",
-      requestId,
-    );
-  }
-  if ((results.next_page_token ?? "") !== "" && !completed) {
-    throw invalidIngestResponse(
-      "Medallion returned a continuation token for an incomplete query.",
-      requestId,
-    );
-  }
-  const rows = results.rows_json ?? [];
+  const rows = body.rows ?? [];
   if (
     !Array.isArray(rows) ||
-    rows.some((row) => typeof row !== "string" || row.length === 0)
+    rows.some((row) => row === null || typeof row !== "object")
   ) {
     throw invalidIngestResponse(
       "Medallion returned malformed query result rows.",
       requestId,
     );
   }
-  if (rows.length > 0 && !completed) {
+  if (state !== "SUCCEEDED" && rows.length > 0) {
     throw invalidIngestResponse(
-      "Medallion returned result rows for an incomplete query.",
+      "Medallion returned result rows for a query that has not succeeded.",
       requestId,
     );
   }
-  const columns = results.schema?.columns ?? [];
+  const nextPageToken = body.next_page_token ?? "";
+  if (
+    typeof nextPageToken !== "string" ||
+    new TextEncoder().encode(nextPageToken).length > MAX_INGEST_PAGE_TOKEN_BYTES
+  ) {
+    throw invalidIngestResponse(
+      "Medallion returned a malformed query continuation token.",
+      requestId,
+    );
+  }
+  if (
+    nextPageToken.length > 0 &&
+    (state !== "SUCCEEDED" || name.length === 0)
+  ) {
+    throw invalidIngestResponse(
+      "Medallion returned a continuation token no page can be fetched with.",
+      requestId,
+    );
+  }
+  validateSchemaColumns(body.schema?.columns, requestId);
+  nonNegativeCount(body.total_rows, "query.totalRows", requestId);
+}
+
+function validateTableResponse(
+  body: IngestTableResponse,
+  requestId: string | undefined,
+): void {
+  validateTable(body.table, requestId);
+}
+
+function validateListTablesResponse(
+  body: IngestListTablesResponse,
+  requestId: string | undefined,
+): void {
+  const tables = body.tables ?? [];
+  if (!Array.isArray(tables)) {
+    throw invalidIngestResponse(
+      "Medallion returned a malformed table list.",
+      requestId,
+    );
+  }
+  for (const table of tables) validateTable(table, requestId);
+  if (
+    body.next_page_token !== undefined &&
+    (typeof body.next_page_token !== "string" ||
+      new TextEncoder().encode(body.next_page_token).length >
+        MAX_INGEST_PAGE_TOKEN_BYTES)
+  ) {
+    throw invalidIngestResponse(
+      "Medallion returned a malformed table continuation token.",
+      requestId,
+    );
+  }
+}
+
+function validateTable(
+  table: IngestTable | undefined,
+  requestId: string | undefined,
+): void {
+  if (
+    table === undefined ||
+    typeof table.name !== "string" ||
+    !TABLE_NAME_PATTERN.test(table.name)
+  ) {
+    throw invalidIngestResponse(
+      "Medallion returned a table without a valid resource name.",
+      requestId,
+    );
+  }
+  validateSchemaColumns(table.schema?.columns, requestId);
+}
+
+function validateSchemaColumns(
+  columns: Array<{ name?: string; type?: string }> | undefined,
+  requestId: string | undefined,
+): void {
+  if (columns === undefined) return;
   if (
     !Array.isArray(columns) ||
     columns.some(
@@ -538,77 +683,14 @@ function validateQueryResults(
     )
   ) {
     throw invalidIngestResponse(
-      "Medallion returned a malformed query result schema.",
-      requestId,
-    );
-  }
-  nonNegativeCount(results.total_rows, "query.totalRows", requestId);
-  nonNegativeCount(
-    results.total_bytes_processed,
-    "query.totalBytesProcessed",
-    requestId,
-  );
-  const arrow = results.arrow_rows?.serialized_record_batch;
-  if (
-    arrow !== undefined &&
-    (typeof arrow !== "string" ||
-      arrow.length % 4 !== 0 ||
-      !BASE64_TEXT.test(arrow))
-  ) {
-    throw invalidIngestResponse(
-      "Medallion returned a malformed Arrow result payload.",
+      "Medallion returned a malformed table schema.",
       requestId,
     );
   }
 }
 
-function validateDatasetResponse(
-  body: IngestDatasetResponse,
-  requestId: string | undefined,
-): void {
-  validateDataset(body.dataset, requestId);
-}
-
-function validateListDatasetsResponse(
-  body: IngestListDatasetsResponse,
-  requestId: string | undefined,
-): void {
-  const datasets = body.datasets ?? [];
-  if (!Array.isArray(datasets)) {
-    throw invalidIngestResponse(
-      "Medallion returned a malformed dataset list.",
-      requestId,
-    );
-  }
-  for (const dataset of datasets) validateDataset(dataset, requestId);
-  if (
-    body.next_page_token !== undefined &&
-    (typeof body.next_page_token !== "string" ||
-      new TextEncoder().encode(body.next_page_token).length >
-        MAX_INGEST_PAGE_TOKEN_BYTES)
-  ) {
-    throw invalidIngestResponse(
-      "Medallion returned a malformed dataset continuation token.",
-      requestId,
-    );
-  }
-}
-
-function validateDataset(
-  dataset: { dataset_id?: string } | undefined,
-  requestId: string | undefined,
-): void {
-  if (
-    dataset === undefined ||
-    typeof dataset.dataset_id !== "string" ||
-    dataset.dataset_id.length === 0 ||
-    new TextEncoder().encode(dataset.dataset_id).length > MAX_DATASET_ID_BYTES
-  ) {
-    throw invalidIngestResponse(
-      "Medallion returned a dataset without a valid identifier.",
-      requestId,
-    );
-  }
+function invalidSchema(message: string): MedallionError {
+  return new MedallionError(message, { code: "MEDALLION_INVALID_SCHEMA" });
 }
 
 export function invalidIngestResponse(

@@ -101,12 +101,13 @@ CONNECT_RPC_METHODS = frozenset(
 )
 INGEST_RPC_METHODS = frozenset(
     {
-        "Append",
-        "Query",
+        "CreateTable",
+        "GetTable",
+        "ListTables",
+        "UpdateTable",
+        "AppendRows",
+        "RunQuery",
         "GetQueryResults",
-        "CreateDataset",
-        "GetDataset",
-        "ListDatasets",
     }
 )
 ACTIVE_LEGACY_SCOPE_MARKERS = (
@@ -125,7 +126,6 @@ TYPESCRIPT_DIST_MODULES = frozenset(
         "cdc",
         "client",
         "connect-descriptor",
-        "datasets",
         "error-policy",
         "errors",
         "ids",
@@ -137,6 +137,7 @@ TYPESCRIPT_DIST_MODULES = frozenset(
         "protocol-preflight",
         "protocol",
         "request",
+        "tables",
         "tracing",
         "types",
     }
@@ -149,12 +150,12 @@ PYTHON_RUNTIME_FILES = frozenset(
         "buf/validate/validate_pb2.py",
         "medallion/__init__.py",
         "medallion/client.py",
-        "medallion/datasets.py",
         "medallion/error_policy_generated.py",
         "medallion/errors.py",
         "medallion/ids.py",
         "medallion/py.typed",
         "medallion/request.py",
+        "medallion/tables.py",
         "medallion/tracing.py",
         "medallion/types.py",
         "medallion/connect/__init__.py",

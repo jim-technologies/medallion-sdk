@@ -1,15 +1,16 @@
 import { AuditClient } from "./audit.js";
 import { CdcClient } from "./cdc.js";
-import { DatasetsClient } from "./datasets.js";
+
 import { ProtocolIngestClient } from "./ingest.js";
 import { ProtocolConnectClient } from "./protocol.js";
 import { RequestClient } from "./request.js";
+import { TablesClient } from "./tables.js";
 import type { MedallionClientOptions } from "./types.js";
 
 export class MedallionClient {
-  /** Tabular ingestion and query: append rows, run SQL, manage datasets. */
-  readonly datasets: DatasetsClient;
-  /** Low-level access to the six medallion.ingest.v1 RPCs. */
+  /** Tabular ingestion and query: declare tables, append rows, run SQL. */
+  readonly tables: TablesClient;
+  /** Low-level access to the seven medallion.ingest.v1 RPCs. */
   readonly ingest: ProtocolIngestClient;
   /** @deprecated medallion.connect.v1 audit publishing is deprecated. */
   readonly audit: AuditClient;
@@ -24,7 +25,7 @@ export class MedallionClient {
   constructor(options: MedallionClientOptions) {
     const requests = new RequestClient(options);
     this.ingest = new ProtocolIngestClient(requests);
-    this.datasets = new DatasetsClient(this.ingest);
+    this.tables = new TablesClient(this.ingest);
     this.connect = new ProtocolConnectClient(requests, options.workspaceId);
     this.audit = new AuditClient(this.connect, {
       workspaceId: options.workspaceId,

@@ -11,7 +11,6 @@ from google.protobuf.timestamp_pb2 import Timestamp
 
 from medallion.connect.v1 import connect_pb2
 
-from .datasets import DatasetsClient, IngestClient
 from .errors import MedallionError
 from .ids import (
     actor_from_principal,
@@ -23,6 +22,7 @@ from .ids import (
     same_actor,
 )
 from .request import RetryConfig, _canonical_workspace_id, _RequestClient
+from .tables import IngestClient, TablesClient
 from .tracing import TracingConfig
 from .types import (
     PAYLOAD_UNSET,
@@ -79,7 +79,7 @@ class MedallionClient:
             tracing=tracing,
         )
         self.ingest = IngestClient(requests)
-        self.datasets = DatasetsClient(self.ingest)
+        self.tables = TablesClient(self.ingest)
         self.connect = ConnectClient(requests)
         self.audit = AuditClient(
             self.connect,

@@ -13,11 +13,11 @@ deployment requires commit-level immutability.
 
 The Go SDK speaks two bounded surfaces and nothing else:
 
-- `medallion.ingest.v1` — the tabular datasets, append, and query surface
-  (`Append`, `Query`, `GetQueryResults`, `CreateDataset`, `GetDataset`,
-  `ListDatasets`) through the deliberately thin `client.Ingest`, built on the
-  generated bindings in `go/gen/medallion/ingest/v1`. The richer convenience
-  layer ships Python-first.
+- `medallion.ingest.v1` — the tabular tables, append, and query surface
+  (`CreateTable`, `GetTable`, `ListTables`, `UpdateTable`, `AppendRows`,
+  `RunQuery`, `GetQueryResults`) through the deliberately thin `client.Ingest`,
+  built on the generated bindings in `go/gen/medallion/ingest/v1`. The richer
+  convenience layer ships Python-first.
 - `medallion.connect.v1` — the DEPRECATED CDC/audit publish surface
   (`PublishCdcEvents`, `ListCdcEvents`, `PublishAuditEvents`,
   `ListAuditEvents`), which keeps working for existing integrations.
@@ -28,17 +28,28 @@ publish surface) before a server-side application starts the SDK. The SDK
 does not automate that provisioning or expose broader platform administration
 APIs.
 
-## Datasets and queries
+## Tables and queries
 
 `client.Ingest` passes generated protobuf requests through with header-only
-workspace identity. `Append` and `CreateDataset` always carry a Stripe-style
-`Idempotency-Key` header: the SDK generates one per call, or
-`medallion.WithIngestIdempotencyKey(ctx, key)` pins a caller key so an exact
-replay of the same batch is acknowledged as a duplicate. Queries pass one
-statement through verbatim in the declared ClickHouse SQL dialect; poll
-`GetQueryResults` while `completed` is false and follow `next_page_token`
-until it is empty. See [`examples/datasets.go`](../examples/datasets.go) for
-the complete flow.
+workspace identity. A table is one declared tabular collection: an ordered
+schema (`BOOL`, `INT64`, `FLOAT64`, `STRING`, `BYTES`, `TIMESTAMP`, `DATE`,
+`JSON`), a `TIMESTAMP` time column, and an optional sort key. `UpdateTable`
+evolves it additively: send the FULL desired schema with the existing columns
+unchanged, then the new nullable ones.
+
+`CreateTable`, `UpdateTable`, and `AppendRows` always carry a batch
+idempotency key. The SDK generates one per call, or
+`medallion.WithIngestIdempotencyKey(ctx, key)` pins a caller key; either way
+it is sent as the `Idempotency-Key` header and stamped into the request's
+`request_id` when that field is empty, because `request_id` is what the
+contract deduplicates on. An exact replay under the same key is absorbed
+without duplication and re-acknowledged with the original counts.
+
+Queries pass one statement through verbatim in the declared ClickHouse SQL
+dialect; poll `GetQueryResults` while the state is `RUNNING` and follow
+`next_page_token` until it is empty. A `FAILED` state carries its cause in
+`error`. See [`examples/tables.go`](../examples/tables.go) for the complete
+flow.
 
 ## Configure a client
 

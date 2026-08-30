@@ -1,254 +1,320 @@
-// medallion.ingest.v1 is the tabular ingestion and query surface: datasets,
-// batch appends, and read-back queries. The shapes deliberately follow the
-// widely understood BigQuery analogs (Append is the insertAll analog; Query
-// and GetQueryResults are the synchronous-first jobs.query analog with
-// poll-and-paginate), with job vocabulary removed.
-//
-// The workspace identity is carried only by the request headers
-// (X-Medallion-API-Key or a bearer token, plus X-Medallion-Workspace-Id);
-// no message in this package carries a workspace field. Batch-level replay
-// protection uses the Idempotency-Key request header, never a body field.
-//
-// This vendored copy awaits its first sanitized upstream contract export and
-// release attestation; until that pin lands, the upstream contract is
-// authoritative and this file must track it exactly. See proto/README.md.
 syntax = "proto3";
 
+// Package medallion.ingest.v1 is the platform-owned tabular ingest and query
+// lane: declare a table with a tabular schema, append rows (JSON or Arrow
+// IPC), and query one logical table with declared ClickHouse SQL. The shapes
+// deliberately follow BigQuery (insertAll / jobs.query) with Google AIP
+// grammar; the dialect and auth are Medallion's own.
+//
+// This copy tracks the released platform contract exactly on the wire. It
+// omits the upstream `buf.validate` field rules and `google.api.http`
+// annotations, which this repository has no dependency on; every message,
+// field name, field number, reserved range, and RPC is identical, and the
+// omitted validation bounds are restated in the field comments so callers
+// can still see them. See proto/README.md.
 package medallion.ingest.v1;
 
+import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/jim-technologies/medallion-sdk/go/gen/medallion/ingest/v1;ingestv1";
 
-// ResultFormat selects the encoding of query result rows.
-enum ResultFormat {
-  // Defaults to JSON rows.
-  RESULT_FORMAT_UNSPECIFIED = 0;
-  // Each result row is one JSON object rendered as text in rows_json.
-  RESULT_FORMAT_JSON = 1;
-  // Result rows are Arrow record batches in arrow_rows, encoded as one
-  // Arrow IPC stream per page.
-  RESULT_FORMAT_ARROW_IPC = 2;
+// MedallionIngestService owns workspace-scoped tabular tables, row appends,
+// and SQL queries over one logical table per table (ClickHouse hot tier
+// unioned with the lake behind an arrival-time watermark). The verified
+// workspace comes only from the authenticated transport; it appears in no
+// message. Acknowledged appends are durable and immediately queryable.
+// Future, deliberately unimplemented surface (reserved design room): a jobs
+// resource for bulk staged loads, Storage-Write-style streams with a
+// BUFFERED mode and FlushRows checkpoint, and large results via Arrow
+// streams or presigned links.
+service MedallionIngestService {
+  // CreateTable declares a new table (one table with a declared schema,
+  // a time column, and an optional sort key; the schema later evolves
+  // additively via UpdateTable).
+  rpc CreateTable(CreateTableRequest) returns (CreateTableResponse);
+  // GetTable returns one table by resource name.
+  rpc GetTable(GetTableRequest) returns (GetTableResponse);
+  // ListTables returns the workspace's tables ordered by table id.
+  rpc ListTables(ListTablesRequest) returns (ListTablesResponse);
+  // UpdateTable evolves a table's schema (BigQuery tables.patch shape):
+  // the request carries the FULL desired schema, and the only permitted
+  // change is appending new nullable columns after the existing ones.
+  // Existing columns (name, type, nullability, order), the time column, and
+  // the sort key are immutable. Submitting the current schema unchanged is a
+  // no-op success, so retries are safe.
+  rpc UpdateTable(UpdateTableRequest) returns (UpdateTableResponse);
+  // AppendRows appends a batch of rows to a table (BigQuery insertAll
+  // shape). The acknowledgement guarantees the accepted rows are durable in
+  // the journal and immediately visible to RunQuery. Batches are JSON rows or
+  // one Arrow IPC stream; REST callers may also send a raw
+  // application/vnd.apache.arrow.stream body and a Stripe-style
+  // Idempotency-Key header (copied into request_id).
+  rpc AppendRows(AppendRowsRequest) returns (AppendRowsResponse);
+  // RunQuery executes one read-only ClickHouse SQL statement (BigQuery
+  // jobs.query shape, modernized): sync-first, returning rows inline when the
+  // query completes within timeout_ms, otherwise a RUNNING query to poll.
+  rpc RunQuery(RunQueryRequest) returns (RunQueryResponse);
+  // GetQueryResults polls a query and cursor-paginates its stored result set.
+  rpc GetQueryResults(GetQueryResultsRequest) returns (GetQueryResultsResponse);
 }
 
-// Row is one JSON row submitted to Append, the insertId+json analog.
-message Row {
-  // Optional caller-stable per-row deduplication identifier, passed through
-  // to server-side best-effort row deduplication. At most 128 bytes.
-  string insert_id = 1;
-  // Exactly one JSON object rendered as text; keys are dataset column names.
-  string json = 2;
-}
-
-// JsonRows carries the JSON row payload of one Append batch.
-message JsonRows {
-  // Rows in submission order. A batch contains 1 through 50,000 rows.
-  repeated Row rows = 1;
-}
-
-// ArrowRecordBatch carries columnar rows as one serialized Arrow IPC stream,
-// including its own embedded schema.
-message ArrowRecordBatch {
-  // A complete Arrow IPC stream (schema message plus record batches).
-  bytes serialized_record_batch = 1;
-}
-
-// AppendRequest appends tabular rows to one dataset.
-message AppendRequest {
-  // Target dataset identifier, as returned by dataset creation.
-  string dataset_id = 1;
-  // Exactly one row payload encoding.
-  oneof rows {
-    // JSON object rows.
-    JsonRows json_rows = 2;
-    // Columnar rows as one Arrow IPC stream.
-    ArrowRecordBatch arrow_rows = 3;
-  }
-}
-
-// RowError reports one rejected row of an Append batch, the insertErrors
-// analog flattened to a single reason per row.
-message RowError {
-  // Zero-based index of the rejected row in the submitted batch.
-  uint32 index = 1;
-  // Stable machine-readable rejection reason.
-  string reason = 2;
-  // Human-readable rejection description; never branch on this text.
-  string message = 3;
-}
-
-// AppendResponse acknowledges one Append batch.
-message AppendResponse {
-  // Per-row rejections; empty when every submitted row was accepted.
-  repeated RowError insert_errors = 1;
-  // Number of rows durably accepted by this request.
-  uint64 accepted_rows = 2;
-  // True when the Idempotency-Key header matched an already accepted batch
-  // and this response replays that prior acknowledgement.
-  bool duplicate = 3;
-}
-
-// QueryRequest runs one read-only SQL statement, the jobs.query analog.
-message QueryRequest {
-  // One SQL statement in the declared ClickHouse SQL dialect, passed through
-  // verbatim; the SDK never rewrites, parameterizes, or dialect-translates it.
-  string query = 1;
-  // Longest time the call may wait synchronously for completion before
-  // returning completed=false with a query_id to poll. Zero selects the
-  // server default.
-  int64 timeout_ms = 2;
-  // Validate the statement and report schema plus total_bytes_processed
-  // without executing it or returning rows.
-  bool dry_run = 3;
-  // Largest number of rows in the first result page. Zero selects the
-  // server default.
-  uint32 max_results = 4;
-  // Encoding of result rows.
-  ResultFormat format = 5;
-}
-
-// ColumnSchema describes one result column.
+// ColumnSchema declares one column of a table.
 message ColumnSchema {
-  // Column name.
+  // Column name. Lowercase identifier matching "^[a-z][a-z0-9_]{0,63}$";
+  // names beginning with an underscore are reserved for system columns such
+  // as _ingest_time.
   string name = 1;
-  // Declared ClickHouse type of the column, for example "UInt64" or
-  // "Nullable(String)".
+  // Column type, BigQuery-style: one of BOOL, INT64, FLOAT64, STRING, BYTES,
+  // TIMESTAMP, DATE, or JSON.
   string type = 2;
+  // Whether the column accepts null values.
+  bool nullable = 3;
 }
 
-// ResultSchema describes the columns of a query result.
-message ResultSchema {
-  // Result columns in output order.
+// TableSchema is the declared tabular schema of a table.
+message TableSchema {
+  // Ordered columns, 1 through 512 of them. Existing columns are immutable;
+  // evolution via UpdateTable may only append new nullable columns at the
+  // end.
   repeated ColumnSchema columns = 1;
 }
 
-// QueryResults is one page of query state and rows shared by Query and
-// GetQueryResults acknowledgements.
-message QueryResults {
-  // Identifier for polling and pagination; set whenever the query is still
-  // running or more pages remain.
-  string query_id = 1;
-  // True when the query has finished and this page carries authoritative
-  // results; false when the caller must poll GetQueryResults with query_id.
-  bool completed = 2;
-  // Result column schema; set once the query has completed and for dry runs.
-  ResultSchema schema = 3;
-  // Result rows for this page when the JSON format is selected; each entry
-  // is exactly one JSON object rendered as text.
-  repeated string rows_json = 4;
-  // Result rows for this page when the Arrow IPC format is selected.
-  ArrowRecordBatch arrow_rows = 5;
-  // Opaque continuation token for the next page; empty on the last page.
-  // Callers pass it back unchanged and never inspect or persist it.
-  string next_page_token = 6;
-  // Total rows in the complete result set, across every page.
-  uint64 total_rows = 7;
-  // Bytes the query processed, or would process for a dry run.
-  int64 total_bytes_processed = 8;
+// Table is one append-only logical table served across the hot tier and the
+// lake. The resource name is workspace-relative because the workspace scope
+// comes only from the verified transport identity.
+message Table {
+  // Resource name, "tables/{table}", matching
+  // "^(tables/[a-z][a-z0-9_]{0,62})?$" within 128 bytes. Output only;
+  // CreateTable takes the identifier in table_id.
+  string name = 1;
+  // Declared tabular schema. Required; evolves additively via UpdateTable.
+  TableSchema schema = 2;
+  // Name of the TIMESTAMP column that carries event time. Required, and
+  // matching "^([a-z][a-z0-9_]{0,63})?$".
+  string time_column = 3;
+  // Optional sort key controlling physical order in both tiers, at most 8
+  // column names; defaults to [time_column].
+  repeated string sort_columns = 4;
+  // Creation time. Output only.
+  google.protobuf.Timestamp create_time = 5;
+  // Reserved design room: expiration policy, partitioning override, stream
+  // state, and labels.
+  reserved 10 to 19;
 }
 
-// QueryResponse acknowledges Query.
-message QueryResponse {
-  // Query state and the first page of results.
-  QueryResults results = 1;
+// CreateTableRequest declares one table.
+message CreateTableRequest {
+  // Identifier for the new table, matching "^[a-z][a-z0-9_]{0,62}$"; becomes
+  // name "tables/{table_id}".
+  string table_id = 1;
+  // The table to create. Required; name and create_time are ignored.
+  Table table = 2;
+  // Optional AIP-155 idempotency identifier for safe retries, at most 512
+  // bytes.
+  string request_id = 3;
 }
 
-// GetQueryResultsRequest polls a running query or fetches a further page,
-// the getQueryResults analog.
-message GetQueryResultsRequest {
-  // Identifier returned by Query.
-  string query_id = 1;
-  // Continuation token from the previous page; empty for the first page.
-  string page_token = 2;
-  // Longest time the call may wait synchronously for completion before
-  // returning completed=false again. Zero selects the server default.
-  int64 timeout_ms = 3;
-  // Largest number of rows in this result page. Zero selects the server
-  // default.
-  uint32 max_results = 4;
-  // Encoding of result rows.
-  ResultFormat format = 5;
+// CreateTableResponse returns the created table.
+message CreateTableResponse {
+  // The created table with its resource name and creation time.
+  Table table = 1;
 }
 
-// GetQueryResultsResponse acknowledges GetQueryResults.
-message GetQueryResultsResponse {
-  // Query state and one page of results.
-  QueryResults results = 1;
+// UpdateTableRequest evolves one table's schema additively.
+message UpdateTableRequest {
+  // The table carrying its resource name and the full desired schema.
+  // Required. time_column and sort_columns must be empty or identical to the
+  // current declaration; create_time is ignored.
+  Table table = 1;
+  // Optional AIP-155 idempotency identifier for safe retries, at most 512
+  // bytes.
+  string request_id = 2;
 }
 
-// Dataset is one named tabular collection in the workspace selected by the
-// request headers.
-message Dataset {
-  // Workspace-unique dataset identifier.
-  string dataset_id = 1;
-  // Human-readable description.
-  string description = 2;
-  // Server-assigned creation time.
-  google.protobuf.Timestamp create_time = 3;
+// UpdateTableResponse returns the evolved table.
+message UpdateTableResponse {
+  // The table with its full post-evolution schema.
+  Table table = 1;
 }
 
-// CreateDatasetRequest creates one dataset.
-message CreateDatasetRequest {
-  // Workspace-unique dataset identifier chosen by the caller.
-  string dataset_id = 1;
-  // Optional human-readable description.
-  string description = 2;
+// GetTableRequest names one table.
+message GetTableRequest {
+  // Resource name, "tables/{table}", matching
+  // "^tables/[a-z][a-z0-9_]{0,62}$".
+  string name = 1;
 }
 
-// CreateDatasetResponse acknowledges CreateDataset.
-message CreateDatasetResponse {
-  // The created dataset.
-  Dataset dataset = 1;
+// GetTableResponse returns one table.
+message GetTableResponse {
+  // The requested table.
+  Table table = 1;
 }
 
-// GetDatasetRequest reads one dataset.
-message GetDatasetRequest {
-  // Dataset identifier to read.
-  string dataset_id = 1;
-}
-
-// GetDatasetResponse acknowledges GetDataset.
-message GetDatasetResponse {
-  // The requested dataset.
-  Dataset dataset = 1;
-}
-
-// ListDatasetsRequest lists the datasets of the workspace selected by the
-// request headers.
-message ListDatasetsRequest {
-  // Largest number of datasets in this page. Zero selects the server
-  // default.
-  uint32 page_size = 1;
-  // Opaque continuation token from the previous page; empty for the first
-  // page.
+// ListTablesRequest pages through the workspace's tables.
+message ListTablesRequest {
+  // Maximum tables per page, 0 through 1000; the server may return fewer. 0
+  // selects the server default.
+  int32 page_size = 1;
+  // Opaque continuation token from a previous response, at most 4096 bytes.
   string page_token = 2;
 }
 
-// ListDatasetsResponse acknowledges ListDatasets.
-message ListDatasetsResponse {
-  // One page of datasets.
-  repeated Dataset datasets = 1;
-  // Opaque continuation token for the next page; empty on the last page.
+// ListTablesResponse is one page of tables.
+message ListTablesResponse {
+  // The tables on this page.
+  repeated Table tables = 1;
+  // Continuation token; empty when the listing is complete.
   string next_page_token = 2;
 }
 
-// MedallionIngestService is the tabular ingestion and query surface.
-// Every RPC is unary JSON over the canonical
-// /medallion.ingest.v1.MedallionIngestService/<Method> path.
-service MedallionIngestService {
-  // Append appends one batch of rows to a dataset; the insertAll analog.
-  // The Idempotency-Key request header deduplicates whole-batch replays.
-  rpc Append(AppendRequest) returns (AppendResponse);
-  // Query runs one read-only SQL statement synchronously first; when the
-  // synchronous budget elapses it returns completed=false and a query_id
-  // to poll with GetQueryResults.
-  rpc Query(QueryRequest) returns (QueryResponse);
-  // GetQueryResults polls a running query and paginates its result rows.
-  rpc GetQueryResults(GetQueryResultsRequest) returns (GetQueryResultsResponse);
-  // CreateDataset creates one dataset in the selected workspace.
-  rpc CreateDataset(CreateDatasetRequest) returns (CreateDatasetResponse);
-  // GetDataset reads one dataset by identifier.
-  rpc GetDataset(GetDatasetRequest) returns (GetDatasetResponse);
-  // ListDatasets pages through the datasets of the selected workspace.
-  rpc ListDatasets(ListDatasetsRequest) returns (ListDatasetsResponse);
+// Row is one JSON row, BigQuery insertAll-style.
+message Row {
+  // Optional caller-supplied row identifier echoed in row errors, at most 128
+  // bytes. Correlation only in v0; it does not deduplicate rows (batch dedup
+  // uses request_id).
+  string insert_id = 1;
+  // The row values keyed by column name. Required.
+  google.protobuf.Struct json = 2;
+}
+
+// ArrowRecordBatch carries rows as one Arrow IPC stream whose schema must
+// match the declared table schema exactly.
+message ArrowRecordBatch {
+  // A complete Arrow IPC stream (schema message plus record batches), 1
+  // through 16777216 bytes.
+  bytes serialized_record_batch = 1;
+}
+
+// AppendRowsRequest appends one batch of rows to a table. Exactly one of
+// rows or arrow_rows must be populated.
+message AppendRowsRequest {
+  // Target table resource name, "tables/{table}", matching
+  // "^tables/[a-z][a-z0-9_]{0,62}$".
+  string table = 1;
+  // JSON rows, at most 50000 per batch, validated and coerced to the declared
+  // schema before acknowledgement.
+  repeated Row rows = 2;
+  // Arrow IPC alternative to rows for typed, high-throughput appends.
+  ArrowRecordBatch arrow_rows = 3;
+  // Per-batch idempotency identifier (AIP-155), at most 512 bytes. REST
+  // callers may send the Stripe-style Idempotency-Key header instead; it is
+  // copied here. Replaying an identical batch is absorbed without
+  // duplication; reusing the identifier with different content fails with
+  // reason IDEMPOTENCY_MISMATCH.
+  string request_id = 4;
+  // When true, invalid JSON rows are reported in row_errors and the valid
+  // remainder is still committed; when false (default), any invalid row
+  // rejects the whole batch.
+  bool skip_invalid_rows = 5;
+  // Reserved design room: stream identifiers and offsets for
+  // Storage-Write-style appends.
+  reserved 20 to 24;
+}
+
+// RpcStatus is a wire-compatible subset of google.rpc.Status (same field
+// numbers) embedded for per-row and per-query errors. It keeps this package
+// free of googleapis message dependencies; RPC-level failures still use full
+// AIP-193 google.rpc.Status error envelopes on the transport.
+message RpcStatus {
+  // Numeric google.rpc.Code value.
+  int32 code = 1;
+  // Developer-facing error message.
+  string message = 2;
+  // Room for google.rpc.Status.details compatibility.
+  reserved 3;
+}
+
+// RowError reports one rejected row, BigQuery insertErrors-style.
+message RowError {
+  // Zero-based index of the row in the request batch.
+  int64 index = 1;
+  // Why the row was rejected.
+  RpcStatus error = 2;
+}
+
+// AppendRowsResponse acknowledges a batch. Acknowledged rows are durable and
+// immediately queryable.
+message AppendRowsResponse {
+  // Rows durably accepted by this request (or by the replayed original).
+  int64 accepted_rows = 1;
+  // Per-row rejections; present only when rows were rejected.
+  repeated RowError row_errors = 2;
+}
+
+// RunQueryRequest executes one read-only ClickHouse SQL statement over the
+// workspace's tables.
+message RunQueryRequest {
+  // The SQL text, 1 through 262144 bytes. Declared ClickHouse SQL; exactly
+  // one SELECT/WITH statement.
+  string query = 1;
+  // How long to wait synchronously for completion before returning a RUNNING
+  // query, 0 through 600000 milliseconds. 0 selects the server default; the
+  // server execution cap always bounds total execution regardless of this
+  // wait.
+  int64 timeout_ms = 2;
+  // When true, validate the statement and return the result schema without
+  // executing it (ClickHouse EXPLAIN-backed).
+  bool dry_run = 3;
+  // Maximum rows in the inline first page, 0 through 100000; 0 selects the
+  // server default.
+  int32 page_size = 4;
+  // Reserved design room: request_id, query parameters, and byte budgets.
+  reserved 6 to 10;
+}
+
+// RunQueryResponse is the sync-first query answer: inline rows on completion
+// within the wait, otherwise a RUNNING query to poll via GetQueryResults.
+message RunQueryResponse {
+  // Query resource name, "queries/{query}". Always present so slow queries
+  // and later pages can be fetched.
+  string name = 1;
+  // One of RUNNING, SUCCEEDED, or FAILED.
+  string state = 2;
+  // Result schema; present once known (dry runs included).
+  TableSchema schema = 3;
+  // Inline result rows keyed by column name; present when state is SUCCEEDED.
+  repeated google.protobuf.Struct rows = 4;
+  // Continuation token for GetQueryResults; empty when the results are
+  // complete.
+  string next_page_token = 5;
+  // Total rows in the full result set; present when state is SUCCEEDED.
+  int64 total_rows = 6;
+  // Failure cause; present when state is FAILED.
+  RpcStatus error = 7;
+  // Reserved design room: Arrow result streams, presigned result links, and
+  // execution statistics.
+  reserved 20 to 29;
+}
+
+// GetQueryResultsRequest polls one query and pages its stored results.
+message GetQueryResultsRequest {
+  // Query resource name, "queries/{query}", matching
+  // "^queries/[0-9a-hjkmnp-tv-z]{26}$".
+  string name = 1;
+  // Opaque continuation token from a previous response, at most 4096 bytes.
+  string page_token = 2;
+  // Maximum rows per page, 0 through 100000; 0 selects the server default.
+  int32 page_size = 3;
+}
+
+// GetQueryResultsResponse mirrors RunQueryResponse for polling and
+// pagination.
+message GetQueryResultsResponse {
+  // Query resource name, "queries/{query}".
+  string name = 1;
+  // One of RUNNING, SUCCEEDED, or FAILED.
+  string state = 2;
+  // Result schema; present once known.
+  TableSchema schema = 3;
+  // Result rows for this page; present when state is SUCCEEDED.
+  repeated google.protobuf.Struct rows = 4;
+  // Continuation token; empty when the results are complete.
+  string next_page_token = 5;
+  // Total rows in the full result set; present when state is SUCCEEDED.
+  int64 total_rows = 6;
+  // Failure cause; present when state is FAILED.
+  RpcStatus error = 7;
+  // Reserved design room mirroring RunQueryResponse.
+  reserved 20 to 29;
 }

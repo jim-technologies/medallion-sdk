@@ -15,13 +15,13 @@ describe("MedallionClient", () => {
       "audit",
       "cdc",
       "connect",
-      "datasets",
       "ingest",
+      "tables",
     ]);
     expect(client.audit.record).toBeTypeOf("function");
     expect(client.cdc.record).toBeTypeOf("function");
-    expect(client.datasets.append).toBeTypeOf("function");
-    expect(client.datasets.query).toBeTypeOf("function");
+    expect(client.tables.append).toBeTypeOf("function");
+    expect(client.tables.query).toBeTypeOf("function");
     expect(Object.getOwnPropertyNames(ProtocolConnectClient.prototype)).toEqual(
       [
         "constructor",

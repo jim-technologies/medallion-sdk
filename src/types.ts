@@ -426,8 +426,8 @@ export interface ConnectListCdcEventsResponse {
 /** One JSON row on the ingest wire: BigQuery's insertId + json analog. */
 export interface IngestRow {
   insert_id?: string;
-  /** Exactly one JSON object rendered as text. */
-  json: string;
+  /** The row values keyed by column name. */
+  json: Record<string, unknown>;
 }
 
 /** Arrow rows as one base64 Arrow IPC stream in the protobuf JSON codec. */
@@ -435,166 +435,214 @@ export interface IngestArrowRecordBatch {
   serialized_record_batch?: string;
 }
 
-export interface IngestAppendRequest {
-  dataset_id: string;
-  json_rows?: { rows: IngestRow[] };
-  arrow_rows?: IngestArrowRecordBatch;
-}
-
-export interface IngestRowError {
-  index?: number;
-  reason?: string;
-  message?: string;
-}
-
-export interface IngestAppendResponse {
-  insert_errors?: IngestRowError[];
-  accepted_rows?: string | number;
-  duplicate?: boolean;
-}
-
-export type IngestResultFormat =
-  | "RESULT_FORMAT_UNSPECIFIED"
-  | "RESULT_FORMAT_JSON"
-  | "RESULT_FORMAT_ARROW_IPC";
-
-export interface IngestQueryRequest {
-  query: string;
-  timeout_ms?: number;
-  dry_run?: boolean;
-  max_results?: number;
-  format?: IngestResultFormat;
-}
-
+/** One declared column of a table schema, or of a query result schema. */
 export interface IngestColumnSchema {
   name?: string;
   type?: string;
+  nullable?: boolean;
 }
 
-export interface IngestResultSchema {
+/** The ordered columns of a table schema or query result schema. */
+export interface IngestTableSchema {
   columns?: IngestColumnSchema[];
 }
 
-export interface IngestQueryResults {
-  query_id?: string;
-  completed?: boolean;
-  schema?: IngestResultSchema;
-  rows_json?: string[];
-  arrow_rows?: IngestArrowRecordBatch;
-  next_page_token?: string;
-  total_rows?: string | number;
-  total_bytes_processed?: string | number;
-}
-
-export interface IngestQueryResponse {
-  results?: IngestQueryResults;
-}
-
-export interface IngestGetQueryResultsRequest {
-  query_id: string;
-  page_token?: string;
-  timeout_ms?: number;
-  max_results?: number;
-  format?: IngestResultFormat;
-}
-
-export interface IngestDataset {
-  dataset_id?: string;
-  description?: string;
+/** One table on the ingest wire; `name` is "tables/{table}". */
+export interface IngestTable {
+  name?: string;
+  schema?: IngestTableSchema;
+  time_column?: string;
+  sort_columns?: string[];
   create_time?: string;
 }
 
-export interface IngestCreateDatasetRequest {
-  dataset_id: string;
-  description?: string;
+export interface IngestCreateTableRequest {
+  table_id: string;
+  table: IngestTable;
+  request_id?: string;
 }
 
-export interface IngestDatasetResponse {
-  dataset?: IngestDataset;
+export interface IngestUpdateTableRequest {
+  table: IngestTable;
+  request_id?: string;
 }
 
-export interface IngestListDatasetsRequest {
+export interface IngestGetTableRequest {
+  name: string;
+}
+
+/** Shared acknowledgement of CreateTable, GetTable, and UpdateTable. */
+export interface IngestTableResponse {
+  table?: IngestTable;
+}
+
+export interface IngestListTablesRequest {
   page_size?: number;
   page_token?: string;
 }
 
-export interface IngestListDatasetsResponse {
-  datasets?: IngestDataset[];
+export interface IngestListTablesResponse {
+  tables?: IngestTable[];
   next_page_token?: string;
 }
 
-/** Options accepted by ingest calls that carry an Idempotency-Key header. */
+export interface IngestAppendRowsRequest {
+  table: string;
+  rows?: IngestRow[];
+  arrow_rows?: IngestArrowRecordBatch;
+  request_id?: string;
+  skip_invalid_rows?: boolean;
+}
+
+/** Wire-compatible subset of google.rpc.Status carried by per-row errors. */
+export interface IngestRpcStatus {
+  code?: number;
+  message?: string;
+}
+
+export interface IngestRowError {
+  index?: string | number;
+  error?: IngestRpcStatus;
+}
+
+export interface IngestAppendRowsResponse {
+  accepted_rows?: string | number;
+  row_errors?: IngestRowError[];
+}
+
+export interface IngestRunQueryRequest {
+  query: string;
+  timeout_ms?: number;
+  dry_run?: boolean;
+  page_size?: number;
+}
+
+/** Lifecycle state of one query. */
+export type IngestQueryState = "RUNNING" | "SUCCEEDED" | "FAILED";
+
+/** Shared acknowledgement of RunQuery and GetQueryResults. */
+export interface IngestQueryResponse {
+  name?: string;
+  state?: string;
+  schema?: IngestTableSchema;
+  rows?: Record<string, unknown>[];
+  next_page_token?: string;
+  total_rows?: string | number;
+  error?: IngestRpcStatus;
+}
+
+export interface IngestGetQueryResultsRequest {
+  name: string;
+  page_token?: string;
+  page_size?: number;
+}
+
+/** Options accepted by ingest calls that carry a batch idempotency key. */
 export interface IngestWriteOptions extends RequestOptions {
   /**
-   * Stable batch deduplication key sent as the Idempotency-Key header.
-   * Generated automatically when omitted; pass the same key to make a manual
-   * replay of the same batch safe.
+   * Stable batch deduplication key sent as the Idempotency-Key header and as
+   * the request's `request_id`. Generated automatically when omitted; pass
+   * the same key to make a manual replay of the same batch safe.
    */
   idempotencyKey?: string;
 }
 
 /** One appended row: a plain JSON object of column values. */
-export type DatasetRow = { readonly [column: string]: JsonValue };
+export type TableRow = { readonly [column: string]: JsonValue };
 
-export interface DatasetAppendOptions extends IngestWriteOptions {
+export interface TableAppendOptions extends IngestWriteOptions {
   /**
-   * Optional per-row deduplication identifiers, index-aligned with the
-   * submitted JSON rows and passed through as each row's insert_id.
+   * Optional per-row identifiers, index-aligned with the submitted JSON rows
+   * and passed through as each row's insert_id. They correlate row errors
+   * only; batch deduplication uses the idempotency key.
    */
   insertIds?: readonly (string | undefined)[];
+  /**
+   * Report invalid rows in rowErrors and commit the valid remainder instead
+   * of rejecting the whole batch.
+   */
+  skipInvalidRows?: boolean;
 }
 
-export interface DatasetRowError {
+export interface TableRowError {
   index: number;
-  reason?: string;
+  /** Numeric google.rpc.Code value for the rejection. */
+  code?: number;
   message?: string;
 }
 
-export interface DatasetAppendResult extends ResponseMetadata {
-  /** The Idempotency-Key value this batch was sent with. */
+export interface TableAppendResult extends ResponseMetadata {
+  /** The idempotency key this batch was sent with. */
   idempotencyKey: string;
-  /** Rows durably accepted by this request. */
+  /** Rows durably accepted by this request, or by the replayed original. */
   acceptedRows: number;
-  /** True when the whole batch replayed an already accepted Idempotency-Key. */
-  duplicate: boolean;
   /** Per-row rejections; empty when every submitted row was accepted. */
-  rowErrors: DatasetRowError[];
+  rowErrors: TableRowError[];
 }
 
-export interface DatasetQueryOptions extends RequestOptions {
+export interface TableQueryOptions extends RequestOptions {
   /** Synchronous server-side wait budget per request, in milliseconds. */
   serverTimeoutMs?: number;
-  /** Validate and estimate the statement without executing it. */
+  /** Validate the statement and report its schema without executing it. */
   dryRun?: boolean;
   /** Largest number of rows per result page. */
-  maxResults?: number;
-  /** Result row encoding; JSON parsed rows by default. */
-  format?: "json" | "arrow";
+  pageSize?: number;
 }
 
-export interface DatasetColumn {
+/** BigQuery-style column types the tabular schema accepts. */
+export type TableColumnType =
+  | "BOOL"
+  | "INT64"
+  | "FLOAT64"
+  | "STRING"
+  | "BYTES"
+  | "TIMESTAMP"
+  | "DATE"
+  | "JSON";
+
+export interface TableColumn {
   name: string;
-  /** Declared ClickHouse type of the column. */
-  type: string;
+  type: TableColumnType | (string & {});
+  /** Whether the column accepts null values. */
+  nullable?: boolean;
 }
 
-export interface DatasetCreateInput {
-  datasetId: string;
-  description?: string;
+export interface TableCreateInput {
+  tableId: string;
+  /** Ordered columns of the declared schema. */
+  columns: readonly TableColumn[];
+  /** Name of the TIMESTAMP column carrying event time. */
+  timeColumn: string;
+  /** Optional sort key; defaults to the time column. */
+  sortColumns?: readonly string[];
 }
 
-export interface Dataset {
-  datasetId: string;
-  description?: string;
+export interface TableUpdateInput {
+  tableId: string;
+  /**
+   * The FULL desired schema. Evolution is additive only: existing columns
+   * must be repeated unchanged and in order, and new columns must be
+   * nullable and appended at the end.
+   */
+  columns: readonly TableColumn[];
+}
+
+export interface Table {
+  tableId: string;
+  /** Resource name, "tables/{table}". */
+  name: string;
+  columns: TableColumn[];
+  timeColumn: string;
+  sortColumns: string[];
   createTime?: string;
 }
 
-export interface DatasetListOptions {
+export interface TableListOptions {
   pageSize?: number;
   pageToken?: string;
 }
 
-export interface DatasetPage extends ResponseMetadata {
-  datasets: Dataset[];
+export interface TablePage extends ResponseMetadata {
+  tables: Table[];
   nextPageToken?: string;
 }

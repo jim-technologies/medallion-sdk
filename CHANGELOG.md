@@ -6,23 +6,31 @@ annotated `vX.Y.Z` tag.
 
 ## [Unreleased]
 
-- Add the `medallion.ingest.v1` tabular surface as the SDK's main act:
-  dataset create/get/list, `Append` (the insertAll analog with per-row
-  `insert_id` passthrough and per-row error surfacing), and
-  `Query`/`GetQueryResults` (the synchronous-first jobs.query analog with
+- Add the `medallion.ingest.v1` tabular surface as the SDK's main act, tracking
+  the released upstream contract: `CreateTable`, `GetTable`, `ListTables`,
+  `UpdateTable`, `AppendRows` (the insertAll analog with per-row `insert_id`
+  passthrough, `skip_invalid_rows`, and per-row error surfacing), and
+  `RunQuery`/`GetQueryResults` (the synchronous-first jobs.query analog with
   transparent poll-and-paginate). Queries pass one statement through verbatim
-  in the declared ClickHouse SQL dialect; workspace identity rides only in
-  request headers, and appends and dataset creation carry an automatic
-  Stripe-style `Idempotency-Key` header for whole-batch replay protection.
-  The vendored ingest proto awaits its first sanitized upstream export; the
-  pin is recorded as pending in `proto/README.md`.
-- Ship the surface in all three languages: TypeScript `client.datasets` and
-  the low-level `client.ingest` with an async row iterator that never exposes
-  page tokens; Python `client.datasets` with the dataframe-first layer
+  in the declared ClickHouse SQL dialect; workspace identity comes only from
+  the verified transport, and every write carries a batch idempotency key sent
+  as both the Stripe-style `Idempotency-Key` header and the contract's
+  `request_id` field. `proto/README.md` records the pin and the three
+  deliberate deviations from upstream.
+- Name the resource a TABLE, not a dataset, the way the contract does: a
+  workspace already plays BigQuery's dataset role, so the resource one level
+  down is a table with a declared schema (`BOOL`, `INT64`, `FLOAT64`,
+  `STRING`, `BYTES`, `TIMESTAMP`, `DATE`, `JSON`), a `TIMESTAMP` time column,
+  and an optional sort key. Schema evolution is additive only: `UpdateTable`
+  takes the full desired schema and may only append new nullable columns.
+- Ship the surface in all three languages: TypeScript `client.tables` and the
+  low-level `client.ingest` with an async row iterator that never exposes page
+  tokens; Python `client.tables` with the dataframe-first layer
   (polars/pyarrow appends, `to_polars()` collection, `medallion[polars]`
   extra); Go generated bindings with a deliberately thin `client.Ingest`.
   Runnable quickstarts land in `examples/` for every language, and live tests
-  stay opt-in behind the `MEDALLION_SMOKE_*` environment.
+  stay opt-in behind the `MEDALLION_SMOKE_*` environment
+  (`MEDALLION_SMOKE_INGEST_TABLE` selects the target table).
 - Deprecate the `medallion.connect.v1` CDC/audit publish surface. The four
   publish/list RPCs and their clients keep working unchanged; the README is
   rewritten around getting data into and out of Medallion through datasets.

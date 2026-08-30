@@ -1,15 +1,5 @@
 from .client import MedallionClient
 from .connect.v1 import connect_pb2
-from .datasets import (
-    Dataset,
-    DatasetAppendResult,
-    DatasetColumn,
-    DatasetPage,
-    DatasetQueryResult,
-    DatasetRowError,
-    DatasetsClient,
-    IngestClient,
-)
 from .errors import (
     KNOWN_ERROR_DOMAIN,
     KnownErrorReason,
@@ -19,6 +9,16 @@ from .errors import (
 from .ids import stable_idempotency_key
 from .ingest.v1 import ingest_pb2
 from .request import RetryConfig
+from .tables import (
+    IngestClient,
+    Table,
+    TableAppendResult,
+    TableColumn,
+    TablePage,
+    TableQueryResult,
+    TableRowError,
+    TablesClient,
+)
 from .tracing import TracingConfig
 from .types import (
     ActorRef,
@@ -48,13 +48,6 @@ __all__ = [
     "CdcEventInput",
     "CdcPage",
     "CdcReadEvent",
-    "Dataset",
-    "DatasetAppendResult",
-    "DatasetColumn",
-    "DatasetPage",
-    "DatasetQueryResult",
-    "DatasetRowError",
-    "DatasetsClient",
     "EventRecordResponse",
     "IngestClient",
     "KnownErrorReason",
@@ -66,6 +59,13 @@ __all__ = [
     "PublishedEventResult",
     "ResourceRef",
     "RetryConfig",
+    "Table",
+    "TableAppendResult",
+    "TableColumn",
+    "TablePage",
+    "TableQueryResult",
+    "TableRowError",
+    "TablesClient",
     "TracingConfig",
     "connect_pb2",
     "ingest_pb2",

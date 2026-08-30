@@ -1,8 +1,8 @@
 # Medallion Python SDK
 
 This server-side SDK gets data into and out of Medallion. Its main surface is
-`medallion.ingest.v1.MedallionIngestService` — datasets, idempotent batch
-appends (including polars DataFrames), and read-back SQL queries in the
+`medallion.ingest.v1.MedallionIngestService` — declared tables, idempotent
+batch appends (including polars DataFrames), and read-back SQL queries in the
 declared ClickHouse dialect with results collected straight into polars.
 
 The deprecated `medallion.connect.v1.MedallionConnectService` publish surface
@@ -48,38 +48,56 @@ separate client. Per-call workspace overrides are intentionally unavailable.
 For an allowed service-account flow, use `access_token` instead of `api_key`;
 configuring both is rejected. Never put either credential in browser or mobile
 code. `default_connector_id` matters only for the deprecated publish surface;
-the datasets surface does not use connectors, and workspace identity rides
-only in request headers.
+the tables surface does not use connectors, and workspace identity comes only
+from the verified transport.
 
-## Datasets, appends, and queries
+## Tables, appends, and queries
 
-A dataset is a named tabular collection in the configured workspace. Appends
-take plain dict rows, a `polars.DataFrame`, a `pyarrow.Table` or
-`RecordBatch`, or raw Arrow IPC `bytes`. Every append carries a Stripe-style
-`Idempotency-Key` header — generated automatically and returned — so the
-exact batch replays safely; per-row `insert_ids` pass through as each row's
-`insert_id`.
+A table is one declared tabular collection in the configured workspace: an
+ordered schema, a `TIMESTAMP` time column, and an optional sort key. Column
+types are `BOOL`, `INT64`, `FLOAT64`, `STRING`, `BYTES`, `TIMESTAMP`, `DATE`,
+and `JSON`. Appends take plain dict rows, a `polars.DataFrame`, a
+`pyarrow.Table` or `RecordBatch`, or raw Arrow IPC `bytes`. Every write
+carries a batch idempotency key — generated automatically, sent as both the
+Stripe-style `Idempotency-Key` header and the contract's `request_id` field,
+and returned — so the exact batch replays safely; per-row `insert_ids` pass
+through as each row's `insert_id` and correlate row errors only.
 
 ```python
-client.datasets.create("app_events", description="application events")
+from medallion import TableColumn
 
-appended = client.datasets.append(
+client.tables.create(
+    "app_events",
+    columns=[
+        TableColumn(name="at", type="TIMESTAMP"),
+        TableColumn(name="level", type="STRING"),
+        TableColumn(name="message", type="STRING", nullable=True),
+    ],
+    time_column="at",
+)
+
+appended = client.tables.append(
     "app_events",
     [
-        {"level": "info", "message": "service started"},
-        {"level": "warn", "message": "cache is cold"},
+        {"at": "2026-08-29T01:00:00Z", "level": "info", "message": "started"},
+        {"at": "2026-08-29T01:00:02Z", "level": "warn", "message": "cold"},
     ],
     insert_ids=["boot:1", "boot:2"],
 )
 print(appended.accepted_rows, appended.idempotency_key)
 for row_error in appended.row_errors:
-    print("rejected", row_error.index, row_error.reason)
+    print("rejected", row_error.index, row_error.message)
 
 import polars as pl
 
 frame = pl.DataFrame({"level": ["info", "warn"], "count": [1, 2]})
-client.datasets.append("app_events", frame)  # one Arrow IPC stream
+client.tables.append("app_events", frame)  # one Arrow IPC stream
 ```
+
+Schema evolution is additive only. `client.tables.update()` takes the FULL
+desired schema: the existing columns repeated unchanged and in order, then the
+new columns, which must be nullable. Resending the current schema is a no-op
+success, so retries are safe.
 
 Queries run one statement in the declared ClickHouse SQL dialect, verbatim —
 this is not an ORM or a query builder. The call is synchronous first; while
@@ -87,7 +105,7 @@ the server reports the query as running the SDK polls transparently, and
 iterating the result walks every page without exposing page tokens:
 
 ```python
-result = client.datasets.query(
+result = client.tables.query(
     "SELECT level, count() AS events FROM app_events GROUP BY level",
     server_timeout_ms=10_000,
 )
@@ -95,16 +113,19 @@ print([(column.name, column.type) for column in result.columns])
 for row in result:
     print(row["level"], row["events"])
 
-frame = client.datasets.query(
+frame = client.tables.query(
     "SELECT level, count() AS events FROM app_events GROUP BY level",
-    format="arrow",
 ).to_polars()
 ```
 
-`dry_run=True` validates the statement and reports `total_bytes_processed`
-without executing it. Query results are single-consumption; run the query
-again to re-read it. `client.ingest` exposes the same six RPCs at the
-protobuf level (`ingest_pb2`).
+`dry_run=True` validates the statement and reports the result schema without
+executing it, and without a query resource name to poll. A query that ends in
+the `FAILED` state raises the reported cause. Query results are
+single-consumption; run the query again to re-read it. Result rows arrive as
+dicts keyed by output column name; an `INT64` column comes back as a number
+inside the IEEE-754 safe range and as a decimal string outside it.
+`client.ingest` exposes the same seven RPCs at the protobuf level
+(`ingest_pb2`).
 
 ## Deprecated: publish CDC events
 

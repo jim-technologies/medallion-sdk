@@ -46,11 +46,11 @@ Before a v2 or later release, migrate the Go module and imports to the required
 
 Every language implementation supports the same two bounded customer surfaces:
 
-- `medallion.ingest.v1` — the tabular datasets surface: dataset
-  create/get/list, idempotent batch appends, and read-back SQL queries in the
-  declared ClickHouse dialect. Its clients and wrappers must contain exactly
-  `Append`, `Query`, `GetQueryResults`, `CreateDataset`, `GetDataset`, and
-  `ListDatasets`.
+- `medallion.ingest.v1` — the tabular tables surface: table
+  create/get/list/update, idempotent batch appends, and read-back SQL queries
+  in the declared ClickHouse dialect. Its clients and wrappers must contain
+  exactly `CreateTable`, `GetTable`, `ListTables`, `UpdateTable`,
+  `AppendRows`, `RunQuery`, and `GetQueryResults`.
 - `medallion.connect.v1` — the deprecated CDC/audit publish surface. Its
   generated service, low-level clients, and ergonomic wrappers must contain
   exactly `PublishCdcEvents`, `PublishAuditEvents`, `ListCdcEvents`, and

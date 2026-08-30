@@ -9,9 +9,12 @@ import (
 	"testing"
 
 	ingestv1 "github.com/jim-technologies/medallion-sdk/go/gen/medallion/ingest/v1"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 var uuidShape = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+
+const testQueryName = "queries/01jz9q5g6rsf7r5ar4rah1b2c3"
 
 func newIngestTestClient(t *testing.T, handler http.HandlerFunc) (*Client, *httptest.Server) {
 	t.Helper()
@@ -28,7 +31,16 @@ func newIngestTestClient(t *testing.T, handler http.HandlerFunc) (*Client, *http
 	return client, server
 }
 
-func TestIngestAppendSendsIdempotencyKeyAndCanonicalRoute(t *testing.T) {
+func jsonRow(t *testing.T, values map[string]any) *ingestv1.Row {
+	t.Helper()
+	fields, err := structpb.NewStruct(values)
+	if err != nil {
+		t.Fatalf("build row: %v", err)
+	}
+	return &ingestv1.Row{Json: fields}
+}
+
+func TestIngestAppendRowsStampsBatchKeyAndCanonicalRoute(t *testing.T) {
 	var seen struct {
 		path    string
 		headers http.Header
@@ -42,29 +54,41 @@ func TestIngestAppendSendsIdempotencyKeyAndCanonicalRoute(t *testing.T) {
 		}
 		w.Header().Set("content-type", "application/json")
 		w.Header().Set("x-request-id", "req_ingest_1")
-		_ = json.NewEncoder(w).Encode(map[string]any{"accepted_rows": "2"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"acceptedRows": "2"})
 	})
 
-	response, requestID, err := client.Ingest.Append(context.Background(), &ingestv1.AppendRequest{
-		DatasetId: "events",
-		Rows: &ingestv1.AppendRequest_JsonRows{JsonRows: &ingestv1.JsonRows{Rows: []*ingestv1.Row{
-			{InsertId: "evt-1", Json: `{"level":"info"}`},
-			{Json: `{"level":"warn"}`},
-		}}},
-	})
-	if err != nil {
-		t.Fatalf("append: %v", err)
+	first := jsonRow(t, map[string]any{"level": "info"})
+	first.InsertId = "evt-1"
+	request := &ingestv1.AppendRowsRequest{
+		Table: "tables/events",
+		Rows: []*ingestv1.Row{
+			first,
+			jsonRow(t, map[string]any{"level": "warn"}),
+		},
 	}
-	if seen.path != "/medallion.ingest.v1.MedallionIngestService/Append" {
+	response, requestID, err := client.Ingest.AppendRows(context.Background(), request)
+	if err != nil {
+		t.Fatalf("append rows: %v", err)
+	}
+	if seen.path != "/medallion.ingest.v1.MedallionIngestService/AppendRows" {
 		t.Fatalf("unexpected path %q", seen.path)
 	}
-	if key := seen.headers.Get("Idempotency-Key"); !uuidShape.MatchString(key) {
+	key := seen.headers.Get("Idempotency-Key")
+	if !uuidShape.MatchString(key) {
 		t.Fatalf("expected a generated UUID Idempotency-Key, got %q", key)
+	}
+	// request_id is the field the contract deduplicates on, so the generated
+	// key must reach the body as well as the header.
+	if request.GetRequestId() != key {
+		t.Fatalf("expected request_id %q to match the batch key %q", request.GetRequestId(), key)
+	}
+	if seen.body["requestId"] != key {
+		t.Fatalf("expected the wire request_id to carry the batch key, got %v", seen.body["requestId"])
 	}
 	if seen.headers.Get("X-Medallion-Workspace-Id") != testWorkspaceID {
 		t.Fatalf("workspace header missing")
 	}
-	rows := seen.body["jsonRows"].(map[string]any)["rows"].([]any)
+	rows := seen.body["rows"].([]any)
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows on the wire, got %d", len(rows))
 	}
@@ -76,48 +100,70 @@ func TestIngestAppendSendsIdempotencyKeyAndCanonicalRoute(t *testing.T) {
 	}
 }
 
-func TestIngestAppendHonorsCallerIdempotencyKeyFromContext(t *testing.T) {
+func TestIngestAppendRowsHonorsCallerIdempotencyKeyFromContext(t *testing.T) {
 	var seenKey string
 	client, _ := newIngestTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		seenKey = r.Header.Get("Idempotency-Key")
 		w.Header().Set("content-type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"duplicate": true})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"acceptedRows": "1",
+			"rowErrors": []any{map[string]any{
+				"index": "0",
+				"error": map[string]any{"code": 3, "message": "level expects a string"},
+			}},
+		})
 	})
 
 	ctx := WithIngestIdempotencyKey(context.Background(), "outbox:batch:42")
-	response, _, err := client.Ingest.Append(ctx, &ingestv1.AppendRequest{
-		DatasetId: "events",
-		Rows: &ingestv1.AppendRequest_ArrowRows{ArrowRows: &ingestv1.ArrowRecordBatch{
+	response, _, err := client.Ingest.AppendRows(ctx, &ingestv1.AppendRowsRequest{
+		Table: "tables/events",
+		ArrowRows: &ingestv1.ArrowRecordBatch{
 			SerializedRecordBatch: []byte("ARROW"),
-		}},
+		},
 	})
 	if err != nil {
-		t.Fatalf("append: %v", err)
+		t.Fatalf("append rows: %v", err)
 	}
 	if seenKey != "outbox:batch:42" {
 		t.Fatalf("expected the pinned key, got %q", seenKey)
 	}
-	if !response.GetDuplicate() {
-		t.Fatalf("expected the duplicate acknowledgement to survive decoding")
+	if len(response.GetRowErrors()) != 1 {
+		t.Fatalf("expected one row error to survive decoding")
+	}
+	rowError := response.GetRowErrors()[0]
+	if rowError.GetIndex() != 0 || rowError.GetError().GetCode() != 3 {
+		t.Fatalf("unexpected row error %v", rowError)
 	}
 }
 
-func TestIngestAppendRejectsAmbiguousOrMissingPayloadLocally(t *testing.T) {
+func TestIngestRejectsMalformedRequestsLocally(t *testing.T) {
 	client, _ := newIngestTestClient(t, func(http.ResponseWriter, *http.Request) {
 		t.Fatalf("no request may reach the network")
 	})
 
-	_, _, err := client.Ingest.Append(context.Background(), &ingestv1.AppendRequest{DatasetId: "events"})
+	_, _, err := client.Ingest.AppendRows(context.Background(), &ingestv1.AppendRowsRequest{Table: "tables/events"})
 	if sdkError := asSDKError(t, err); sdkError.Code != "MEDALLION_AMBIGUOUS_ROW_PAYLOAD" {
 		t.Fatalf("unexpected code %q", sdkError.Code)
 	}
-	_, _, err = client.Ingest.Append(context.Background(), &ingestv1.AppendRequest{
-		Rows: &ingestv1.AppendRequest_JsonRows{JsonRows: &ingestv1.JsonRows{Rows: []*ingestv1.Row{{Json: "{}"}}}},
+	_, _, err = client.Ingest.AppendRows(context.Background(), &ingestv1.AppendRowsRequest{
+		Table: "events",
+		Rows:  []*ingestv1.Row{jsonRow(t, map[string]any{"level": "info"})},
 	})
-	if sdkError := asSDKError(t, err); sdkError.Code != "MEDALLION_INVALID_DATASET_ID" {
+	if sdkError := asSDKError(t, err); sdkError.Code != "MEDALLION_INVALID_TABLE_ID" {
 		t.Fatalf("unexpected code %q", sdkError.Code)
 	}
-	_, _, err = client.Ingest.Query(context.Background(), &ingestv1.QueryRequest{Query: "   "})
+	_, _, err = client.Ingest.CreateTable(context.Background(), &ingestv1.CreateTableRequest{TableId: "Events"})
+	if sdkError := asSDKError(t, err); sdkError.Code != "MEDALLION_INVALID_TABLE_ID" {
+		t.Fatalf("unexpected code %q", sdkError.Code)
+	}
+	_, _, err = client.Ingest.CreateTable(context.Background(), &ingestv1.CreateTableRequest{
+		TableId: "events",
+		Table:   &ingestv1.Table{},
+	})
+	if sdkError := asSDKError(t, err); sdkError.Code != "MEDALLION_INVALID_SCHEMA" {
+		t.Fatalf("unexpected code %q", sdkError.Code)
+	}
+	_, _, err = client.Ingest.RunQuery(context.Background(), &ingestv1.RunQueryRequest{Query: "   "})
 	if sdkError := asSDKError(t, err); sdkError.Code != "MEDALLION_INVALID_QUERY" {
 		t.Fatalf("unexpected code %q", sdkError.Code)
 	}
@@ -138,43 +184,45 @@ func TestIngestQueryPollAndPaginateRoutes(t *testing.T) {
 		switch len(paths) {
 		case 1:
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"results": map[string]any{"completed": false, "queryId": "q_1"},
+				"name":  testQueryName,
+				"state": "RUNNING",
 			})
 		default:
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"results": map[string]any{
-					"completed": true,
-					"queryId":   "q_1",
-					"rowsJson":  []string{`{"n":1}`},
-					"totalRows": "1",
-				},
+				"name":      testQueryName,
+				"state":     "SUCCEEDED",
+				"rows":      []any{map[string]any{"n": 1}},
+				"totalRows": "1",
 			})
 		}
 	})
 
-	first, _, err := client.Ingest.Query(context.Background(), &ingestv1.QueryRequest{Query: "SELECT n FROM events"})
+	first, _, err := client.Ingest.RunQuery(context.Background(), &ingestv1.RunQueryRequest{Query: "SELECT n FROM events"})
 	if err != nil {
-		t.Fatalf("query: %v", err)
+		t.Fatalf("run query: %v", err)
 	}
-	if first.GetResults().GetCompleted() {
+	if first.GetState() != "RUNNING" {
 		t.Fatalf("expected the first acknowledgement to still be running")
 	}
 	poll, _, err := client.Ingest.GetQueryResults(context.Background(), &ingestv1.GetQueryResultsRequest{
-		QueryId: first.GetResults().GetQueryId(),
+		Name: first.GetName(),
 	})
 	if err != nil {
 		t.Fatalf("poll: %v", err)
 	}
-	if !poll.GetResults().GetCompleted() || len(poll.GetResults().GetRowsJson()) != 1 {
-		t.Fatalf("expected one completed row page")
+	if poll.GetState() != "SUCCEEDED" || len(poll.GetRows()) != 1 {
+		t.Fatalf("expected one succeeded row page")
 	}
-	if paths[0] != "/medallion.ingest.v1.MedallionIngestService/Query" ||
+	if poll.GetRows()[0].GetFields()["n"].GetNumberValue() != 1 {
+		t.Fatalf("expected the result row to decode as a struct")
+	}
+	if paths[0] != "/medallion.ingest.v1.MedallionIngestService/RunQuery" ||
 		paths[1] != "/medallion.ingest.v1.MedallionIngestService/GetQueryResults" {
 		t.Fatalf("unexpected routes %v", paths)
 	}
 }
 
-func TestIngestDatasetLifecycleRoutes(t *testing.T) {
+func TestIngestTableLifecycleRoutes(t *testing.T) {
 	var paths []string
 	var createKey string
 	client, _ := newIngestTestClient(t, func(w http.ResponseWriter, r *http.Request) {
@@ -184,31 +232,51 @@ func TestIngestDatasetLifecycleRoutes(t *testing.T) {
 		}
 		w.Header().Set("content-type", "application/json")
 		switch r.URL.Path {
-		case createDatasetPath, getDatasetPath:
+		case createTablePath, getTablePath, updateTablePath:
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"dataset": map[string]any{"datasetId": "events"},
+				"table": map[string]any{
+					"name":       "tables/events",
+					"timeColumn": "occurred_at",
+				},
 			})
 		default:
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"datasets":      []any{map[string]any{"datasetId": "events"}},
+				"tables":        []any{map[string]any{"name": "tables/events"}},
 				"nextPageToken": "",
 			})
 		}
 	})
 
-	created, _, err := client.Ingest.CreateDataset(context.Background(), &ingestv1.CreateDatasetRequest{DatasetId: "events"})
-	if err != nil || created.GetDataset().GetDatasetId() != "events" {
-		t.Fatalf("create dataset: %v", err)
+	schema := &ingestv1.TableSchema{Columns: []*ingestv1.ColumnSchema{
+		{Name: "occurred_at", Type: "TIMESTAMP"},
+		{Name: "level", Type: "STRING"},
+	}}
+	created, _, err := client.Ingest.CreateTable(context.Background(), &ingestv1.CreateTableRequest{
+		TableId: "events",
+		Table:   &ingestv1.Table{Schema: schema, TimeColumn: "occurred_at"},
+	})
+	if err != nil || created.GetTable().GetName() != "tables/events" {
+		t.Fatalf("create table: %v", err)
 	}
 	if !uuidShape.MatchString(createKey) {
-		t.Fatalf("dataset creation must carry a generated Idempotency-Key, got %q", createKey)
+		t.Fatalf("table creation must carry a generated Idempotency-Key, got %q", createKey)
 	}
-	if _, _, err = client.Ingest.GetDataset(context.Background(), &ingestv1.GetDatasetRequest{DatasetId: "events"}); err != nil {
-		t.Fatalf("get dataset: %v", err)
+	if _, _, err = client.Ingest.GetTable(context.Background(), &ingestv1.GetTableRequest{Name: "tables/events"}); err != nil {
+		t.Fatalf("get table: %v", err)
 	}
-	listed, _, err := client.Ingest.ListDatasets(context.Background(), &ingestv1.ListDatasetsRequest{PageSize: 10})
-	if err != nil || len(listed.GetDatasets()) != 1 {
-		t.Fatalf("list datasets: %v", err)
+	evolved := &ingestv1.TableSchema{Columns: append(schema.GetColumns(), &ingestv1.ColumnSchema{
+		Name:     "trace_id",
+		Type:     "STRING",
+		Nullable: true,
+	})}
+	if _, _, err = client.Ingest.UpdateTable(context.Background(), &ingestv1.UpdateTableRequest{
+		Table: &ingestv1.Table{Name: "tables/events", Schema: evolved},
+	}); err != nil {
+		t.Fatalf("update table: %v", err)
+	}
+	listed, _, err := client.Ingest.ListTables(context.Background(), &ingestv1.ListTablesRequest{PageSize: 10})
+	if err != nil || len(listed.GetTables()) != 1 {
+		t.Fatalf("list tables: %v", err)
 	}
 }
 

@@ -5,17 +5,17 @@ const requiredEnv = [
   "MEDALLION_SMOKE_BASE_URL",
   "MEDALLION_SMOKE_API_KEY",
   "MEDALLION_SMOKE_WORKSPACE_ID",
-  "MEDALLION_SMOKE_INGEST_DATASET",
+  "MEDALLION_SMOKE_INGEST_TABLE",
 ] as const;
 
 const liveEnabled = requiredEnv.every((name) => process.env[name]?.trim());
 
-describe.skipIf(!liveEnabled)("deployed datasets ingest", () => {
+describe.skipIf(!liveEnabled)("deployed tables ingest", () => {
   it("appends rows idempotently and reads them back with SQL", async () => {
-    const dataset = requiredEnvValue("MEDALLION_SMOKE_INGEST_DATASET");
-    // The dataset name is spliced into SQL below, so restrict it to a safe
+    const table = requiredEnvValue("MEDALLION_SMOKE_INGEST_TABLE");
+    // The table name is spliced into SQL below, so restrict it to a safe
     // identifier instead of trusting the environment.
-    expect(dataset).toMatch(/^[A-Za-z0-9_]+$/);
+    expect(table).toMatch(/^[a-z][a-z0-9_]*$/);
     const client = new MedallionClient({
       baseUrl: requiredEnvValue("MEDALLION_SMOKE_BASE_URL"),
       apiKey: requiredEnvValue("MEDALLION_SMOKE_API_KEY"),
@@ -23,25 +23,28 @@ describe.skipIf(!liveEnabled)("deployed datasets ingest", () => {
       timeoutMs: 30_000,
     });
     const runId = `sdk_live_${Date.now()}`;
+    const occurredAt = new Date().toISOString();
 
-    const found = await client.datasets.get(dataset);
-    expect(found.datasetId).toBe(dataset);
+    const found = await client.tables.get(table);
+    expect(found.tableId).toBe(table);
 
     const rows = [
-      { run_id: runId, seq: 1, level: "info" },
-      { run_id: runId, seq: 2, level: "warn" },
+      { occurred_at: occurredAt, run_id: runId, seq: 1, level: "info" },
+      { occurred_at: occurredAt, run_id: runId, seq: 2, level: "warn" },
     ];
-    const appended = await client.datasets.append(dataset, rows);
+    const appended = await client.tables.append(table, rows);
     expect(appended.rowErrors).toEqual([]);
     expect(appended.acceptedRows).toBe(2);
 
-    const replay = await client.datasets.append(dataset, rows, {
+    // Replaying the exact batch under the same key is absorbed without
+    // duplication and re-acknowledged with the original counts.
+    const replay = await client.tables.append(table, rows, {
       idempotencyKey: appended.idempotencyKey,
     });
-    expect(replay.duplicate).toBe(true);
+    expect(replay.acceptedRows).toBe(2);
 
-    const result = await client.datasets.query(
-      `SELECT run_id, seq, level FROM ${dataset} WHERE run_id = '${runId}' ORDER BY seq`,
+    const result = await client.tables.query(
+      `SELECT run_id, seq, level FROM ${table} WHERE run_id = '${runId}' ORDER BY seq`,
       { serverTimeoutMs: 20_000 },
     );
     const readBack = [];
@@ -49,11 +52,11 @@ describe.skipIf(!liveEnabled)("deployed datasets ingest", () => {
     expect(readBack).toHaveLength(2);
     expect(readBack[0]).toMatchObject({ run_id: runId, level: "info" });
 
-    const estimate = await client.datasets.query(
-      `SELECT count() FROM ${dataset}`,
-      { dryRun: true },
-    );
-    expect(estimate.dryRun).toBe(true);
+    const planned = await client.tables.query(`SELECT count() FROM ${table}`, {
+      dryRun: true,
+    });
+    expect(planned.dryRun).toBe(true);
+    expect(planned.columns.length).toBeGreaterThan(0);
   }, 120_000);
 });
 

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "medallion"
 version = "0.3.1"
-description = "Server-side Python SDK for getting data into and out of Medallion: datasets, batch appends, and SQL queries."
+description = "Server-side Python SDK for getting data into and out of Medallion: tables, batch appends, and SQL queries."
 readme = "README.md"
 requires-python = ">=3.14"
 license = "Apache-2.0"
@@ -13,7 +13,7 @@ license-files = ["LICENSE", "NOTICE"]
 authors = [
   { name = "Jim Technologies" }
 ]
-keywords = ["medallion", "datasets", "ingestion", "clickhouse", "arrow", "cdc", "audit", "sdk"]
+keywords = ["medallion", "tables", "ingestion", "clickhouse", "arrow", "cdc", "audit", "sdk"]
 classifiers = [
   "Private :: Do Not Upload",
   "Development Status :: 3 - Alpha",
@@ -30,7 +30,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Dataframe conveniences for the datasets surface: polars append inputs,
+# Dataframe conveniences for the tables surface: polars append inputs,
 # query results collected with to_polars(), and Arrow IPC payloads.
 polars = [
   "polars>=1.20,<2",

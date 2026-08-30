@@ -22,10 +22,11 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
+from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n medallion/ingest/v1/ingest.proto\x12\x13medallion.ingest.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"6\n\x03Row\x12\x1b\n\tinsert_id\x18\x01 \x01(\tR\x08insertId\x12\x12\n\x04json\x18\x02 \x01(\tR\x04json\"8\n\x08JsonRows\x12,\n\x04rows\x18\x01 \x03(\x0b\x32\x18.medallion.ingest.v1.RowR\x04rows\"J\n\x10\x41rrowRecordBatch\x12\x36\n\x17serialized_record_batch\x18\x01 \x01(\x0cR\x15serializedRecordBatch\"\xbc\x01\n\rAppendRequest\x12\x1d\n\ndataset_id\x18\x01 \x01(\tR\tdatasetId\x12<\n\tjson_rows\x18\x02 \x01(\x0b\x32\x1d.medallion.ingest.v1.JsonRowsH\x00R\x08jsonRows\x12\x46\n\narrow_rows\x18\x03 \x01(\x0b\x32%.medallion.ingest.v1.ArrowRecordBatchH\x00R\tarrowRowsB\x06\n\x04rows\"R\n\x08RowError\x12\x14\n\x05index\x18\x01 \x01(\rR\x05index\x12\x16\n\x06reason\x18\x02 \x01(\tR\x06reason\x12\x18\n\x07message\x18\x03 \x01(\tR\x07message\"\x97\x01\n\x0e\x41ppendResponse\x12\x42\n\rinsert_errors\x18\x01 \x03(\x0b\x32\x1d.medallion.ingest.v1.RowErrorR\x0cinsertErrors\x12#\n\raccepted_rows\x18\x02 \x01(\x04R\x0c\x61\x63\x63\x65ptedRows\x12\x1c\n\tduplicate\x18\x03 \x01(\x08R\tduplicate\"\xb8\x01\n\x0cQueryRequest\x12\x14\n\x05query\x18\x01 \x01(\tR\x05query\x12\x1d\n\ntimeout_ms\x18\x02 \x01(\x03R\ttimeoutMs\x12\x17\n\x07\x64ry_run\x18\x03 \x01(\x08R\x06\x64ryRun\x12\x1f\n\x0bmax_results\x18\x04 \x01(\rR\nmaxResults\x12\x39\n\x06\x66ormat\x18\x05 \x01(\x0e\x32!.medallion.ingest.v1.ResultFormatR\x06\x66ormat\"6\n\x0c\x43olumnSchema\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n\x04type\x18\x02 \x01(\tR\x04type\"K\n\x0cResultSchema\x12;\n\x07\x63olumns\x18\x01 \x03(\x0b\x32!.medallion.ingest.v1.ColumnSchemaR\x07\x63olumns\"\xe0\x02\n\x0cQueryResults\x12\x19\n\x08query_id\x18\x01 \x01(\tR\x07queryId\x12\x1c\n\tcompleted\x18\x02 \x01(\x08R\tcompleted\x12\x39\n\x06schema\x18\x03 \x01(\x0b\x32!.medallion.ingest.v1.ResultSchemaR\x06schema\x12\x1b\n\trows_json\x18\x04 \x03(\tR\x08rowsJson\x12\x44\n\narrow_rows\x18\x05 \x01(\x0b\x32%.medallion.ingest.v1.ArrowRecordBatchR\tarrowRows\x12&\n\x0fnext_page_token\x18\x06 \x01(\tR\rnextPageToken\x12\x1d\n\ntotal_rows\x18\x07 \x01(\x04R\ttotalRows\x12\x32\n\x15total_bytes_processed\x18\x08 \x01(\x03R\x13totalBytesProcessed\"L\n\rQueryResponse\x12;\n\x07results\x18\x01 \x01(\x0b\x32!.medallion.ingest.v1.QueryResultsR\x07results\"\xcd\x01\n\x16GetQueryResultsRequest\x12\x19\n\x08query_id\x18\x01 \x01(\tR\x07queryId\x12\x1d\n\npage_token\x18\x02 \x01(\tR\tpageToken\x12\x1d\n\ntimeout_ms\x18\x03 \x01(\x03R\ttimeoutMs\x12\x1f\n\x0bmax_results\x18\x04 \x01(\rR\nmaxResults\x12\x39\n\x06\x66ormat\x18\x05 \x01(\x0e\x32!.medallion.ingest.v1.ResultFormatR\x06\x66ormat\"V\n\x17GetQueryResultsResponse\x12;\n\x07results\x18\x01 \x01(\x0b\x32!.medallion.ingest.v1.QueryResultsR\x07results\"\x87\x01\n\x07\x44\x61taset\x12\x1d\n\ndataset_id\x18\x01 \x01(\tR\tdatasetId\x12 \n\x0b\x64\x65scription\x18\x02 \x01(\tR\x0b\x64\x65scription\x12;\n\x0b\x63reate_time\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\ncreateTime\"W\n\x14\x43reateDatasetRequest\x12\x1d\n\ndataset_id\x18\x01 \x01(\tR\tdatasetId\x12 \n\x0b\x64\x65scription\x18\x02 \x01(\tR\x0b\x64\x65scription\"O\n\x15\x43reateDatasetResponse\x12\x36\n\x07\x64\x61taset\x18\x01 \x01(\x0b\x32\x1c.medallion.ingest.v1.DatasetR\x07\x64\x61taset\"2\n\x11GetDatasetRequest\x12\x1d\n\ndataset_id\x18\x01 \x01(\tR\tdatasetId\"L\n\x12GetDatasetResponse\x12\x36\n\x07\x64\x61taset\x18\x01 \x01(\x0b\x32\x1c.medallion.ingest.v1.DatasetR\x07\x64\x61taset\"Q\n\x13ListDatasetsRequest\x12\x1b\n\tpage_size\x18\x01 \x01(\rR\x08pageSize\x12\x1d\n\npage_token\x18\x02 \x01(\tR\tpageToken\"x\n\x14ListDatasetsResponse\x12\x38\n\x08\x64\x61tasets\x18\x01 \x03(\x0b\x32\x1c.medallion.ingest.v1.DatasetR\x08\x64\x61tasets\x12&\n\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken*b\n\x0cResultFormat\x12\x1d\n\x19RESULT_FORMAT_UNSPECIFIED\x10\x00\x12\x16\n\x12RESULT_FORMAT_JSON\x10\x01\x12\x1b\n\x17RESULT_FORMAT_ARROW_IPC\x10\x02\x32\xd5\x04\n\x16MedallionIngestService\x12Q\n\x06\x41ppend\x12\".medallion.ingest.v1.AppendRequest\x1a#.medallion.ingest.v1.AppendResponse\x12N\n\x05Query\x12!.medallion.ingest.v1.QueryRequest\x1a\".medallion.ingest.v1.QueryResponse\x12l\n\x0fGetQueryResults\x12+.medallion.ingest.v1.GetQueryResultsRequest\x1a,.medallion.ingest.v1.GetQueryResultsResponse\x12\x66\n\rCreateDataset\x12).medallion.ingest.v1.CreateDatasetRequest\x1a*.medallion.ingest.v1.CreateDatasetResponse\x12]\n\nGetDataset\x12&.medallion.ingest.v1.GetDatasetRequest\x1a\'.medallion.ingest.v1.GetDatasetResponse\x12\x63\n\x0cListDatasets\x12(.medallion.ingest.v1.ListDatasetsRequest\x1a).medallion.ingest.v1.ListDatasetsResponseBOZMgithub.com/jim-technologies/medallion-sdk/go/gen/medallion/ingest/v1;ingestv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n medallion/ingest/v1/ingest.proto\x12\x13medallion.ingest.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"R\n\x0c\x43olumnSchema\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n\x04type\x18\x02 \x01(\tR\x04type\x12\x1a\n\x08nullable\x18\x03 \x01(\x08R\x08nullable\"J\n\x0bTableSchema\x12;\n\x07\x63olumns\x18\x01 \x03(\x0b\x32!.medallion.ingest.v1.ColumnSchemaR\x07\x63olumns\"\xdc\x01\n\x05Table\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x38\n\x06schema\x18\x02 \x01(\x0b\x32 .medallion.ingest.v1.TableSchemaR\x06schema\x12\x1f\n\x0btime_column\x18\x03 \x01(\tR\ntimeColumn\x12!\n\x0csort_columns\x18\x04 \x03(\tR\x0bsortColumns\x12;\n\x0b\x63reate_time\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\ncreateTimeJ\x04\x08\n\x10\x14\"\x80\x01\n\x12\x43reateTableRequest\x12\x19\n\x08table_id\x18\x01 \x01(\tR\x07tableId\x12\x30\n\x05table\x18\x02 \x01(\x0b\x32\x1a.medallion.ingest.v1.TableR\x05table\x12\x1d\n\nrequest_id\x18\x03 \x01(\tR\trequestId\"G\n\x13\x43reateTableResponse\x12\x30\n\x05table\x18\x01 \x01(\x0b\x32\x1a.medallion.ingest.v1.TableR\x05table\"e\n\x12UpdateTableRequest\x12\x30\n\x05table\x18\x01 \x01(\x0b\x32\x1a.medallion.ingest.v1.TableR\x05table\x12\x1d\n\nrequest_id\x18\x02 \x01(\tR\trequestId\"G\n\x13UpdateTableResponse\x12\x30\n\x05table\x18\x01 \x01(\x0b\x32\x1a.medallion.ingest.v1.TableR\x05table\"%\n\x0fGetTableRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\"D\n\x10GetTableResponse\x12\x30\n\x05table\x18\x01 \x01(\x0b\x32\x1a.medallion.ingest.v1.TableR\x05table\"O\n\x11ListTablesRequest\x12\x1b\n\tpage_size\x18\x01 \x01(\x05R\x08pageSize\x12\x1d\n\npage_token\x18\x02 \x01(\tR\tpageToken\"p\n\x12ListTablesResponse\x12\x32\n\x06tables\x18\x01 \x03(\x0b\x32\x1a.medallion.ingest.v1.TableR\x06tables\x12&\n\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"O\n\x03Row\x12\x1b\n\tinsert_id\x18\x01 \x01(\tR\x08insertId\x12+\n\x04json\x18\x02 \x01(\x0b\x32\x17.google.protobuf.StructR\x04json\"J\n\x10\x41rrowRecordBatch\x12\x36\n\x17serialized_record_batch\x18\x01 \x01(\x0cR\x15serializedRecordBatch\"\xee\x01\n\x11\x41ppendRowsRequest\x12\x14\n\x05table\x18\x01 \x01(\tR\x05table\x12,\n\x04rows\x18\x02 \x03(\x0b\x32\x18.medallion.ingest.v1.RowR\x04rows\x12\x44\n\narrow_rows\x18\x03 \x01(\x0b\x32%.medallion.ingest.v1.ArrowRecordBatchR\tarrowRows\x12\x1d\n\nrequest_id\x18\x04 \x01(\tR\trequestId\x12*\n\x11skip_invalid_rows\x18\x05 \x01(\x08R\x0fskipInvalidRowsJ\x04\x08\x14\x10\x19\"?\n\tRpcStatus\x12\x12\n\x04\x63ode\x18\x01 \x01(\x05R\x04\x63ode\x12\x18\n\x07message\x18\x02 \x01(\tR\x07messageJ\x04\x08\x03\x10\x04\"V\n\x08RowError\x12\x14\n\x05index\x18\x01 \x01(\x03R\x05index\x12\x34\n\x05\x65rror\x18\x02 \x01(\x0b\x32\x1e.medallion.ingest.v1.RpcStatusR\x05\x65rror\"w\n\x12\x41ppendRowsResponse\x12#\n\raccepted_rows\x18\x01 \x01(\x03R\x0c\x61\x63\x63\x65ptedRows\x12<\n\nrow_errors\x18\x02 \x03(\x0b\x32\x1d.medallion.ingest.v1.RowErrorR\trowErrors\"\x82\x01\n\x0fRunQueryRequest\x12\x14\n\x05query\x18\x01 \x01(\tR\x05query\x12\x1d\n\ntimeout_ms\x18\x02 \x01(\x03R\ttimeoutMs\x12\x17\n\x07\x64ry_run\x18\x03 \x01(\x08R\x06\x64ryRun\x12\x1b\n\tpage_size\x18\x04 \x01(\x05R\x08pageSizeJ\x04\x08\x06\x10\x0b\"\xa6\x02\n\x10RunQueryResponse\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n\x05state\x18\x02 \x01(\tR\x05state\x12\x38\n\x06schema\x18\x03 \x01(\x0b\x32 .medallion.ingest.v1.TableSchemaR\x06schema\x12+\n\x04rows\x18\x04 \x03(\x0b\x32\x17.google.protobuf.StructR\x04rows\x12&\n\x0fnext_page_token\x18\x05 \x01(\tR\rnextPageToken\x12\x1d\n\ntotal_rows\x18\x06 \x01(\x03R\ttotalRows\x12\x34\n\x05\x65rror\x18\x07 \x01(\x0b\x32\x1e.medallion.ingest.v1.RpcStatusR\x05\x65rrorJ\x04\x08\x14\x10\x1e\"h\n\x16GetQueryResultsRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n\npage_token\x18\x02 \x01(\tR\tpageToken\x12\x1b\n\tpage_size\x18\x03 \x01(\x05R\x08pageSize\"\xad\x02\n\x17GetQueryResultsResponse\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n\x05state\x18\x02 \x01(\tR\x05state\x12\x38\n\x06schema\x18\x03 \x01(\x0b\x32 .medallion.ingest.v1.TableSchemaR\x06schema\x12+\n\x04rows\x18\x04 \x03(\x0b\x32\x17.google.protobuf.StructR\x04rows\x12&\n\x0fnext_page_token\x18\x05 \x01(\tR\rnextPageToken\x12\x1d\n\ntotal_rows\x18\x06 \x01(\x03R\ttotalRows\x12\x34\n\x05\x65rror\x18\x07 \x01(\x0b\x32\x1e.medallion.ingest.v1.RpcStatusR\x05\x65rrorJ\x04\x08\x14\x10\x1e\x32\xba\x05\n\x16MedallionIngestService\x12`\n\x0b\x43reateTable\x12\'.medallion.ingest.v1.CreateTableRequest\x1a(.medallion.ingest.v1.CreateTableResponse\x12W\n\x08GetTable\x12$.medallion.ingest.v1.GetTableRequest\x1a%.medallion.ingest.v1.GetTableResponse\x12]\n\nListTables\x12&.medallion.ingest.v1.ListTablesRequest\x1a\'.medallion.ingest.v1.ListTablesResponse\x12`\n\x0bUpdateTable\x12\'.medallion.ingest.v1.UpdateTableRequest\x1a(.medallion.ingest.v1.UpdateTableResponse\x12]\n\nAppendRows\x12&.medallion.ingest.v1.AppendRowsRequest\x1a\'.medallion.ingest.v1.AppendRowsResponse\x12W\n\x08RunQuery\x12$.medallion.ingest.v1.RunQueryRequest\x1a%.medallion.ingest.v1.RunQueryResponse\x12l\n\x0fGetQueryResults\x12+.medallion.ingest.v1.GetQueryResultsRequest\x1a,.medallion.ingest.v1.GetQueryResultsResponseBOZMgithub.com/jim-technologies/medallion-sdk/go/gen/medallion/ingest/v1;ingestv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -33,48 +34,48 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'medallion.ingest.v1.ingest_
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'ZMgithub.com/jim-technologies/medallion-sdk/go/gen/medallion/ingest/v1;ingestv1'
-  _globals['_RESULTFORMAT']._serialized_start=2401
-  _globals['_RESULTFORMAT']._serialized_end=2499
-  _globals['_ROW']._serialized_start=90
-  _globals['_ROW']._serialized_end=144
-  _globals['_JSONROWS']._serialized_start=146
-  _globals['_JSONROWS']._serialized_end=202
-  _globals['_ARROWRECORDBATCH']._serialized_start=204
-  _globals['_ARROWRECORDBATCH']._serialized_end=278
-  _globals['_APPENDREQUEST']._serialized_start=281
-  _globals['_APPENDREQUEST']._serialized_end=469
-  _globals['_ROWERROR']._serialized_start=471
-  _globals['_ROWERROR']._serialized_end=553
-  _globals['_APPENDRESPONSE']._serialized_start=556
-  _globals['_APPENDRESPONSE']._serialized_end=707
-  _globals['_QUERYREQUEST']._serialized_start=710
-  _globals['_QUERYREQUEST']._serialized_end=894
-  _globals['_COLUMNSCHEMA']._serialized_start=896
-  _globals['_COLUMNSCHEMA']._serialized_end=950
-  _globals['_RESULTSCHEMA']._serialized_start=952
-  _globals['_RESULTSCHEMA']._serialized_end=1027
-  _globals['_QUERYRESULTS']._serialized_start=1030
-  _globals['_QUERYRESULTS']._serialized_end=1382
-  _globals['_QUERYRESPONSE']._serialized_start=1384
-  _globals['_QUERYRESPONSE']._serialized_end=1460
-  _globals['_GETQUERYRESULTSREQUEST']._serialized_start=1463
-  _globals['_GETQUERYRESULTSREQUEST']._serialized_end=1668
-  _globals['_GETQUERYRESULTSRESPONSE']._serialized_start=1670
-  _globals['_GETQUERYRESULTSRESPONSE']._serialized_end=1756
-  _globals['_DATASET']._serialized_start=1759
-  _globals['_DATASET']._serialized_end=1894
-  _globals['_CREATEDATASETREQUEST']._serialized_start=1896
-  _globals['_CREATEDATASETREQUEST']._serialized_end=1983
-  _globals['_CREATEDATASETRESPONSE']._serialized_start=1985
-  _globals['_CREATEDATASETRESPONSE']._serialized_end=2064
-  _globals['_GETDATASETREQUEST']._serialized_start=2066
-  _globals['_GETDATASETREQUEST']._serialized_end=2116
-  _globals['_GETDATASETRESPONSE']._serialized_start=2118
-  _globals['_GETDATASETRESPONSE']._serialized_end=2194
-  _globals['_LISTDATASETSREQUEST']._serialized_start=2196
-  _globals['_LISTDATASETSREQUEST']._serialized_end=2277
-  _globals['_LISTDATASETSRESPONSE']._serialized_start=2279
-  _globals['_LISTDATASETSRESPONSE']._serialized_end=2399
-  _globals['_MEDALLIONINGESTSERVICE']._serialized_start=2502
-  _globals['_MEDALLIONINGESTSERVICE']._serialized_end=3099
+  _globals['_COLUMNSCHEMA']._serialized_start=120
+  _globals['_COLUMNSCHEMA']._serialized_end=202
+  _globals['_TABLESCHEMA']._serialized_start=204
+  _globals['_TABLESCHEMA']._serialized_end=278
+  _globals['_TABLE']._serialized_start=281
+  _globals['_TABLE']._serialized_end=501
+  _globals['_CREATETABLEREQUEST']._serialized_start=504
+  _globals['_CREATETABLEREQUEST']._serialized_end=632
+  _globals['_CREATETABLERESPONSE']._serialized_start=634
+  _globals['_CREATETABLERESPONSE']._serialized_end=705
+  _globals['_UPDATETABLEREQUEST']._serialized_start=707
+  _globals['_UPDATETABLEREQUEST']._serialized_end=808
+  _globals['_UPDATETABLERESPONSE']._serialized_start=810
+  _globals['_UPDATETABLERESPONSE']._serialized_end=881
+  _globals['_GETTABLEREQUEST']._serialized_start=883
+  _globals['_GETTABLEREQUEST']._serialized_end=920
+  _globals['_GETTABLERESPONSE']._serialized_start=922
+  _globals['_GETTABLERESPONSE']._serialized_end=990
+  _globals['_LISTTABLESREQUEST']._serialized_start=992
+  _globals['_LISTTABLESREQUEST']._serialized_end=1071
+  _globals['_LISTTABLESRESPONSE']._serialized_start=1073
+  _globals['_LISTTABLESRESPONSE']._serialized_end=1185
+  _globals['_ROW']._serialized_start=1187
+  _globals['_ROW']._serialized_end=1266
+  _globals['_ARROWRECORDBATCH']._serialized_start=1268
+  _globals['_ARROWRECORDBATCH']._serialized_end=1342
+  _globals['_APPENDROWSREQUEST']._serialized_start=1345
+  _globals['_APPENDROWSREQUEST']._serialized_end=1583
+  _globals['_RPCSTATUS']._serialized_start=1585
+  _globals['_RPCSTATUS']._serialized_end=1648
+  _globals['_ROWERROR']._serialized_start=1650
+  _globals['_ROWERROR']._serialized_end=1736
+  _globals['_APPENDROWSRESPONSE']._serialized_start=1738
+  _globals['_APPENDROWSRESPONSE']._serialized_end=1857
+  _globals['_RUNQUERYREQUEST']._serialized_start=1860
+  _globals['_RUNQUERYREQUEST']._serialized_end=1990
+  _globals['_RUNQUERYRESPONSE']._serialized_start=1993
+  _globals['_RUNQUERYRESPONSE']._serialized_end=2287
+  _globals['_GETQUERYRESULTSREQUEST']._serialized_start=2289
+  _globals['_GETQUERYRESULTSREQUEST']._serialized_end=2393
+  _globals['_GETQUERYRESULTSRESPONSE']._serialized_start=2396
+  _globals['_GETQUERYRESULTSRESPONSE']._serialized_end=2697
+  _globals['_MEDALLIONINGESTSERVICE']._serialized_start=2700
+  _globals['_MEDALLIONINGESTSERVICE']._serialized_end=3398
 # @@protoc_insertion_point(module_scope)
