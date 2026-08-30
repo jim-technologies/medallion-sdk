@@ -20,6 +20,7 @@ FIXTURE_FILES = (
     "LICENSE",
     "NOTICE",
     "VERSION",
+    "Makefile",
     "README.md",
     "go.mod",
     "package.json",
@@ -28,7 +29,9 @@ FIXTURE_FILES = (
     "python/pyproject.toml",
     "python/LICENSE",
     "python/NOTICE",
+    "python/README.md",
     "python/src/medallion/py.typed",
+    "python/src/medallion/workflows.py",
     "python/uv.lock",
     "scripts/check_versions.py",
     "scripts/set_version.py",
@@ -303,6 +306,47 @@ class VersionScriptsTest(unittest.TestCase):
         result = self.run_script("check_versions.py")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("README.md pnpm versions", result.stderr)
+
+    def test_checker_rejects_temporaless_module_pin_drift(self) -> None:
+        module = self.fixture / "python/src/medallion/workflows.py"
+        module.write_text(
+            re.sub(
+                r'^TEMPORALESS_COMMIT = "[0-9a-f]{40}"$',
+                'TEMPORALESS_COMMIT = "' + "0" * 40 + '"',
+                module.read_text(),
+                flags=re.MULTILINE,
+            )
+        )
+
+        result = self.run_script("check_versions.py")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("medallion.workflows.TEMPORALESS_COMMIT", result.stderr)
+
+    def test_checker_rejects_temporaless_extra_pin_drift(self) -> None:
+        pyproject = self.fixture / "python/pyproject.toml"
+        pyproject.write_text(
+            pyproject.read_text().replace(
+                "#subdirectory=core/py", "#subdirectory=core/py-moved"
+            )
+        )
+
+        result = self.run_script("check_versions.py")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("workflows extra", result.stderr)
+
+    def test_checker_rejects_documented_temporaless_version_drift(self) -> None:
+        readme_path = self.fixture / "README.md"
+        readme_path.write_text(
+            re.sub(
+                r"\bTemporaless v[0-9]+\.[0-9]+\.[0-9]+",
+                "Temporaless v0.0.0",
+                readme_path.read_text(),
+            )
+        )
+
+        result = self.run_script("check_versions.py")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Temporaless versions", result.stderr)
 
     def test_checker_rejects_missing_python_type_marker(self) -> None:
         (self.fixture / "python/src/medallion/py.typed").unlink()

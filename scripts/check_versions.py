@@ -25,6 +25,13 @@ INVARIANT_PROTOCOL_LOCATOR_PREFIX = (
     "https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/"
 )
 INVARIANT_PROTOCOL_LOCATOR = INVARIANT_PROTOCOL_LOCATOR_PREFIX + INVARIANT_PROTOCOL_SHA
+TEMPORALESS_VERSION = "0.10.7"
+TEMPORALESS_SHA = "03dbf90732a8a043d1de0587b16a1f163c6efcd1"
+TEMPORALESS_REQUIREMENT = (
+    "temporaless @ git+https://github.com/jim-technologies/temporaless.git@"
+    + TEMPORALESS_SHA
+    + "#subdirectory=core/py"
+)
 ESBUILD_VERSION = "0.28.2"
 POSTCSS_VERSION = "8.5.26"
 
@@ -44,6 +51,58 @@ def captured(path: str, pattern: str) -> str | None:
         return None
     match = re.search(pattern, source.read_text(), re.MULTILINE)
     return match.group(1) if match is not None else None
+
+
+def temporaless_pin_errors(pyproject: dict[str, Any]) -> list[str]:
+    """Hold the wrapped Temporaless release to one pin in every place it appears.
+
+    The workflows surface hands callers Temporaless's own storage clients, so
+    the extra, the Makefile target that tests against it, the Python module
+    that records the contract, and the READMEs must all name the same release
+    and commit. A drifting pin is how an SDK ends up wrapping a contract it was
+    never gated against.
+    """
+
+    errors: list[str] = []
+    extras = pyproject["project"].get("optional-dependencies", {})
+    workflows = extras.get("workflows") if isinstance(extras, dict) else None
+    if workflows != [TEMPORALESS_REQUIREMENT]:
+        errors.append(
+            "python/pyproject.toml workflows extra is "
+            f"{workflows!r}; expected {[TEMPORALESS_REQUIREMENT]!r}"
+        )
+
+    makefile = (ROOT / "Makefile").read_text()
+    makefile_shas = set(
+        re.findall(r"^TEMPORALESS_COMMIT \?= ([0-9a-f]{40})$", makefile, re.MULTILINE)
+    )
+    if makefile_shas != {TEMPORALESS_SHA}:
+        errors.append(
+            f"Makefile TEMPORALESS_COMMIT is {sorted(makefile_shas)!r}; "
+            f"expected only {[TEMPORALESS_SHA]!r}"
+        )
+
+    module = (ROOT / "python/src/medallion/workflows.py").read_text()
+    for name, expected in (
+        ("TEMPORALESS_VERSION", TEMPORALESS_VERSION),
+        ("TEMPORALESS_COMMIT", TEMPORALESS_SHA),
+    ):
+        found = set(re.findall(rf'^{name} = "([^"]+)"$', module, re.MULTILINE))
+        if found != {expected}:
+            errors.append(
+                f"medallion.workflows.{name} is {sorted(found)!r}; "
+                f"expected only {[expected]!r}"
+            )
+
+    for relative in ("README.md", "python/README.md"):
+        readme = (ROOT / relative).read_text()
+        versions = set(re.findall(r"\bTemporaless v([0-9]+\.[0-9]+\.[0-9]+)\b", readme))
+        if versions != {TEMPORALESS_VERSION}:
+            errors.append(
+                f"{relative} Temporaless versions are {sorted(versions)!r}; "
+                f"expected only {[TEMPORALESS_VERSION]!r}"
+            )
+    return errors
 
 
 def main() -> int:
@@ -319,6 +378,8 @@ def main() -> int:
     classifiers = pyproject["project"].get("classifiers", [])
     if "Private :: Do Not Upload" not in classifiers:
         errors.append("python/pyproject.toml must prohibit PyPI uploads")
+
+    errors.extend(temporaless_pin_errors(pyproject))
     if not (ROOT / "python/src/medallion/py.typed").is_file():
         errors.append("python package must include src/medallion/py.typed")
     for license_file in ("LICENSE", "NOTICE"):
