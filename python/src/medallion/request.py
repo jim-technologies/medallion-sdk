@@ -210,6 +210,25 @@ class _RequestClient:
     def workspace_id(self) -> str:
         return self._workspace_id
 
+    @property
+    def base_url(self) -> str:
+        return self._base_url
+
+    def identity_headers(self) -> dict[str, str]:
+        """The credential and workspace headers, and nothing else.
+
+        A wrapped third-party ConnectRPC client negotiates its own protocol,
+        codec, and timeout headers, so it must receive only the Medallion
+        identity that ``_headers`` builds alongside them.
+        """
+
+        headers = {"X-Medallion-Workspace-Id": self._workspace_id}
+        if self._access_token:
+            headers["Authorization"] = f"Bearer {self._access_token}"
+        else:
+            headers["X-Medallion-API-Key"] = self._api_key or ""
+        return headers
+
     def _post_proto(
         self,
         path: str,

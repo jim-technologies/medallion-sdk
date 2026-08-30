@@ -42,6 +42,7 @@ from .types import (
     PublishedEventResult,
     ResourceInput,
 )
+from .workflows import WorkflowsClient
 
 CONNECT_SERVICE = "/medallion.connect.v1.MedallionConnectService"
 PUBLISH_CDC_EVENTS = f"{CONNECT_SERVICE}/PublishCdcEvents"
@@ -80,6 +81,7 @@ class MedallionClient:
         )
         self.ingest = IngestClient(requests)
         self.tables = TablesClient(self.ingest)
+        self.workflows = WorkflowsClient(requests)
         self.connect = ConnectClient(requests)
         self.audit = AuditClient(
             self.connect,
