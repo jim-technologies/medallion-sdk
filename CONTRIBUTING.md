@@ -44,7 +44,7 @@ Before a v2 or later release, migrate the Go module and imports to the required
 
 ## Scope
 
-Every language implementation supports the same two bounded customer surfaces:
+Every language implementation supports the same bounded customer surfaces:
 
 - `medallion.ingest.v1` — the tabular tables surface: table
   create/get/list/update, idempotent batch appends, and read-back SQL queries
@@ -56,10 +56,21 @@ Every language implementation supports the same two bounded customer surfaces:
   exactly `PublishCdcEvents`, `PublishAuditEvents`, `ListCdcEvents`, and
   `ListAuditEvents`.
 
+- `temporaless.v1` — the durable-execution storage backend, exposed only as a
+  workspace-bound factory over Temporaless's own `ConnectStore` and
+  `ConnectQueryStore`. Do not write a storage client here, and do not restate,
+  subset, or re-export the `RecordStoreService` / `RecordQueryService` RPCs.
+  The pinned release is recorded in `medallion.workflows` and held there by
+  `scripts/check_versions.py`; `make test-workflows` fails when the installed
+  contract drifts from it. This SDK ships no operator client: `PutEvent`, the
+  bounded deletions, and `Sweep` stay behind a separately provisioned operator
+  credential and the server's per-method authorization.
+
 Do not add a generic RPC dispatcher, connector provisioning, platform
 administration, first-party application APIs, actions, secrets, an ORM or
-query builder over the SQL passthrough, an Iceberg client wrapper, or
-object-storage APIs to this repository.
+query builder over the SQL passthrough, an Iceberg client wrapper, a
+reimplementation of a wrapped upstream contract, or object-storage APIs to
+this repository.
 
 When vendored proto contracts change, regenerate the language bindings and
 TypeScript descriptors:

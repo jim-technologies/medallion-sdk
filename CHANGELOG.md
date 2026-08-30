@@ -6,6 +6,24 @@ annotated `vX.Y.Z` tag.
 
 ## [Unreleased]
 
+- Expose Medallion as a durable-execution backend through `medallion.workflows`
+  (Python): `store()` and `query_store()` return Temporaless's own
+  `ConnectStore` / `ConnectQueryStore` pointed at the configured Medallion
+  endpoint, with the client's credential and immutable workspace attached as
+  request headers by a ConnectRPC interceptor that caller interceptors cannot
+  displace. No storage client is reimplemented here and none of the
+  `temporaless.v1` RPCs are restated. `capabilities()` surfaces the
+  `GetStoreCapabilities` handshake and `require_capabilities()` turns a backend
+  without atomic create-if-absent into a startup error. Ships as the
+  `medallion[workflows]` extra, pinning Temporaless v0.10.7 by immutable
+  commit; `scripts/check_versions.py` holds that pin across every file naming
+  it, and `make test-workflows` runs the suite against a built wheel so a
+  drifting upstream contract fails the gate. No operator client is shipped:
+  `PutEvent`, the bounded deletions, and `Sweep` are enumerated in
+  `OPERATOR_METHODS` and stay behind a separate operator credential and the
+  server's per-method authorization. TypeScript parity waits for a real
+  consumer; Go documents the ten-line interceptor instead of taking a
+  dependency that would triple every Go consumer's module graph.
 - Add the `medallion.ingest.v1` tabular surface as the SDK's main act, tracking
   the released upstream contract: `CreateTable`, `GetTable`, `ListTables`,
   `UpdateTable`, `AppendRows` (the insertAll analog with per-row `insert_id`

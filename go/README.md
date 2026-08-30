@@ -28,6 +28,48 @@ publish surface) before a server-side application starts the SDK. The SDK
 does not automate that provisioning or expose broader platform administration
 APIs.
 
+## Durable execution
+
+Medallion can also back a Temporaless workflow runtime. That surface is
+**not** part of this Go module, deliberately: Temporaless's Go module brings
+the AWS SDK, `gocloud.dev`, the Temporal SDK, and OpenDAL's native bindings,
+which would take this module's dependency graph from 25 modules to roughly 78
+for every consumer — including one that only publishes CDC events. Go has no
+optional dependencies, and a nested module would need its own tag, which this
+repository's single-root-tag release model does not allow.
+
+A Go application that wants Medallion as a durable backend therefore depends
+on Temporaless directly and adds the two Medallion identity headers with a
+standard ConnectRPC interceptor:
+
+```go
+import (
+	"net/http"
+
+	"connectrpc.com/connect"
+	"github.com/jim-technologies/temporaless/adapters/go/connectstore"
+)
+
+func medallionIdentity(apiKey, workspaceID string) connect.Interceptor {
+	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			req.Header().Set("X-Medallion-API-Key", apiKey)
+			req.Header().Set("X-Medallion-Workspace-Id", workspaceID)
+			return next(ctx, req)
+		}
+	})
+}
+
+store := connectstore.NewHTTPClientStore(
+	http.DefaultClient,
+	os.Getenv("MEDALLION_BASE_URL"),
+	connect.WithInterceptors(medallionIdentity(apiKey, workspaceID)),
+)
+```
+
+The Python SDK ships the richer factory, including the
+`GetStoreCapabilities` handshake; see the repository README.
+
 ## Tables and queries
 
 `client.Ingest` passes generated protobuf requests through with header-only

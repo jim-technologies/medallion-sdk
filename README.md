@@ -20,6 +20,10 @@ The stable ingest v1 surface is exactly:
 The resource is a TABLE, not a dataset: a workspace already plays the role
 BigQuery gives a dataset, so the resource one level down is a table.
 
+Medallion is also a durable-execution backend: `medallion.workflows` hands a
+Temporaless workflow runtime a storage client bound to your workspace. See
+[Durable execution](#durable-execution).
+
 The older `medallion.connect.v1` CDC/audit publish surface is DEPRECATED. Its
 four RPCs keep working and stay documented [below](#deprecated-cdc-and-audit-publishing),
 but new integrations should land data through tables.
@@ -28,12 +32,17 @@ but new integrations should land data through tables.
 
 - **Server-side only.** Customer code must run on a trusted server. Never put
   a Medallion API key in a browser, mobile application, or shipped client
-  bundle.
+  bundle. This matters most on the durable-execution surface, which can
+  **delete runs**: a leaked key there destroys workflow history, not just
+  reads it.
 - **Not an ORM and not a query builder.** SQL passes through verbatim as the
   declared ClickHouse SQL; the SDK never rewrites, parameterizes, or
   dialect-translates a statement.
 - **No Iceberg client wrapper.** A future read-only Iceberg catalog door is
   served by standard clients such as PyIceberg, not by this SDK.
+- **No hand-rolled storage client.** The durable-execution surface hands back
+  Temporaless's own `ConnectStore` / `ConnectQueryStore`. This SDK does not
+  reimplement, subset, or restate the `temporaless.v1` storage RPCs.
 - The SDK does not create credentials or workspaces, and it is not an
   administration, storage, provider, OAuth, or provisioning client.
 
@@ -178,6 +187,71 @@ Result rows arrive as JSON objects keyed by output column name. `INT64`
 columns come back as a JSON number inside the IEEE-754 safe range and as a
 decimal string outside it, so read them through a normalizer if the values can
 be large.
+
+## Durable execution
+
+Medallion can be the durable backend for a [Temporaless](https://github.com/jim-technologies/temporaless)
+workflow runtime. Temporaless already ships storage clients for the
+`temporaless.v1` contract, so this SDK adds no storage client of its own — it
+hands you Temporaless's, pointed at your Medallion endpoint with this client's
+credential and workspace attached as request headers:
+
+```python
+medallion = MedallionClient(
+    base_url=os.environ["MEDALLION_BASE_URL"],
+    api_key=os.environ["MEDALLION_API_KEY"],
+    workspace_id=os.environ["MEDALLION_WORKSPACE_ID"],
+)
+
+store = medallion.workflows.store()        # a temporaless ConnectStore
+query = medallion.workflows.query_store()  # a temporaless ConnectQueryStore
+
+await run(store, Options(workflow_id="greet", run_id="1"), request, Reply, greet)
+```
+
+Install the extra: `medallion[workflows]`, which pins Temporaless v0.10.7.
+The workspace is bound at client construction and travels as a header; no
+storage request body carries it. Caller-supplied ConnectRPC interceptors
+(retry, tracing, logging) are forwarded and cannot displace those headers.
+
+### Check capabilities before relying on them
+
+A workflow runtime that coordinates claims or delivers events exactly once
+depends on the backend being able to *atomically create if absent*. Ask
+before trusting it:
+
+```python
+capabilities = await medallion.workflows.capabilities()
+capabilities.supports_claims                  # atomic claim creation
+capabilities.supports_atomic_event_delivery   # create-once DeliverEvent
+
+# Or refuse to start at all:
+await medallion.workflows.require_capabilities()
+```
+
+`require_capabilities()` raises `MEDALLION_STORE_CAPABILITY_UNAVAILABLE`
+naming what was missing. A backend that reports
+`EVENT_DELIVERY_CAPABILITY_NO_ATOMIC_CREATE` rejects delivery rather than
+substituting a check-then-write, so **a runtime that needs claims or
+exactly-once events must not be pointed at a backend that does not advertise
+them.** Make this a startup check, not a discovery under concurrency.
+
+### Least privilege
+
+The storage contract is a privileged internal API, and the server authorizes
+every method independently. This SDK ships **no operator client** and adds no
+convenience for the operator-only RPCs — `PutEvent` (replace semantics), the
+bounded deletions (`DeleteWorkflow`, `DeleteActivity`, `DeleteTimer`,
+`DeleteEvent`, `DeleteRun`), and indexed retention (`Sweep`). They are
+enumerated in `medallion.workflows.OPERATOR_METHODS` so you can assert on
+them.
+
+Those RPCs still exist as methods on the Temporaless objects returned here,
+because these are Temporaless's own clients and subsetting them would mean
+reimplementing the contract. The boundary is therefore the credential and the
+server, not a hidden method: provision a **separate operator credential** for
+retention and repair, and give workflow runtimes and event senders their own
+least-privilege identities.
 
 ## Python first: dataframes in, dataframes out
 

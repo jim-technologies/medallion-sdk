@@ -51,6 +51,47 @@ code. `default_connector_id` matters only for the deprecated publish surface;
 the tables surface does not use connectors, and workspace identity comes only
 from the verified transport.
 
+## Durable execution
+
+Medallion can back a Temporaless workflow runtime. This SDK ships no storage
+client of its own: `medallion.workflows` returns Temporaless's own clients,
+pointed at your Medallion endpoint with this client's credential and
+workspace attached as headers. Install the `medallion[workflows]` extra,
+which pins Temporaless v0.10.7.
+
+```python
+store = client.workflows.store()        # temporaless ConnectStore
+query = client.workflows.query_store()  # temporaless ConnectQueryStore
+
+capabilities = await client.workflows.require_capabilities()
+print(capabilities.claim_capability_name)
+print(capabilities.event_delivery_capability_name)
+
+greeting = await run(
+    store, Options(workflow_id="greet", run_id="1"), request, Reply, greet
+)
+```
+
+`capabilities()` runs the `GetStoreCapabilities` handshake;
+`require_capabilities()` turns a backend that cannot atomically create claims
+or deliver events exactly once into a startup error rather than a correctness
+bug under concurrency. A runtime that depends on either must not be pointed at
+a backend that does not advertise it.
+
+These credentials can delete runs. Keep them server-side, and provision a
+separate operator credential for the operator-only RPCs
+(`medallion.workflows.OPERATOR_METHODS`): `PutEvent`, the bounded deletions,
+and `Sweep`. This SDK ships no operator client.
+
+A caveat when installing: Temporaless depends on protovalidate, which needs a
+newer `buf.validate` than this SDK vendors from its attested contract bundle,
+and both packages own that module. Install Temporaless **after** medallion so
+its complete copy resolves last. The wrong order raises
+`MEDALLION_TEMPORALESS_INCOMPATIBLE` with that instruction.
+
+See [`examples/workflows.py`](../examples/workflows.py) for a runnable
+quickstart.
+
 ## Tables, appends, and queries
 
 A table is one declared tabular collection in the configured workspace: an
