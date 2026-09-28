@@ -6,6 +6,11 @@ annotated `vX.Y.Z` tag.
 
 ## [Unreleased]
 
+- Keep `make validate` offline and hermetic, as `MAKEFILE-CONTRACT.md`
+  requires: `make test-workflows` leaves `make test` and becomes an opt-in
+  tier beside `make test-deployed`, because it installs Temporaless from
+  GitHub. The offline guard that holds the Temporaless pin in every file still
+  runs in the gate (`make version-check`).
 - Expose Medallion as a durable-execution backend through `medallion.workflows`
   (Python): `store()` and `query_store()` return Temporaless's own
   `ConnectStore` / `ConnectQueryStore` pointed at the configured Medallion
@@ -17,13 +22,13 @@ annotated `vX.Y.Z` tag.
   without atomic create-if-absent into a startup error. Ships as the
   `medallion[workflows]` extra, pinning Temporaless v0.10.7 by immutable
   commit; `scripts/check_versions.py` holds that pin across every file naming
-  it, and `make test-workflows` runs the suite against a built wheel so a
-  drifting upstream contract fails the gate. No operator client is shipped:
-  `PutEvent`, the bounded deletions, and `Sweep` are enumerated in
-  `OPERATOR_METHODS` and stay behind a separate operator credential and the
-  server's per-method authorization. TypeScript parity waits for a real
-  consumer; Go documents the ten-line interceptor instead of taking a
-  dependency that would triple every Go consumer's module graph.
+  it inside the gate, and the opt-in `make test-workflows` tier runs the suite
+  against a built wheel so a drifting upstream contract fails it. No operator
+  client is shipped: `PutEvent`, the bounded deletions, and `Sweep` are
+  enumerated in `OPERATOR_METHODS` and stay behind a separate operator
+  credential and the server's per-method authorization. TypeScript parity
+  waits for a real consumer; Go documents the ten-line interceptor instead of
+  taking a dependency that would triple every Go consumer's module graph.
 - Add the `medallion.ingest.v1` tabular surface as the SDK's main act, tracking
   the released upstream contract: `CreateTable`, `GetTable`, `ListTables`,
   `UpdateTable`, `AppendRows` (the insertAll analog with per-row `insert_id`

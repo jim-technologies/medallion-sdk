@@ -17,9 +17,16 @@ workflow runs `flox activate -- make audit`; every toolchain comes from
 `.flox/env/manifest.toml`. On a release tag the same gate additionally
 requires the immutable contract attestation and the annotated-tag checks.
 
-The deployed smoke test (`make test-deployed`) is never run by CI. Invoke it
-from a maintainer machine with caller-supplied `MEDALLION_SMOKE_*` environment
-variables; `scripts/check_smoke_env.sh` verifies the set is complete.
+`make validate` is offline and hermetic, so two opt-in tiers sit outside it
+and are never run by CI:
+
+- `make test-deployed`, the deployed smoke test. Invoke it from a maintainer
+  machine with caller-supplied `MEDALLION_SMOKE_*` environment variables;
+  `scripts/check_smoke_env.sh` verifies the set is complete.
+- `make test-workflows`, the durable-execution suite. It installs the pinned
+  Temporaless release from GitHub into a scratch virtualenv and runs
+  `python/tests_workflows` against a built wheel. Run it whenever the
+  Temporaless pin or `medallion.workflows` changes, and before every release.
 
 ## Versions and Releases
 
@@ -61,8 +68,9 @@ Every language implementation supports the same bounded customer surfaces:
   `ConnectQueryStore`. Do not write a storage client here, and do not restate,
   subset, or re-export the `RecordStoreService` / `RecordQueryService` RPCs.
   The pinned release is recorded in `medallion.workflows` and held there by
-  `scripts/check_versions.py`; `make test-workflows` fails when the installed
-  contract drifts from it. This SDK ships no operator client: `PutEvent`, the
+  `scripts/check_versions.py` inside the gate; the opt-in
+  `make test-workflows` tier fails when the installed contract drifts from
+  it. This SDK ships no operator client: `PutEvent`, the
   bounded deletions, and `Sweep` stay behind a separately provisioned operator
   credential and the server's per-method authorization.
 
@@ -148,7 +156,8 @@ Before creating the one root `vX.Y.Z` release tag:
 3. Sync a reviewed, immutable external-ingestion contract export and run
    `flox activate -- make contract-release-check`; a mutable or unattested
    export is never acceptable on a release tag.
-4. Run `flox activate -- make validate`.
+4. Run `flox activate -- make validate` and
+   `flox activate -- make test-workflows`.
 5. Run `flox activate -- make git-install-check`; this installs the exact tree
    by both full commit SHA and the synthetic root release tag in clean Go,
    Python, and TypeScript consumers.

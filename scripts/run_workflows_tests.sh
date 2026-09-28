@@ -3,6 +3,9 @@
 # Run the durable-execution suite against a built wheel, the way a consumer
 # installs it.
 #
+# This is the opt-in `make test-workflows` tier: it installs Temporaless from
+# GitHub, so the offline `make validate` gate never runs it.
+#
 # The editable development environment cannot host this suite. Temporaless
 # depends on protovalidate, which needs a newer `buf.validate` than the one
 # this SDK vendors from its attested contract bundle, and both packages own

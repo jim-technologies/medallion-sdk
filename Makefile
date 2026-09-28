@@ -114,7 +114,7 @@ check-examples: build ## Check the runnable TypeScript, Go, and Python quickstar
 	$(RUFF) check --no-cache examples
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m compileall -q examples
 
-test: test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-workflows ## Run all tests.
+test: test-version test-contract-sync test-package-artifacts test-ts test-go test-python ## Run the offline suite (every language).
 
 test-version: ## Test version synchronization and release-tag guardrails.
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/test_versions.py
@@ -135,7 +135,7 @@ test-go: ## Run Go tests.
 test-python: ## Run Python tests.
 	cd python && $(UV) run --locked python -m unittest discover tests
 
-test-workflows: ## Test the durable-execution surface and its Temporaless compat pin, against a built wheel.
+test-workflows: ## Opt-in, networked: install the pinned Temporaless and run the durable-execution suite against a built wheel.
 	TEMPORALESS_COMMIT=$(TEMPORALESS_COMMIT) scripts/run_workflows_tests.sh
 
 test-deployed: node_modules/.medallion-install-stamp ## Run opt-in deployed smoke test against a locked-down workspace.

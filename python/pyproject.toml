@@ -55,7 +55,9 @@ workflows = [
 # vendors from its attested contract bundle. A wheel install resolves that to
 # the superset and both packages work, but an editable checkout shadows it
 # with the vendored projection. `make test-workflows` therefore runs the
-# workflows suite against a built wheel, the way a consumer installs it.
+# workflows suite against a built wheel, the way a consumer installs it; it
+# installs Temporaless over the network, so it is an opt-in tier outside the
+# offline `make validate` gate.
 dev = [
   "polars>=1.20,<2",
   "pyarrow>=19,<26",
