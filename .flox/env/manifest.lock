@@ -37,6 +37,17 @@
         "pkg-path": "gawk",
         "pkg-group": "repo-tools"
       },
+      "gcc-unwrapped": {
+        "pkg-path": "gcc-unwrapped",
+        "pkg-group": "python-native",
+        "systems": [
+          "aarch64-linux",
+          "x86_64-linux"
+        ],
+        "outputs": [
+          "lib"
+        ]
+      },
       "git": {
         "pkg-path": "git",
         "pkg-group": "repo-tools"
@@ -188,6 +199,82 @@
       },
       "system": "x86_64-linux",
       "group": "buf",
+      "priority": 5
+    },
+    {
+      "attr_path": "gcc-unwrapped",
+      "broken": false,
+      "derivation": "/nix/store/nhqv30k4w3lrkf39fg7zmwidlsxnq9ld-gcc-15.3.0.drv",
+      "description": "GNU Compiler Collection, version 15.3.0",
+      "install_id": "gcc-unwrapped",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=e158d9ed9b51c98974c5e66e1ba1c9e0255fecaa",
+      "name": "gcc-15.3.0",
+      "pname": "gcc-unwrapped",
+      "rev": "e158d9ed9b51c98974c5e66e1ba1c9e0255fecaa",
+      "rev_count": 1080189,
+      "rev_date": "2026-09-26T22:51:50Z",
+      "scrape_date": "2026-09-28T05:29:51.742394Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "15.3.0",
+      "outputs_to_install": [
+        "man",
+        "out",
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "checksum": "/nix/store/4la7m9qax83lc8k3d3w84grgq3cfy3i0-gcc-15.3.0-checksum",
+        "info": "/nix/store/g255bdzmjwsp08lfbibixvdp6az71glv-gcc-15.3.0-info",
+        "lib": "/nix/store/n65q2br81z7a9g3hcvskd2pvr8s6a7ms-gcc-15.3.0-lib",
+        "libgcc": "/nix/store/ahg79xbgc81hkhj3xl8524i8pjp3sxkx-gcc-15.3.0-libgcc",
+        "man": "/nix/store/22mnvimbzqkqm3z0d3qdawwjcrd470gy-gcc-15.3.0-man",
+        "out": "/nix/store/mhx6dmg6whr7c85krk9rjwjsxrp9iggs-gcc-15.3.0"
+      },
+      "system": "aarch64-linux",
+      "group": "python-native",
+      "priority": 5
+    },
+    {
+      "attr_path": "gcc-unwrapped",
+      "broken": false,
+      "derivation": "/nix/store/71gxnaixis3nn5xr1ql6y9dnmc5p1n85-gcc-15.3.0.drv",
+      "description": "GNU Compiler Collection, version 15.3.0",
+      "install_id": "gcc-unwrapped",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=e158d9ed9b51c98974c5e66e1ba1c9e0255fecaa",
+      "name": "gcc-15.3.0",
+      "pname": "gcc-unwrapped",
+      "rev": "e158d9ed9b51c98974c5e66e1ba1c9e0255fecaa",
+      "rev_count": 1080189,
+      "rev_date": "2026-09-26T22:51:50Z",
+      "scrape_date": "2026-09-28T06:05:44.075940Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "15.3.0",
+      "outputs_to_install": [
+        "man",
+        "man",
+        "out",
+        "out",
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "checksum": "/nix/store/55s1dsmxycadggi6b61s7q7jsw4rdimk-gcc-15.3.0-checksum",
+        "info": "/nix/store/gjf6byy1grf66jaik7vh2cjfbwfvw8z7-gcc-15.3.0-info",
+        "lib": "/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib",
+        "libgcc": "/nix/store/wkiqjb44n5k0fwhmc523dvflspd47q3b-gcc-15.3.0-libgcc",
+        "man": "/nix/store/s6iwcb0ba10002wnsia434zp8dmyq7al-gcc-15.3.0-man",
+        "out": "/nix/store/8sjgd7q3mdks1rb7rbcv0sallhvrhai5-gcc-15.3.0"
+      },
+      "system": "x86_64-linux",
+      "group": "python-native",
       "priority": 5
     },
     {

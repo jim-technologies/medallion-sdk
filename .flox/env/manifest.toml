@@ -16,6 +16,8 @@ go.version = "1.26.4"
 python.pkg-path = "python314"
 uv.pkg-path = "uv"
 protobuf.pkg-path = "protobuf"
+# Native Python wheels (PyArrow and google-re2) require the C++ runtime.
+gcc-unwrapped = { pkg-path = "gcc-unwrapped", outputs = ["lib"], pkg-group = "python-native", systems = ["aarch64-linux", "x86_64-linux"] }
 
 # Repository and quality tooling lives in Flox as well, so local checks and CI
 # use the same binaries instead of inheriting them from the host runner.
