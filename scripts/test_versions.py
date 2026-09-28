@@ -15,7 +15,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_FILES = (
-    ".ci/node-26/.flox/env/manifest.toml",
     ".flox/env/manifest.toml",
     "CHANGELOG.md",
     "LICENSE",
@@ -314,17 +313,19 @@ class VersionScriptsTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("@types/node major", result.stderr)
 
-    def test_checker_rejects_minimum_node_environment_drift(self) -> None:
-        manifest_path = self.fixture / ".ci/node-26/.flox/env/manifest.toml"
+    def test_checker_rejects_gate_node_above_the_minimum(self) -> None:
+        manifest_path = self.fixture / ".flox/env/manifest.toml"
         manifest_path.write_text(
-            manifest_path.read_text().replace("nodejs_26", "nodejs_28")
+            manifest_path.read_text().replace(
+                'nodejs.pkg-path = "nodejs_26"', 'nodejs.pkg-path = "nodejs_28"'
+            )
         )
 
         result = self.run_script("check_versions.py")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn(".ci/node-26 Flox environment", result.stderr)
+        self.assertIn("nodejs must be nodejs_26", result.stderr)
 
-    def test_checker_rejects_missing_minimum_node_environment(self) -> None:
+    def test_checker_rejects_minimum_node_raised_without_the_gate(self) -> None:
         package_path = self.fixture / "package.json"
         package = json.loads(package_path.read_text())
         package["engines"]["node"] = ">=27"
@@ -333,7 +334,7 @@ class VersionScriptsTest(unittest.TestCase):
 
         result = self.run_script("check_versions.py")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn(".ci/node-27 Flox environment must exist", result.stderr)
+        self.assertIn("nodejs must be nodejs_27", result.stderr)
 
     def test_checker_rejects_documented_go_version_drift(self) -> None:
         readme_path = self.fixture / "README.md"

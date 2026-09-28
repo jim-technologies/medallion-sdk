@@ -265,7 +265,7 @@ def check_dependency_and_ci_boundaries(
         python_root / "pyproject.toml",
         python_root / "uv.lock",
     }
-    for configuration_root in (root / ".github", root / ".flox", root / ".ci"):
+    for configuration_root in (root / ".github", root / ".flox"):
         files.update(
             path
             for path in configuration_root.rglob("*")

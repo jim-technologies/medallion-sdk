@@ -6,9 +6,10 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 5
     ignore:
-      # check_versions.py requires the @types/node major to equal the
-      # engines.node floor, so a major move is a coordinated edit across
-      # package.json, .ci/node-N, and the guard fixtures, not a lone bump.
+      # check_versions.py requires the @types/node major and the Flox nodejs
+      # pin to equal the engines.node floor, so a major move is a coordinated
+      # edit across package.json, .flox, and the guard fixtures, not a lone
+      # bump.
       - dependency-name: "@types/node"
         update-types:
           - "version-update:semver-major"

@@ -6,6 +6,10 @@ annotated `vX.Y.Z` tag.
 
 ## [Unreleased]
 
+- Removed the `.ci/node-26` Flox environment: CI never activated it, and the
+  root environment already runs Node 26, the `engines.node` floor.
+  `make version-check` now requires the root environment's Node to equal that
+  floor, so the one gate always tests the oldest supported Node.
 - `make release` publishes instead of refusing: after its guards (the
   immutable contract attestation, a clean tree, `HEAD` pushed to
   `origin/main`, every version mirror and the first CHANGELOG release heading

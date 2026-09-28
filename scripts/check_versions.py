@@ -263,37 +263,15 @@ def main() -> int:
         if isinstance(primary_node_path, str)
         else None
     )
+    # The gate is the only CI run, so its Node is the one the TypeScript SDK
+    # is tested on: hold it to the oldest release engines.node admits.
     if minimum_node_major is not None and (
         primary_node_match is None
-        or int(primary_node_match.group(1)) < minimum_node_major
+        or int(primary_node_match.group(1)) != minimum_node_major
     ):
         errors.append(
-            ".flox/env/manifest.toml nodejs must meet the minimum Node runtime"
-        )
-
-    minimum_node_manifest_path = (
-        ROOT / f".ci/node-{minimum_node_major}/.flox/env/manifest.toml"
-        if minimum_node_major is not None
-        else None
-    )
-    if minimum_node_manifest_path is None:
-        minimum_node_manifest: dict[str, Any] = {}
-    elif not minimum_node_manifest_path.is_file():
-        errors.append(f".ci/node-{minimum_node_major} Flox environment must exist")
-        minimum_node_manifest = {}
-    else:
-        with minimum_node_manifest_path.open("rb") as file:
-            minimum_node_manifest = tomllib.load(file)
-    minimum_node_path = (
-        minimum_node_manifest.get("install", {}).get("nodejs", {}).get("pkg-path")
-    )
-    if (
-        minimum_node_major is not None
-        and minimum_node_path != f"nodejs_{minimum_node_major}"
-    ):
-        errors.append(
-            f".ci/node-{minimum_node_major} Flox environment must use "
-            f"nodejs_{minimum_node_major}"
+            f".flox/env/manifest.toml nodejs must be nodejs_{minimum_node_major}, "
+            "the minimum Node runtime package.json declares"
         )
 
     dependencies = package.get("dependencies", {})
