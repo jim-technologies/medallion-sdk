@@ -15,8 +15,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 SEMVER_COMPONENT = r"(?:0|[1-9][0-9]*)"
 SEMVER = re.compile(rf"{SEMVER_COMPONENT}\.{SEMVER_COMPONENT}\.{SEMVER_COMPONENT}")
-INVARIANT_PROTOCOL_VERSION = "0.16.3"
-INVARIANT_PROTOCOL_SHA = "535d6ca5cf41f6e1029da0946a754e6724a5cf69"
+INVARIANT_PROTOCOL_VERSION = "0.16.5"
+INVARIANT_PROTOCOL_SHA = "c646cd0326a72ce977cf9c221a678881f8c83ced"
 INVARIANT_PROTOCOL_PACKAGE = "@jim-technologies/invariant-protocol"
 INVARIANT_PROTOCOL_SPEC = (
     "github:jim-technologies/invariantprotocol#" + INVARIANT_PROTOCOL_SHA
@@ -25,8 +25,8 @@ INVARIANT_PROTOCOL_LOCATOR_PREFIX = (
     "https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/"
 )
 INVARIANT_PROTOCOL_LOCATOR = INVARIANT_PROTOCOL_LOCATOR_PREFIX + INVARIANT_PROTOCOL_SHA
-TEMPORALESS_VERSION = "0.10.7"
-TEMPORALESS_SHA = "03dbf90732a8a043d1de0587b16a1f163c6efcd1"
+TEMPORALESS_VERSION = "0.12.0"
+TEMPORALESS_SHA = "f70cbd47779ac7fdf2101ee52954f3ac8451fc5b"
 TEMPORALESS_REQUIREMENT = (
     "temporaless @ git+https://github.com/jim-technologies/temporaless.git@"
     + TEMPORALESS_SHA

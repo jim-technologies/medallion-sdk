@@ -13,11 +13,11 @@ importers:
   .:
     dependencies:
       '@bufbuild/protobuf':
-        specifier: 2.14.0
-        version: 2.14.0
+        specifier: 2.15.0
+        version: 2.15.0
       '@jim-technologies/invariant-protocol':
-        specifier: github:jim-technologies/invariantprotocol#535d6ca5cf41f6e1029da0946a754e6724a5cf69
-        version: https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/535d6ca5cf41f6e1029da0946a754e6724a5cf69
+        specifier: github:jim-technologies/invariantprotocol#c646cd0326a72ce977cf9c221a678881f8c83ced
+        version: https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/c646cd0326a72ce977cf9c221a678881f8c83ced
       '@opentelemetry/api':
         specifier: 1.9.1
         version: 1.9.1
@@ -97,33 +97,36 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@bufbuild/cel-spec@0.4.0':
-    resolution: {integrity: sha512-dUS6f2fNt6KEumsYGE7YFxERZE5ZuyME1hQmGjtO8tkZhR6ow6/ne3v4Gik9cfdb9lSLK3AJ+vDxCdGWmDbWvA==}
+  '@bufbuild/cel-spec@0.6.1':
+    resolution: {integrity: sha512-m0Ac9qA669yxxC0Hy45qGsUZemjImVfxPl6r9jLbkJviEvv3R9hSYyH2ItGRbDguekX6eId0cb62ulNBK97ezg==}
     peerDependencies:
       '@bufbuild/protobuf': ^2.6.2
 
-  '@bufbuild/cel@0.4.0':
-    resolution: {integrity: sha512-CdW/JgiTJCYXqnwuaJRo7NcoYhR37AaF58MMiog0/t8nudn86ZyLXYaA1f2yGhm2U17h8pKGZNksTHVSTcpmAw==}
+  '@bufbuild/cel@0.6.1':
+    resolution: {integrity: sha512-tW7cvf5byb4zrVKsdkVk/UhD3dH6Q0hnfmeRyKaAGXx0pwebk7NjUgdR2GSwf74GXxkC7StMfgRLA2Ea/+zPKw==}
     peerDependencies:
       '@bufbuild/protobuf': ^2.6.2
 
-  '@bufbuild/protobuf@2.14.0':
-    resolution: {integrity: sha512-C3UGsiCwSprE2NKIIFA3hCDlpXTMCAXRZuEVp88L1GY36Y41+rYL5fryE+nOFhp4p4JPQvdV8PQ4DWgHgeTE+w==}
+  '@bufbuild/protobuf@2.15.0':
+    resolution: {integrity: sha512-DAheWUkVr/SJTWCc+lg9dhY0eN4SaWlf4+bG1KzHeXbnqt0AfB/NX0Z+VunGlM1ki1B4zVvye27MpKh/svySUA==}
 
-  '@bufbuild/protovalidate@1.2.0':
-    resolution: {integrity: sha512-tD08DwGrHIV88khLz1Kdz9DYUwEo1TsoepaIg7/B/zd//AymaTx67kvCS1jlkcG/+vgQaSOl6f0HCE3sL8vI7w==}
+  '@bufbuild/protovalidate@1.3.0':
+    resolution: {integrity: sha512-3GU0+0J/+vCk9/7Zply9XWjGLk08DcJsVNI9/e2FiPl+dIv6shBaRimkXouMs1GnPt7PueNW1vPJFGfh7O6VCA==}
     peerDependencies:
       '@bufbuild/protobuf': ^2.8.0
 
-  '@connectrpc/connect-node@2.1.2':
-    resolution: {integrity: sha512-+i/aAOpsI8sIx1mbYp6d99zvxaUSF6t/jP9Ux9maAmjsZPgmIQ3JuIeYi0zJIP9zlCnBlJjkpPosshCgdRuThQ==}
-    engines: {node: '>=20'}
+  '@bufbuild/re2@0.6.1':
+    resolution: {integrity: sha512-VY7zV7bWKdAsf46epowVKidolEfMKw/FoHo2xYVDVzLj/hiP5qDL3nXqJt6seZClRYfG+uzAPFQBZBlj07wO5A==}
+
+  '@connectrpc/connect-node@2.2.0':
+    resolution: {integrity: sha512-E6uUO6e11WdynAuBjuN+0WpHjqxEM9BNDdfDIJHcn49Esg/WxSIbn2y1KFt9XL96IJi01qdBbvubcdpBz1X3Zw==}
+    engines: {node: '>=22'}
     peerDependencies:
       '@bufbuild/protobuf': ^2.7.0
-      '@connectrpc/connect': 2.1.2
+      '@connectrpc/connect': 2.2.0
 
-  '@connectrpc/connect@2.1.2':
-    resolution: {integrity: sha512-MXkBijtcX09R10Eb6sFeIetc6w6746eio6xtfuyVOH7oQAacT1X0GzMIQFux6Qy8cq3W/T5qX5Bei8YbFtmRGA==}
+  '@connectrpc/connect@2.2.0':
+    resolution: {integrity: sha512-M63OQ1ZFcPUm85CuewJ9G9CMV8LjzGR9935xOnXNQGSazAbwMb3x2W7vXBYM1zqrP7XFD8uxp/dUAhirclgwnQ==}
     peerDependencies:
       '@bufbuild/protobuf': ^2.7.0
 
@@ -283,8 +286,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@grpc/grpc-js@1.14.4':
-    resolution: {integrity: sha512-k9Dj3DV/itK9D06Y8f190Qgop7/Ui+D0njFV3LHMPwPT75DpXLQohE9Wmz0QElrJnzsjB7KPWiKJbOl7IPDArQ==}
+  '@grpc/grpc-js@1.14.5':
+    resolution: {integrity: sha512-7VZM+SVdEcUUqSQeNI3zM8Qs/BhQKZndPo2h5VkYkAM8Iz0wJIa8mKV5ekQGqG8UUsnkQ0NMxIxwkIHYvj0qOw==}
     engines: {node: '>=12.10.0'}
 
   '@grpc/proto-loader@0.7.15':
@@ -302,10 +305,10 @@ packages:
     peerDependencies:
       '@grpc/grpc-js': ^1.8.21
 
-  '@jim-technologies/invariant-protocol@https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/535d6ca5cf41f6e1029da0946a754e6724a5cf69':
-    resolution: {gitHosted: true, tarball: https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/535d6ca5cf41f6e1029da0946a754e6724a5cf69}
-    version: 0.16.3
-    engines: {node: '>=24'}
+  '@jim-technologies/invariant-protocol@https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/c646cd0326a72ce977cf9c221a678881f8c83ced':
+    resolution: {gitHosted: true, integrity: sha512-XYMM3JOn5iDk8z/oX88hz2x5/Cl73pJAUvkrjdBA5+CaBipPCf4sXO5U3zer+C0Xt+GCEcE57VvreYQjVRRLPg==, tarball: https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/c646cd0326a72ce977cf9c221a678881f8c83ced}
+    version: 0.16.5
+    engines: {node: '>=24.18.0'}
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -1307,30 +1310,34 @@ snapshots:
   '@biomejs/cli-win32-x64@2.5.11':
     optional: true
 
-  '@bufbuild/cel-spec@0.4.0(@bufbuild/protobuf@2.14.0)':
+  '@bufbuild/cel-spec@0.6.1(@bufbuild/protobuf@2.15.0)':
     dependencies:
-      '@bufbuild/protobuf': 2.14.0
+      '@bufbuild/protobuf': 2.15.0
 
-  '@bufbuild/cel@0.4.0(@bufbuild/protobuf@2.14.0)':
+  '@bufbuild/cel@0.6.1(@bufbuild/protobuf@2.15.0)':
     dependencies:
-      '@bufbuild/cel-spec': 0.4.0(@bufbuild/protobuf@2.14.0)
-      '@bufbuild/protobuf': 2.14.0
+      '@bufbuild/cel-spec': 0.6.1(@bufbuild/protobuf@2.15.0)
+      '@bufbuild/protobuf': 2.15.0
+      '@bufbuild/re2': 0.6.1
 
-  '@bufbuild/protobuf@2.14.0': {}
+  '@bufbuild/protobuf@2.15.0': {}
 
-  '@bufbuild/protovalidate@1.2.0(@bufbuild/protobuf@2.14.0)':
+  '@bufbuild/protovalidate@1.3.0(@bufbuild/protobuf@2.15.0)':
     dependencies:
-      '@bufbuild/cel': 0.4.0(@bufbuild/protobuf@2.14.0)
-      '@bufbuild/protobuf': 2.14.0
+      '@bufbuild/cel': 0.6.1(@bufbuild/protobuf@2.15.0)
+      '@bufbuild/protobuf': 2.15.0
+      '@bufbuild/re2': 0.6.1
 
-  '@connectrpc/connect-node@2.1.2(@bufbuild/protobuf@2.14.0)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.14.0))':
-    dependencies:
-      '@bufbuild/protobuf': 2.14.0
-      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.14.0)
+  '@bufbuild/re2@0.6.1': {}
 
-  '@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.14.0)':
+  '@connectrpc/connect-node@2.2.0(@bufbuild/protobuf@2.15.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.15.0))':
     dependencies:
-      '@bufbuild/protobuf': 2.14.0
+      '@bufbuild/protobuf': 2.15.0
+      '@connectrpc/connect': 2.2.0(@bufbuild/protobuf@2.15.0)
+
+  '@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.15.0)':
+    dependencies:
+      '@bufbuild/protobuf': 2.15.0
 
   '@esbuild/aix-ppc64@0.28.2':
     optional: true
@@ -1410,7 +1417,7 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@grpc/grpc-js@1.14.4':
+  '@grpc/grpc-js@1.14.5':
     dependencies:
       '@grpc/proto-loader': 0.8.1
       '@js-sdsl/ordered-map': 4.4.2
@@ -1429,20 +1436,20 @@ snapshots:
       protobufjs: 7.6.6
       yargs: 17.7.3
 
-  '@grpc/reflection@1.0.4(@grpc/grpc-js@1.14.4)':
+  '@grpc/reflection@1.0.4(@grpc/grpc-js@1.14.5)':
     dependencies:
-      '@grpc/grpc-js': 1.14.4
+      '@grpc/grpc-js': 1.14.5
       '@grpc/proto-loader': 0.7.15
       protobufjs: 7.6.6
 
-  '@jim-technologies/invariant-protocol@https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/535d6ca5cf41f6e1029da0946a754e6724a5cf69':
+  '@jim-technologies/invariant-protocol@https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/c646cd0326a72ce977cf9c221a678881f8c83ced':
     dependencies:
-      '@bufbuild/protobuf': 2.14.0
-      '@bufbuild/protovalidate': 1.2.0(@bufbuild/protobuf@2.14.0)
-      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.14.0)
-      '@connectrpc/connect-node': 2.1.2(@bufbuild/protobuf@2.14.0)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.14.0))
-      '@grpc/grpc-js': 1.14.4
-      '@grpc/reflection': 1.0.4(@grpc/grpc-js@1.14.4)
+      '@bufbuild/protobuf': 2.15.0
+      '@bufbuild/protovalidate': 1.3.0(@bufbuild/protobuf@2.15.0)
+      '@connectrpc/connect': 2.2.0(@bufbuild/protobuf@2.15.0)
+      '@connectrpc/connect-node': 2.2.0(@bufbuild/protobuf@2.15.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.15.0))
+      '@grpc/grpc-js': 1.14.5
+      '@grpc/reflection': 1.0.4(@grpc/grpc-js@1.14.5)
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:

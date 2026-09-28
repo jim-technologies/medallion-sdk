@@ -57,7 +57,7 @@ Medallion can back a Temporaless workflow runtime. This SDK ships no storage
 client of its own: `medallion.workflows` returns Temporaless's own clients,
 pointed at your Medallion endpoint with this client's credential and
 workspace attached as headers. Install the `medallion[workflows]` extra,
-which pins Temporaless v0.10.7.
+which pins Temporaless v0.12.0.
 
 ```python
 store = client.workflows.store()        # temporaless ConnectStore

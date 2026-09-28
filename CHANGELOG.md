@@ -6,6 +6,14 @@ annotated `vX.Y.Z` tag.
 
 ## [Unreleased]
 
+- Dependency currency: the TypeScript SDK pins invariantprotocol v0.16.5
+  (commit `c646cd03`) and moves `@bufbuild/protobuf` to 2.15.0, the release
+  invariantprotocol now requires, so one copy is installed; the workflows
+  extra pins Temporaless v0.12.0 (commit `f70cbd47`), which moves the Python
+  lock to `connectrpc` 0.12.1 and protobuf 7.36.2. The `temporaless.v1`
+  storage contract the factory wraps is unchanged between the two Temporaless
+  releases: `temporaless.proto` differs only by `buf format` layout, and the
+  new `RunInspectionService` lives in its own `inspection.proto`.
 - Take the fleet `MAKEFILE-CONTRACT.md` text shared by every public
   jim-technologies repository: `make release` creates and pushes the annotated
   `v<VERSION>` tag after the same guards everywhere, and `run` and `deploy`
@@ -55,7 +63,7 @@ annotated `vX.Y.Z` tag.
   `temporaless.v1` RPCs are restated. `capabilities()` surfaces the
   `GetStoreCapabilities` handshake and `require_capabilities()` turns a backend
   without atomic create-if-absent into a startup error. Ships as the
-  `medallion[workflows]` extra, pinning Temporaless v0.10.7 by immutable
+  `medallion[workflows]` extra, pinning Temporaless v0.12.0 by immutable
   commit; `scripts/check_versions.py` holds that pin across every file naming
   it inside the gate, and the opt-in `make test-workflows` tier runs the suite
   against a built wheel so a drifting upstream contract fails it. No operator

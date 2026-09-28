@@ -15,7 +15,7 @@ GOVULNCHECK_VERSION ?= v1.7.0
 PIP_AUDIT_VERSION ?= 2.10.1
 # The Temporaless release the workflows surface wraps. scripts/check_versions.py
 # holds this to the pin recorded in every language.
-TEMPORALESS_COMMIT ?= 03dbf90732a8a043d1de0587b16a1f163c6efcd1
+TEMPORALESS_COMMIT ?= f70cbd47779ac7fdf2101ee52954f3ac8451fc5b
 
 .DEFAULT_GOAL := help
 

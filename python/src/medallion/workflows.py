@@ -32,8 +32,8 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 # The exact Temporaless release this SDK is built and gated against. Changing
 # either value requires re-running the compat check, which fails when the
 # installed package no longer matches the contract recorded below.
-TEMPORALESS_VERSION = "0.10.7"
-TEMPORALESS_COMMIT = "03dbf90732a8a043d1de0587b16a1f163c6efcd1"
+TEMPORALESS_VERSION = "0.12.0"
+TEMPORALESS_COMMIT = "f70cbd47779ac7fdf2101ee52954f3ac8451fc5b"
 
 RECORD_STORE_SERVICE = "temporaless.v1.RecordStoreService"
 RECORD_QUERY_SERVICE = "temporaless.v1.RecordQueryService"

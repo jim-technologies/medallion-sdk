@@ -54,8 +54,8 @@ npm, PyPI, or another language registry.
 
 Release tags use `vX.Y.Z` and must match `VERSION` for TypeScript, Go, and
 Python. Repository development is pinned to Go 1.27.0, pnpm 11.24.0, and
-invariantprotocol v0.16.3 (commit
-`535d6ca5cf41f6e1029da0946a754e6724a5cf69`).
+invariantprotocol v0.16.5 (commit
+`c646cd0326a72ce977cf9c221a678881f8c83ced`).
 
 ```bash
 pnpm add 'github:jim-technologies/medallion-sdk#v0.3.1'
@@ -218,7 +218,7 @@ query = medallion.workflows.query_store()  # a temporaless ConnectQueryStore
 await run(store, Options(workflow_id="greet", run_id="1"), request, Reply, greet)
 ```
 
-Install the extra: `medallion[workflows]`, which pins Temporaless v0.10.7.
+Install the extra: `medallion[workflows]`, which pins Temporaless v0.12.0.
 The workspace is bound at client construction and travels as a header; no
 storage request body carries it. Caller-supplied ConnectRPC interceptors
 (retry, tracing, logging) are forwarded and cannot displace those headers.

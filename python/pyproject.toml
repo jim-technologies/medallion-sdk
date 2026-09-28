@@ -42,7 +42,7 @@ polars = [
 # commit recorded in medallion.workflows, and the compat test fails when the
 # installed contract drifts from what this SDK wraps.
 workflows = [
-  "temporaless @ git+https://github.com/jim-technologies/temporaless.git@03dbf90732a8a043d1de0587b16a1f163c6efcd1#subdirectory=core/py",
+  "temporaless @ git+https://github.com/jim-technologies/temporaless.git@f70cbd47779ac7fdf2101ee52954f3ac8451fc5b#subdirectory=core/py",
 ]
 
 [dependency-groups]
