@@ -6,6 +6,10 @@ annotated `vX.Y.Z` tag.
 
 ## [Unreleased]
 
+- Take the fleet `MAKEFILE-CONTRACT.md` text shared by every public
+  jim-technologies repository: `make release` creates and pushes the annotated
+  `v<VERSION>` tag after the same guards everywhere, and `run` and `deploy`
+  are not part of a framework's contract.
 - Removed the `.ci/node-26` Flox environment: CI never activated it, and the
   root environment already runs Node 26, the `engines.node` floor.
   `make version-check` now requires the root environment's Node to equal that
