@@ -23,6 +23,7 @@ FIXTURE_FILES = (
     "Makefile",
     "README.md",
     "go.mod",
+    "go/README.md",
     "package.json",
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml",
@@ -36,6 +37,17 @@ FIXTURE_FILES = (
     "scripts/check_versions.py",
     "scripts/set_version.py",
 )
+GIT_IDENTITY = (
+    "-c",
+    "user.name=Version test",
+    "-c",
+    "user.email=version-test@example.invalid",
+    "-c",
+    "commit.gpgsign=false",
+    "-c",
+    "tag.gpgsign=false",
+)
+README_INSTALL_TAG = re.compile(r"medallion-sdk\.git#(v[0-9]+\.[0-9]+\.[0-9]+)")
 VERSION_MIRRORS = (
     "VERSION",
     "package.json",
@@ -56,6 +68,27 @@ class VersionScriptsTest(unittest.TestCase):
             destination = self.fixture / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, destination)
+        # The checker verifies the README install tag against the repository's
+        # tags, so the fixture is a repository carrying that tag.
+        self.git("init", "--quiet")
+        self.git("add", "--all")
+        self.git("commit", "--quiet", "-m", "Version test fixture")
+        self.readme_tag = self.readme_install_tag()
+        self.git("tag", self.readme_tag)
+
+    def git(self, *arguments: str) -> None:
+        subprocess.run(
+            ["git", *GIT_IDENTITY, *arguments],
+            cwd=self.fixture,
+            check=True,
+            capture_output=True,
+        )
+
+    def readme_install_tag(self) -> str:
+        match = README_INSTALL_TAG.search((self.fixture / "README.md").read_text())
+        self.assertIsNotNone(match)
+        assert match is not None
+        return match.group(1)
 
     def run_script(
         self, script: str, *arguments: str, env: dict[str, str] | None = None
@@ -85,49 +118,12 @@ class VersionScriptsTest(unittest.TestCase):
         }
 
     def create_fixture_tag(self, *, annotated: bool) -> str:
-        subprocess.run(
-            ["git", "init", "--quiet"],
-            cwd=self.fixture,
-            check=True,
-        )
-        subprocess.run(
-            ["git", "add", "--all"],
-            cwd=self.fixture,
-            check=True,
-        )
-        subprocess.run(
-            [
-                "git",
-                "-c",
-                "user.name=Version test",
-                "-c",
-                "user.email=version-test@example.invalid",
-                "commit",
-                "--quiet",
-                "-m",
-                "Version test fixture",
-            ],
-            cwd=self.fixture,
-            check=True,
-        )
         version = (self.fixture / "VERSION").read_text().strip()
         tag = f"v{version}"
         if annotated:
-            tag_arguments = [
-                "git",
-                "-c",
-                "user.name=Version test",
-                "-c",
-                "user.email=version-test@example.invalid",
-                "tag",
-                "--annotate",
-                "--message",
-                "Version test tag",
-                tag,
-            ]
+            self.git("tag", "--annotate", "--message", "Version test tag", tag)
         else:
-            tag_arguments = ["git", "tag", tag]
-        subprocess.run(tag_arguments, cwd=self.fixture, check=True)
+            self.git("tag", tag)
         return tag
 
     def test_setter_updates_every_mirror_and_tag_check(self) -> None:
@@ -486,6 +482,41 @@ class VersionScriptsTest(unittest.TestCase):
         result = self.run_script("check_versions.py")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("minimumReleaseAgeExclude entries", result.stderr)
+
+    def test_checker_accepts_readme_install_tag_that_exists(self) -> None:
+        result = self.run_script("check_versions.py")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_checker_rejects_readme_install_tag_that_does_not_exist(self) -> None:
+        readme_path = self.fixture / "README.md"
+        readme_path.write_text(
+            readme_path.read_text().replace(f"#{self.readme_tag}", "#v0.0.9")
+        )
+
+        result = self.run_script("check_versions.py")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("installs v0.0.9, which is not a tag", result.stderr)
+
+    def test_checker_rejects_several_readme_install_tags(self) -> None:
+        self.git("tag", "v0.0.8")
+        readme_path = self.fixture / "README.md"
+        readme_path.write_text(
+            readme_path.read_text().replace(f"#{self.readme_tag}", "#v0.0.8", 1)
+        )
+
+        result = self.run_script("check_versions.py")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("name several release tags", result.stderr)
+
+    def test_checker_requires_a_readme_install_tag(self) -> None:
+        readme_path = self.fixture / "README.md"
+        readme_path.write_text(
+            readme_path.read_text().replace(f"#{self.readme_tag}", "#vX.Y.Z")
+        )
+
+        result = self.run_script("check_versions.py")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must pin one release tag", result.stderr)
 
     def test_checker_rejects_python_license_drift(self) -> None:
         (self.fixture / "python/NOTICE").write_text("stale notice\n")

@@ -58,13 +58,19 @@ invariantprotocol v0.16.3 (commit
 `535d6ca5cf41f6e1029da0946a754e6724a5cf69`).
 
 ```bash
-pnpm add 'github:jim-technologies/medallion-sdk#v0.3.0'
-npm install --allow-git=all 'git+https://github.com/jim-technologies/medallion-sdk.git#v0.3.0'
+pnpm add 'github:jim-technologies/medallion-sdk#v0.3.1'
+npm install --allow-git=all 'git+https://github.com/jim-technologies/medallion-sdk.git#v0.3.1'
 ```
 
 Go and Python installation commands are documented in
 [`go/README.md`](./go/README.md) and [`python/README.md`](./python/README.md).
 Pin a release tag or immutable commit rather than a branch.
+
+The install lines name the newest release tag, and only ever a tag that
+exists (`make version-check` fails otherwise). `VERSION` names the next
+release; the `[Unreleased]` section of [`CHANGELOG.md`](./CHANGELOG.md) lists
+what `main` carries beyond the tag, including parts of the surface this README
+documents, so pin a `main` commit to use those before that release is tagged.
 
 ## Configure one immutable workspace
 

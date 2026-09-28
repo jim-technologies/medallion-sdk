@@ -34,6 +34,12 @@ TEMPORALESS_REQUIREMENT = (
 )
 ESBUILD_VERSION = "0.28.2"
 POSTCSS_VERSION = "8.5.26"
+# A concrete Git install of this repository: `medallion-sdk#vX.Y.Z`,
+# `medallion-sdk.git#vX.Y.Z`, `medallion-sdk.git@vX.Y.Z`, `medallion-sdk/go@vX.Y.Z`.
+INSTALL_TAG = re.compile(
+    r"medallion-sdk(?:\.git)?(?:/go)?[#@](v[0-9]+\.[0-9]+\.[0-9]+)\b"
+)
+INSTALL_DOCS = ("README.md", "go/README.md", "python/README.md")
 
 
 def read_json(path: str) -> dict[str, Any]:
@@ -101,6 +107,55 @@ def temporaless_pin_errors(pyproject: dict[str, Any]) -> list[str]:
             errors.append(
                 f"{relative} Temporaless versions are {sorted(versions)!r}; "
                 f"expected only {[TEMPORALESS_VERSION]!r}"
+            )
+    return errors
+
+
+def readme_install_tag_errors() -> list[str]:
+    """Hold the documented install commands to one release tag that exists.
+
+    A stranger copies these lines verbatim, so a tag that was never created
+    (the README once pinned v0.3.0, which was skipped) is a broken install.
+    VERSION names the next release and is untagged until `make release`, so
+    the install lines name the newest existing tag instead.
+    """
+
+    places: dict[str, list[str]] = {}
+    for relative in INSTALL_DOCS:
+        lines = (ROOT / relative).read_text().splitlines()
+        for line_number, line in enumerate(lines, 1):
+            for tag in INSTALL_TAG.findall(line):
+                places.setdefault(tag, []).append(f"{relative}:{line_number}")
+    if not any(
+        place.startswith("README.md:") for found in places.values() for place in found
+    ):
+        return ["README.md must pin one release tag in its install commands"]
+    errors: list[str] = []
+    if len(places) > 1:
+        errors.append(
+            f"install commands name several release tags {sorted(places)!r}; "
+            "expected one"
+        )
+    listed = subprocess.run(
+        ["git", "tag", "--list", "v*"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if listed.returncode != 0:
+        errors.append(
+            "cannot list Git tags to verify the documented install tag: "
+            + listed.stderr.strip()
+        )
+        return errors
+    existing = set(listed.stdout.split())
+    for tag, found in sorted(places.items()):
+        if tag not in existing:
+            errors.append(
+                f"{', '.join(found)} installs {tag}, which is not a tag of this "
+                "repository; name an existing release tag (a clone without tags "
+                "needs `git fetch --tags`)"
             )
     return errors
 
@@ -460,6 +515,7 @@ def main() -> int:
             errors.append(
                 f"README.md:{line_number} Git npm install must pass --allow-git=all"
             )
+    errors.extend(readme_install_tag_errors())
     if f"invariantprotocol v{INVARIANT_PROTOCOL_VERSION}" not in readme:
         errors.append(
             "README.md invariantprotocol release does not match the pinned dependency"

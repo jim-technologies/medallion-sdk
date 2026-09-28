@@ -6,6 +6,11 @@ annotated `vX.Y.Z` tag.
 
 ## [Unreleased]
 
+- Point the README install commands at `v0.3.1`, the newest release tag; they
+  named `v0.3.0`, which was never tagged. `make version-check` now fails when
+  an install command names a tag this repository does not have, and CI checks
+  out full history so tags and `main` are present offline. The changelog gains
+  the `0.3.1` section that tag shipped with.
 - Pace query polling instead of issuing up to 1,000 back-to-back
   `GetQueryResults` requests: `tables.query()` in TypeScript and Python waits
   the client's retry backoff between polls (200 ms doubling to 2 s by default,
@@ -39,17 +44,17 @@ annotated `vX.Y.Z` tag.
   credential and the server's per-method authorization. TypeScript parity
   waits for a real consumer; Go documents the ten-line interceptor instead of
   taking a dependency that would triple every Go consumer's module graph.
-- Add the `medallion.ingest.v1` tabular surface as the SDK's main act, tracking
-  the released upstream contract: `CreateTable`, `GetTable`, `ListTables`,
-  `UpdateTable`, `AppendRows` (the insertAll analog with per-row `insert_id`
-  passthrough, `skip_invalid_rows`, and per-row error surfacing), and
-  `RunQuery`/`GetQueryResults` (the synchronous-first jobs.query analog with
-  transparent poll-and-paginate). Queries pass one statement through verbatim
-  in the declared ClickHouse SQL dialect; workspace identity comes only from
-  the verified transport, and every write carries a batch idempotency key sent
-  as both the Stripe-style `Idempotency-Key` header and the contract's
-  `request_id` field. `proto/README.md` records the pin and the three
-  deliberate deviations from upstream.
+- Re-pin the `medallion.ingest.v1` surface from the provisional datasets
+  sketch of 0.3.1 to the released upstream contract: `CreateTable`,
+  `GetTable`, `ListTables`, `UpdateTable`, `AppendRows` (the insertAll analog
+  with per-row `insert_id` passthrough, `skip_invalid_rows`, and per-row error
+  surfacing), and `RunQuery`/`GetQueryResults` (the synchronous-first
+  jobs.query analog with transparent poll-and-paginate). Queries pass one
+  statement through verbatim in the declared ClickHouse SQL dialect; workspace
+  identity comes only from the verified transport, and every write carries a
+  batch idempotency key sent as both the Stripe-style `Idempotency-Key` header
+  and the contract's `request_id` field. `proto/README.md` records the pin and
+  the three deliberate deviations from upstream.
 - Name the resource a TABLE, not a dataset, the way the contract does: a
   workspace already plays BigQuery's dataset role, so the resource one level
   down is a table with a declared schema (`BOOL`, `INT64`, `FLOAT64`,
@@ -64,6 +69,27 @@ annotated `vX.Y.Z` tag.
   Runnable quickstarts land in `examples/` for every language, and live tests
   stay opt-in behind the `MEDALLION_SMOKE_*` environment
   (`MEDALLION_SMOKE_INGEST_TABLE` selects the target table).
+## [0.3.1] - 2026-08-29
+
+Versions 0.2.0 and 0.3.0 were never tagged; their changes ship here.
+
+- Add the `medallion.ingest.v1` tabular surface as the SDK's main act:
+  dataset create/get/list, `Append` (the insertAll analog with per-row
+  `insert_id` passthrough and per-row error surfacing), and
+  `Query`/`GetQueryResults` (the synchronous-first jobs.query analog with
+  transparent poll-and-paginate). Queries pass one statement through verbatim
+  in the declared ClickHouse SQL dialect; workspace identity rides only in
+  request headers, and appends and dataset creation carry an automatic
+  Stripe-style `Idempotency-Key` header for whole-batch replay protection.
+  The vendored ingest proto awaits its first sanitized upstream export; the
+  pin is recorded as pending in `proto/README.md`.
+- Ship the surface in all three languages: TypeScript `client.datasets` and
+  the low-level `client.ingest` with an async row iterator that never exposes
+  page tokens; Python `client.datasets` with the dataframe-first layer
+  (polars/pyarrow appends, `to_polars()` collection, `medallion[polars]`
+  extra); Go generated bindings with a deliberately thin `client.Ingest`.
+  Runnable quickstarts land in `examples/` for every language, and live tests
+  stay opt-in behind the `MEDALLION_SMOKE_*` environment.
 - Deprecate the `medallion.connect.v1` CDC/audit publish surface. The four
   publish/list RPCs and their clients keep working unchanged; the README is
   rewritten around getting data into and out of Medallion through datasets.

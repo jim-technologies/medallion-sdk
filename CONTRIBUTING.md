@@ -39,6 +39,12 @@ flox activate -- make version-set VERSION=X.Y.Z
 flox activate -- make version-check
 ```
 
+`VERSION` names the next release and stays untagged until it ships, so the
+README install commands name the newest tag that exists instead;
+`make version-check` fails when they name a tag this repository does not have.
+After a release tag is pushed, move the README install commands to it in the
+next commit.
+
 `make release` is a fail-closed stub: it verifies a clean, pushed,
 version-consistent tree and then refuses, because publishing to npm, PyPI, or
 a public Go module ecosystem is a pending product decision. Distribution stays
