@@ -15,7 +15,8 @@ bootstrap; do not add language setup actions or host-installed quality tools.
 CI runs exactly `flox activate -- make validate`, and a weekly secretless
 workflow runs `flox activate -- make audit`; every toolchain comes from
 `.flox/env/manifest.toml`. On a release tag the same gate additionally
-requires the immutable contract attestation and the annotated-tag checks.
+requires the immutable contract attestation, the annotated-tag checks, and a
+CHANGELOG whose first release heading is the tagged version.
 
 `make validate` is offline and hermetic, so two opt-in tiers sit outside it
 and are never run by CI:
@@ -42,13 +43,16 @@ flox activate -- make version-check
 `VERSION` names the next release and stays untagged until it ships, so the
 README install commands name the newest tag that exists instead;
 `make version-check` fails when they name a tag this repository does not have.
-After a release tag is pushed, move the README install commands to it in the
-next commit.
 
-`make release` is a fail-closed stub: it verifies a clean, pushed,
-version-consistent tree and then refuses, because publishing to npm, PyPI, or
-a public Go module ecosystem is a pending product decision. Distribution stays
-git-install based per the Release Checklist below.
+`make release` publishes a release the one way this repository is
+distributed: the annotated root tag. From a maintainer's machine it refuses
+unless the immutable contract attestation passes, the tree is clean (untracked
+files included), `HEAD` is pushed to `origin/main`, every version mirror
+equals `VERSION`, the first CHANGELOG release heading is `VERSION` with nothing
+left under `[Unreleased]`, and the tag is absent locally and on origin; then it
+creates `vVERSION`, pushes it, and exits 0. Nothing goes to npm, PyPI, or a Go
+module registry beyond what the Git tag serves. `scripts/test_versions.py`
+exercises those guards against a fixture repository with a local origin.
 
 The synchronizer updates the TypeScript and Python package metadata and the
 Python lockfile together. Go derives the same version from the root Git tag.
@@ -153,7 +157,7 @@ not maintain its package list by hand.
 
 ## Release Checklist
 
-Before creating the one root `vX.Y.Z` release tag:
+To publish the one root `vX.Y.Z` release tag:
 
 1. Run `flox activate -- make version-set VERSION=X.Y.Z` and review every
    version mirror.
@@ -169,8 +173,12 @@ Before creating the one root `vX.Y.Z` release tag:
    Python, and TypeScript consumers.
 6. Run `flox activate -- make audit` to scan the locked Node, Go, and Python
    dependencies and the source tree.
-7. Confirm the tree contains no secrets or unrelated generated output, commit
+7. Rename `## [Unreleased]` in `CHANGELOG.md` to `## [X.Y.Z] - YYYY-MM-DD`;
+   an empty `## [Unreleased]` may stay above it.
+8. Confirm the tree contains no secrets or unrelated generated output, commit
    it, and push it.
-8. Create exactly one annotated root tag, `vX.Y.Z`, on that reviewed commit.
-   Do not create language-prefixed tags and do not publish to npm, PyPI,
-   crates.io, or another language registry.
+9. Run `flox activate -- make release`. It creates and pushes exactly one
+   annotated root tag, `vX.Y.Z`, on that reviewed commit. Never create
+   language-prefixed tags, and do not publish to npm, PyPI, crates.io, or
+   another language registry.
+10. In the next commit, move the README install commands to `vX.Y.Z`.

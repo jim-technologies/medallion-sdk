@@ -6,6 +6,18 @@ annotated `vX.Y.Z` tag.
 
 ## [Unreleased]
 
+- `make release` publishes instead of refusing: after its guards (the
+  immutable contract attestation, a clean tree, `HEAD` pushed to
+  `origin/main`, every version mirror and the first CHANGELOG release heading
+  equal to `VERSION`, the tag absent locally and on origin) it creates and
+  pushes the annotated `vVERSION` tag, the repository's one distribution. The
+  logic lives in `scripts/release`, and the release-tag gate now also requires
+  the CHANGELOG release heading.
+- Removed the fail-closed `make release` stub and `make run`, whose import
+  smoke of the ESM bundle now runs in `make build-ts` inside the gate. The
+  multi-line recipes of `contract-release-gate`, `check-examples`, `lint-go`,
+  and `audit-python` moved to `scripts/`, so every Makefile target names one
+  tool or one script.
 - Point the README install commands at `v0.3.1`, the newest release tag; they
   named `v0.3.0`, which was never tagged. `make version-check` now fails when
   an install command names a tag this repository does not have, and CI checks

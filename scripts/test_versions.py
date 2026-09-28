@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise version synchronization in an isolated repository fixture."""
+"""Exercise version synchronization and the release verb in a fixture repository."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_FILES = (
     ".ci/node-26/.flox/env/manifest.toml",
     ".flox/env/manifest.toml",
+    "CHANGELOG.md",
     "LICENSE",
     "NOTICE",
     "VERSION",
@@ -35,6 +36,7 @@ FIXTURE_FILES = (
     "python/src/medallion/workflows.py",
     "python/uv.lock",
     "scripts/check_versions.py",
+    "scripts/release",
     "scripts/set_version.py",
 )
 GIT_IDENTITY = (
@@ -47,6 +49,17 @@ GIT_IDENTITY = (
     "-c",
     "tag.gpgsign=false",
 )
+# The release script's own git calls get an identity and no signing prompt
+# from the environment, the way a maintainer's configuration supplies them.
+RELEASE_GIT_ENV = {
+    "GIT_AUTHOR_NAME": "Version test",
+    "GIT_AUTHOR_EMAIL": "version-test@example.invalid",
+    "GIT_COMMITTER_NAME": "Version test",
+    "GIT_COMMITTER_EMAIL": "version-test@example.invalid",
+    "GIT_CONFIG_COUNT": "1",
+    "GIT_CONFIG_KEY_0": "tag.gpgsign",
+    "GIT_CONFIG_VALUE_0": "false",
+}
 README_INSTALL_TAG = re.compile(r"medallion-sdk\.git#(v[0-9]+\.[0-9]+\.[0-9]+)")
 VERSION_MIRRORS = (
     "VERSION",
@@ -76,13 +89,59 @@ class VersionScriptsTest(unittest.TestCase):
         self.readme_tag = self.readme_install_tag()
         self.git("tag", self.readme_tag)
 
-    def git(self, *arguments: str) -> None:
-        subprocess.run(
+    def git(self, *arguments: str, cwd: Path | None = None) -> str:
+        return subprocess.run(
             ["git", *GIT_IDENTITY, *arguments],
-            cwd=self.fixture,
+            cwd=self.fixture if cwd is None else cwd,
             check=True,
             capture_output=True,
+            text=True,
+        ).stdout
+
+    def release_changelog(self, version: str) -> None:
+        changelog = self.fixture / "CHANGELOG.md"
+        changelog.write_text(
+            changelog.read_text().replace(
+                "## [Unreleased]", f"## [{version}] - 2026-09-27", 1
+            )
         )
+
+    def release_ready_fixture(self) -> Path:
+        """Commit a released CHANGELOG and push it as main of a bare origin."""
+
+        version = (self.fixture / "VERSION").read_text().strip()
+        self.release_changelog(version)
+        self.git("commit", "--quiet", "--all", "-m", "Release fixture")
+        origin_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(origin_directory.cleanup)
+        origin = Path(origin_directory.name) / "origin.git"
+        self.git("init", "--quiet", "--bare", str(origin))
+        self.git("remote", "add", "origin", str(origin))
+        self.git("push", "--quiet", "origin", "HEAD:refs/heads/main")
+        return origin
+
+    def run_release(self) -> subprocess.CompletedProcess[str]:
+        process_env = os.environ.copy()
+        for name in ("GITHUB_ACTIONS", "GITHUB_REF_TYPE", "GITHUB_REF_NAME"):
+            process_env.pop(name, None)
+        process_env.update(RELEASE_GIT_ENV)
+        return subprocess.run(
+            ["scripts/release"],
+            cwd=self.fixture,
+            env=process_env,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+    def origin_tag_type(self, origin: Path, tag: str) -> str | None:
+        found = subprocess.run(
+            ["git", "--git-dir", str(origin), "cat-file", "-t", f"refs/tags/{tag}"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        return found.stdout.strip() if found.returncode == 0 else None
 
     def readme_install_tag(self) -> str:
         match = README_INSTALL_TAG.search((self.fixture / "README.md").read_text())
@@ -129,6 +188,7 @@ class VersionScriptsTest(unittest.TestCase):
     def test_setter_updates_every_mirror_and_tag_check(self) -> None:
         result = self.run_script("set_version.py", "0.2.3")
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.release_changelog("0.2.3")
 
         package = json.loads((self.fixture / "package.json").read_text())
         self.assertEqual((self.fixture / "VERSION").read_text().strip(), "0.2.3")
@@ -161,6 +221,7 @@ class VersionScriptsTest(unittest.TestCase):
                 self.assertEqual(self.mirror_snapshot(), before)
 
     def test_checker_accepts_annotated_ci_release_tag(self) -> None:
+        self.release_changelog((self.fixture / "VERSION").read_text().strip())
         tag = self.create_fixture_tag(annotated=True)
 
         result = self.run_script(
@@ -517,6 +578,106 @@ class VersionScriptsTest(unittest.TestCase):
         result = self.run_script("check_versions.py")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("must pin one release tag", result.stderr)
+
+    def test_checker_rejects_release_tag_with_unreleased_changes(self) -> None:
+        version = (self.fixture / "VERSION").read_text().strip()
+
+        result = self.run_script(
+            "check_versions.py",
+            env={"GITHUB_REF_TYPE": "tag", "GITHUB_REF_NAME": f"v{version}"},
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("[Unreleased] must be empty", result.stderr)
+
+    def test_checker_rejects_release_tag_of_another_changelog_version(self) -> None:
+        self.release_changelog("0.0.1")
+        version = (self.fixture / "VERSION").read_text().strip()
+
+        result = self.run_script(
+            "check_versions.py",
+            env={"GITHUB_REF_TYPE": "tag", "GITHUB_REF_NAME": f"v{version}"},
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("CHANGELOG.md starts at '[0.0.1] - 2026-09-27'", result.stderr)
+
+    def test_checker_accepts_empty_unreleased_above_the_release(self) -> None:
+        version = (self.fixture / "VERSION").read_text().strip()
+        self.release_changelog(version)
+        changelog = self.fixture / "CHANGELOG.md"
+        changelog.write_text(
+            changelog.read_text().replace(
+                f"## [{version}]", f"## [Unreleased]\n\n## [{version}]", 1
+            )
+        )
+
+        result = self.run_script(
+            "check_versions.py",
+            env={"GITHUB_REF_TYPE": "tag", "GITHUB_REF_NAME": f"v{version}"},
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_release_tags_and_pushes_a_ready_tree(self) -> None:
+        origin = self.release_ready_fixture()
+        tag = "v" + (self.fixture / "VERSION").read_text().strip()
+
+        result = self.run_release()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"Published {tag}", result.stdout)
+        self.assertEqual(self.origin_tag_type(origin, tag), "tag")
+        self.assertEqual(
+            self.git("rev-parse", f"refs/tags/{tag}^{{commit}}"),
+            self.git("rev-parse", "HEAD"),
+        )
+
+    def test_release_refuses_a_dirty_tree(self) -> None:
+        origin = self.release_ready_fixture()
+        (self.fixture / "stray.txt").write_text("untracked\n")
+        tag = "v" + (self.fixture / "VERSION").read_text().strip()
+
+        result = self.run_release()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("the working tree is dirty", result.stderr)
+        self.assertIsNone(self.origin_tag_type(origin, tag))
+
+    def test_release_refuses_an_unpushed_head(self) -> None:
+        origin = self.release_ready_fixture()
+        self.git("commit", "--quiet", "--allow-empty", "-m", "Unpushed")
+        tag = "v" + (self.fixture / "VERSION").read_text().strip()
+
+        result = self.run_release()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("HEAD is not pushed to origin/main", result.stderr)
+        self.assertIsNone(self.origin_tag_type(origin, tag))
+
+    def test_release_refuses_a_tag_that_exists(self) -> None:
+        self.release_ready_fixture()
+        tag = self.create_fixture_tag(annotated=True)
+
+        local = self.run_release()
+        self.assertNotEqual(local.returncode, 0)
+        self.assertIn(f"tag {tag} already exists locally", local.stderr)
+
+        # A tag only origin has is refused too, whether the fetch brings it
+        # back or the remote lookup finds it.
+        self.git("push", "--quiet", "origin", f"refs/tags/{tag}")
+        self.git("tag", "--delete", tag)
+        remote = self.run_release()
+        self.assertNotEqual(remote.returncode, 0)
+        self.assertIn(f"tag {tag} already exists", remote.stderr)
+
+    def test_release_refuses_unreleased_changelog(self) -> None:
+        origin = self.release_ready_fixture()
+        changelog = self.fixture / "CHANGELOG.md"
+        changelog.write_text("# Changelog\n\n## [Unreleased]\n\n- pending\n")
+        self.git("commit", "--quiet", "--all", "-m", "Unreleased work")
+        self.git("push", "--quiet", "origin", "HEAD:refs/heads/main")
+        tag = "v" + (self.fixture / "VERSION").read_text().strip()
+
+        result = self.run_release()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("[Unreleased] must be empty", result.stderr)
+        self.assertIn("the version gate failed", result.stderr)
+        self.assertIsNone(self.origin_tag_type(origin, tag))
 
     def test_checker_rejects_python_license_drift(self) -> None:
         (self.fixture / "python/NOTICE").write_text("stale notice\n")

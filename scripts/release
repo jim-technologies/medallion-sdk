@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+
+# Publish one Medallion SDK release. Distribution is Git-only: the TypeScript,
+# Go, and Python SDKs all install from the single annotated root tag
+# vVERSION, so publishing is creating and pushing that tag. This runs from a
+# maintainer's machine; CI never publishes, it only re-runs the gate on the
+# pushed tag.
+#
+# Guards, in order, before anything is written: a clean tree (untracked files
+# included), HEAD contained in origin/main, the tag absent locally and on
+# origin, and the version gate in tag mode, which holds every language mirror
+# to VERSION and requires the CHANGELOG's first release heading to be
+# VERSION with an empty (or no) [Unreleased] section above it.
+
+set -euo pipefail
+shopt -s inherit_errexit
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+cd "$root"
+
+refuse() {
+  echo "release refused: $*" >&2
+  exit 1
+}
+
+version="$(tr -d '\n' <VERSION)"
+tag="v${version}"
+
+status="$(git status --porcelain --untracked-files=all)"
+[[ -z "$status" ]] || refuse "the working tree is dirty; commit or stash first:
+${status}"
+
+git fetch --quiet origin || refuse "cannot fetch origin to verify the push state."
+git merge-base --is-ancestor HEAD origin/main ||
+  refuse "HEAD is not pushed to origin/main."
+
+if git rev-parse --quiet --verify "refs/tags/${tag}" >/dev/null; then
+  refuse "tag ${tag} already exists locally."
+fi
+if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null; then
+  refuse "tag ${tag} already exists on origin."
+fi
+
+GITHUB_REF_TYPE=tag GITHUB_REF_NAME="$tag" GITHUB_ACTIONS='' \
+  PYTHONDONTWRITEBYTECODE=1 python3 scripts/check_versions.py ||
+  refuse "the version gate failed for ${tag}."
+
+git tag --annotate --message "Medallion SDK ${tag}" "$tag"
+git push --quiet origin "refs/tags/${tag}"
+echo "Published ${tag}. The TypeScript, Go, and Python SDKs install from this one Git tag."

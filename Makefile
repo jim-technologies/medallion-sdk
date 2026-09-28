@@ -19,7 +19,7 @@ TEMPORALESS_COMMIT ?= 03dbf90732a8a043d1de0587b16a1f163c6efcd1
 
 .DEFAULT_GOAL := help
 
-.PHONY: help help-all install validate lock-check version-check version-set release contract-sync contract-check contract-release-check contract-release-gate generated-check breaking-check artifact-check git-install-check public-surface check-examples test test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-workflows test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python lint-proto lint-shell lint-workflows fmt fmt-ts fmt-go fmt-python fmt-proto fmt-shell audit audit-node audit-go audit-python secret-check deps generate proto-bindings proto-descriptor run clean
+.PHONY: help help-all install validate lock-check version-check version-set release contract-sync contract-check contract-release-check contract-release-gate generated-check breaking-check artifact-check git-install-check public-surface check-examples test test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-workflows test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python lint-proto lint-shell lint-workflows fmt fmt-ts fmt-go fmt-python fmt-proto fmt-shell audit audit-node audit-go audit-python secret-check deps generate proto-bindings proto-descriptor clean
 
 help: ## One-screen help (make help-all for every target)
 	@echo "Daily:"
@@ -28,6 +28,7 @@ help: ## One-screen help (make help-all for every target)
 	@echo "  make validate   the full offline gate; exactly what CI runs"
 	@echo "  make build      build all SDK packages"
 	@echo "  make generate   regenerate schema-derived code"
+	@echo "  make release    tag vVERSION and push it, from a clean pushed tree"
 	@echo ""
 	@echo "Everything else: make help-all"
 
@@ -56,20 +57,8 @@ version-set: ## Synchronize every SDK version (usage: make version-set VERSION=X
 	@test -n "$(VERSION)" || { echo "VERSION is required"; exit 2; }
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/set_version.py "$(VERSION)"
 
-release: ## Fail-closed release stub: require a clean, pushed, version-consistent tree, then refuse.
-	@status="$$(git status --porcelain)"; test -z "$$status" \
-		|| { echo "release: refusing: the working tree is dirty:"; echo "$$status"; exit 1; }
-	@git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' >/dev/null 2>&1 \
-		|| { echo "release: refusing: the current branch has no upstream"; exit 1; }
-	@git fetch --quiet \
-		|| { echo "release: refusing: cannot fetch the upstream to verify the push state"; exit 1; }
-	@git merge-base --is-ancestor HEAD '@{upstream}' \
-		|| { echo "release: refusing: HEAD is not pushed to $$(git rev-parse --abbrev-ref '@{upstream}')"; exit 1; }
-	$(MAKE) version-check
-	@echo "release: the tree is clean, pushed, and version-consistent at v$$(cat VERSION)."
-	@echo "release: publishing to npm, PyPI, or a public Go module tag is a pending product decision;"
-	@echo "release: distribution stays git-install from the annotated v$$(cat VERSION) root tag (see CONTRIBUTING.md)."
-	@exit 1
+release: contract-release-check ## Publish one release: guards, then create and push the annotated vVERSION tag.
+	scripts/release
 
 contract-sync: node_modules/.medallion-install-stamp ## Sync a sanitized SDK contract export (MEDALLION_SDK_CONTRACT_ROOT), then regenerate.
 	node scripts/sync_external_ingestion_contract.mjs --sync
@@ -84,11 +73,7 @@ contract-release-check: node_modules/.medallion-install-stamp ## Require an immu
 	node scripts/sync_external_ingestion_contract.mjs --check-release
 
 contract-release-gate: node_modules/.medallion-install-stamp ## Require the immutable contract attestation when validating a release tag.
-	@if [ "$${GITHUB_REF_TYPE:-}" = "tag" ]; then \
-		node scripts/sync_external_ingestion_contract.mjs --check-release; \
-	else \
-		echo "contract-release-gate: not a release tag; immutable attestation not required"; \
-	fi
+	scripts/contract_release_gate.sh
 
 generated-check: contract-check node_modules/.medallion-install-stamp ## Verify generated protobuf bindings and descriptors have no drift.
 	scripts/check_generated.sh
@@ -107,12 +92,7 @@ public-surface: secret-check ## Guard the public surface: tracked content, paths
 	scripts/public-surface-check-test
 
 check-examples: build ## Check the runnable TypeScript, Go, and Python quickstart examples.
-	$(PNPM) check:examples
-	@unformatted="$$(gofmt -l examples)"; \
-	test -z "$$unformatted" || { echo "gofmt: examples need formatting:"; echo "$$unformatted"; exit 1; }
-	$(GO) vet ./examples/
-	$(RUFF) check --no-cache examples
-	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m compileall -q examples
+	scripts/check_examples.sh
 
 test: test-version test-contract-sync test-package-artifacts test-ts test-go test-python ## Run the offline suite (every language).
 
@@ -143,8 +123,9 @@ test-deployed: node_modules/.medallion-install-stamp ## Run opt-in deployed smok
 
 build: build-ts build-go build-python ## Build all SDK packages.
 
-build-ts: node_modules/.medallion-install-stamp ## Build JavaScript and type declarations.
+build-ts: node_modules/.medallion-install-stamp ## Build JavaScript and type declarations, then import-smoke the ESM bundle.
 	$(PNPM) build
+	node --input-type=module -e 'import("./dist/index.js").then((m) => { if (!m.MedallionClient) throw new Error("missing MedallionClient export"); })'
 
 build-go: ## Compile Go packages.
 	$(GO) build ./go/...
@@ -158,9 +139,7 @@ lint-ts: node_modules/.medallion-install-stamp ## Type-check, lint, and format-c
 	$(PNPM) lint
 
 lint-go: ## Format-check and vet Go code.
-	@unformatted="$$(find go -type f -name '*.go' -exec gofmt -l {} +)"; \
-	test -z "$$unformatted" || { echo "gofmt: files need formatting:"; echo "$$unformatted"; exit 1; }
-	$(GO) vet ./go/...
+	scripts/lint_go.sh
 
 lint-python: ## Lint, format-check, and byte-compile authored Python code.
 	cd python && $(RUFF) check src tests tests_workflows
@@ -172,8 +151,8 @@ lint-proto: ## Lint and format-check vendored protobuf contracts.
 	$(BUF) format proto --diff --exit-code
 
 lint-shell: ## Lint and format-check repository shell scripts.
-	$(SHELLCHECK) scripts/*.sh
-	$(SHFMT) -d -i 2 -ci scripts/*.sh
+	$(SHELLCHECK) scripts/*.sh scripts/release
+	$(SHFMT) -d -i 2 -ci scripts/*.sh scripts/release
 
 lint-workflows: ## Validate GitHub Actions syntax and expressions.
 	$(ACTIONLINT) .github/workflows/*.yml
@@ -194,7 +173,7 @@ fmt-proto: ## Format vendored protobuf contracts.
 	$(BUF) format proto --write
 
 fmt-shell: ## Format repository shell scripts.
-	$(SHFMT) -w -i 2 -ci scripts/*.sh
+	$(SHFMT) -w -i 2 -ci scripts/*.sh scripts/release
 
 audit: audit-node audit-go audit-python secret-check ## Scan dependencies and the tree for known vulnerabilities and secrets.
 
@@ -205,18 +184,7 @@ audit-go: ## Audit Go packages and tests against the current vulnerability datab
 	$(GO) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) -test ./...
 
 audit-python: ## Audit exact Python runtime locks and the pinned build backend.
-	@runtime_requirements="$$(mktemp)"; \
-	build_requirements="$$(mktemp)"; \
-	trap 'rm -f "$$runtime_requirements" "$$build_requirements"' EXIT; \
-	$(UV) export --project python --locked --no-dev --no-emit-project \
-		--format requirements-txt --output-file "$$runtime_requirements" >/dev/null; \
-	$(UV) tool run --from pip-audit==$(PIP_AUDIT_VERSION) pip-audit \
-		--strict --disable-pip --vulnerability-service osv \
-		--requirement "$$runtime_requirements" --progress-spinner off; \
-	$(PYTHON) -c 'import tomllib; data = tomllib.load(open("python/pyproject.toml", "rb")); print(*data["build-system"]["requires"], sep="\n")' >"$$build_requirements"; \
-	$(UV) tool run --from pip-audit==$(PIP_AUDIT_VERSION) --with pip pip-audit \
-		--strict --vulnerability-service osv \
-		--requirement "$$build_requirements" --progress-spinner off
+	PIP_AUDIT_VERSION=$(PIP_AUDIT_VERSION) scripts/audit_python.sh
 
 secret-check: ## Scan the working tree for committed credentials and tokens.
 	$(GITLEAKS) dir . --no-banner --redact
@@ -236,9 +204,6 @@ proto-bindings: ## Regenerate public Go and Python Connect and ingest protobuf b
 
 proto-descriptor: node_modules/.medallion-install-stamp ## Regenerate TypeScript invariantprotocol descriptors.
 	node scripts/embed-connect-descriptor.mjs
-
-run: build-ts ## Smoke-test importing the built TypeScript SDK.
-	node --input-type=module -e 'import("./dist/index.js").then((m) => { if (!m.MedallionClient) throw new Error("missing MedallionClient export"); })'
 
 clean: ## Remove generated build outputs and caches.
 	$(PNPM) clean

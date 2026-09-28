@@ -111,6 +111,38 @@ def temporaless_pin_errors(pyproject: dict[str, Any]) -> list[str]:
     return errors
 
 
+def changelog_release_errors(version: str) -> list[str]:
+    """A release tag ships the CHANGELOG's first release section.
+
+    The first heading must be `## [VERSION] - YYYY-MM-DD`; an `[Unreleased]`
+    heading may sit above it only while empty, so nothing documented as
+    unreleased is tagged.
+    """
+
+    sections = re.split(
+        r"^## ", (ROOT / "CHANGELOG.md").read_text(), flags=re.MULTILINE
+    )[1:]
+    if sections and sections[0].startswith("[Unreleased]"):
+        if sections[0].removeprefix("[Unreleased]").strip():
+            return [
+                "tagged release CHANGELOG.md [Unreleased] must be empty; "
+                f"rename it to [{version}] - YYYY-MM-DD"
+            ]
+        sections = sections[1:]
+    heading = sections[0].splitlines()[0] if sections else "<none>"
+    if (
+        re.fullmatch(
+            rf"\[{re.escape(version)}\] - [0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}", heading
+        )
+        is None
+    ):
+        return [
+            f"tagged release CHANGELOG.md starts at {heading!r}; "
+            f"expected '[{version}] - YYYY-MM-DD'"
+        ]
+    return []
+
+
 def readme_install_tag_errors() -> list[str]:
     """Hold the documented install commands to one release tag that exists.
 
@@ -552,6 +584,7 @@ def main() -> int:
     if os.environ.get("GITHUB_REF_TYPE") == "tag":
         expected_tag = f"v{version}"
         actual_tag = os.environ.get("GITHUB_REF_NAME")
+        errors.extend(changelog_release_errors(version))
         if actual_tag != expected_tag:
             errors.append(f"release tag is {actual_tag!r}; expected {expected_tag!r}")
         elif os.environ.get("GITHUB_ACTIONS") == "true":
