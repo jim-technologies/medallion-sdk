@@ -84,7 +84,8 @@ func main() {
 	}
 
 	// Queries are synchronous first; poll GetQueryResults while the state is
-	// RUNNING, then follow next_page_token until it is empty.
+	// RUNNING, waiting between polls (200 ms doubling to 2 s here), then follow
+	// next_page_token until it is empty.
 	response, _, err := client.Ingest.RunQuery(ctx, &ingestv1.RunQueryRequest{
 		Query:     fmt.Sprintf("SELECT run_id, seq, level FROM app_events WHERE run_id = '%s' ORDER BY seq", runID),
 		TimeoutMs: 10_000,
@@ -94,7 +95,12 @@ func main() {
 	}
 	name, state := response.GetName(), response.GetState()
 	rows, nextPageToken := response.GetRows(), response.GetNextPageToken()
-	for state == "RUNNING" {
+	for delay := 200 * time.Millisecond; state == "RUNNING"; delay = min(2*delay, 2*time.Second) {
+		select {
+		case <-ctx.Done():
+			log.Fatal(ctx.Err())
+		case <-time.After(delay):
+		}
 		poll, _, err := client.Ingest.GetQueryResults(ctx, &ingestv1.GetQueryResultsRequest{Name: name})
 		if err != nil {
 			log.Fatal(err)

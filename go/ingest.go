@@ -159,7 +159,9 @@ func (c *IngestClient) AppendRows(ctx context.Context, request *ingestv1.AppendR
 
 // RunQuery runs one read-only SQL statement in the declared ClickHouse
 // dialect; the synchronous-first jobs.query analog. When the acknowledgement
-// reports state RUNNING, poll GetQueryResults with the returned name.
+// reports state RUNNING, poll GetQueryResults with the returned name, waiting
+// between polls with a bounded backoff (examples/tables.go doubles 200 ms up
+// to 2 s) rather than polling back to back.
 func (c *IngestClient) RunQuery(ctx context.Context, request *ingestv1.RunQueryRequest) (*ingestv1.RunQueryResponse, string, error) {
 	if strings.TrimSpace(request.GetQuery()) == "" {
 		return nil, "", &Error{

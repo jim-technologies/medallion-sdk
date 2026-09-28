@@ -25,7 +25,7 @@ from google.protobuf.json_format import MessageToDict
 from medallion.ingest.v1 import ingest_pb2
 
 from .errors import MedallionError
-from .request import _RequestClient
+from .request import ResponseEnvelope, _RequestClient
 
 INGEST_SERVICE = "/medallion.ingest.v1.MedallionIngestService"
 CREATE_TABLE = f"{INGEST_SERVICE}/CreateTable"
@@ -282,6 +282,18 @@ class IngestClient:
         timeout: float | None = None,
         cancellation_event: Event | None = None,
     ) -> tuple[ingest_pb2.RunQueryResponse, str | None]:
+        response, envelope = self._run_query(
+            request, timeout=timeout, cancellation_event=cancellation_event
+        )
+        return response, envelope.request_id
+
+    def _run_query(
+        self,
+        request: ingest_pb2.RunQueryRequest,
+        *,
+        timeout: float | None,
+        cancellation_event: Event | None,
+    ) -> tuple[ingest_pb2.RunQueryResponse, ResponseEnvelope]:
         if not request.query.strip():
             raise MedallionError(
                 "query requires one SQL statement.",
@@ -303,7 +315,7 @@ class IngestClient:
             retry_safe=True,
         )
         _validate_query_response(response, envelope.request_id)
-        return response, envelope.request_id
+        return response, envelope
 
     def get_query_results(
         self,
@@ -312,6 +324,18 @@ class IngestClient:
         timeout: float | None = None,
         cancellation_event: Event | None = None,
     ) -> tuple[ingest_pb2.GetQueryResultsResponse, str | None]:
+        response, envelope = self._get_query_results(
+            request, timeout=timeout, cancellation_event=cancellation_event
+        )
+        return response, envelope.request_id
+
+    def _get_query_results(
+        self,
+        request: ingest_pb2.GetQueryResultsRequest,
+        *,
+        timeout: float | None,
+        cancellation_event: Event | None,
+    ) -> tuple[ingest_pb2.GetQueryResultsResponse, ResponseEnvelope]:
         if not _QUERY_NAME_PATTERN.match(request.name):
             raise MedallionError(
                 'query results require the "queries/{query}" name returned by run_query().',
@@ -329,7 +353,15 @@ class IngestClient:
             retry_safe=True,
         )
         _validate_query_response(response, envelope.request_id)
-        return response, envelope.request_id
+        return response, envelope
+
+    def _wait_before_poll(
+        self,
+        poll: int,
+        previous: ResponseEnvelope,
+        cancellation_event: Event | None,
+    ) -> None:
+        self._requests.wait_before_poll(poll, previous.retry_after, cancellation_event)
 
 
 class TablesClient:
@@ -550,6 +582,9 @@ class TablesClient:
         The call is synchronous first; while the server reports the query as
         still running, the SDK polls transparently, then returns a result
         whose iteration crosses every page without exposing page tokens.
+        Polls are paced by the client's retry backoff (``initial_backoff``
+        doubling to ``max_backoff``); a ``Retry-After`` on a still-running
+        answer replaces that wait, capped at 30 seconds.
         """
 
         request = ingest_pb2.RunQueryRequest(
@@ -558,12 +593,12 @@ class TablesClient:
             dry_run=dry_run,
             page_size=page_size or 0,
         )
-        response, request_id = self._ingest.run_query(
+        page: Any
+        page, envelope = self._ingest._run_query(
             request,
             timeout=timeout,
             cancellation_event=cancellation_event,
         )
-        page: Any = response
         polls = 0
         while page.state == "RUNNING":
             polls += 1
@@ -571,9 +606,10 @@ class TablesClient:
                 raise MedallionError(
                     f"Medallion query polling exceeded {MAX_QUERY_POLLS} attempts without completing.",
                     code="MEDALLION_QUERY_POLL_LIMIT",
-                    request_id=request_id,
+                    request_id=envelope.request_id,
                 )
-            page, request_id = self._ingest.get_query_results(
+            self._ingest._wait_before_poll(polls, envelope, cancellation_event)
+            page, envelope = self._ingest._get_query_results(
                 ingest_pb2.GetQueryResultsRequest(
                     name=page.name,
                     page_size=page_size or 0,
@@ -581,6 +617,7 @@ class TablesClient:
                 timeout=timeout,
                 cancellation_event=cancellation_event,
             )
+        request_id = envelope.request_id
         _require_succeeded(page, request_id)
         return TableQueryResult(
             self._ingest,

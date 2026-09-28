@@ -200,6 +200,26 @@ export class ProtocolIngestClient {
     });
   }
 
+  /**
+   * Wait before polling GetQueryResults again after `previous` reported the
+   * query RUNNING. Poll `poll` waits the client's retry backoff
+   * (initialDelayMs doubling to maxDelayMs, with jitter), or the Retry-After
+   * the previous answer carried, never longer than 30 seconds;
+   * `options.signal` aborts the wait. `tables.query()` paces its polls this
+   * way.
+   */
+  waitBeforeQueryPoll(
+    poll: number,
+    previous: ResponseEnvelope<unknown>,
+    options: RequestOptions = {},
+  ): Promise<void> {
+    return this.#requests.waitBeforePoll(
+      poll,
+      previous.retryAfterMs,
+      options.signal,
+    );
+  }
+
   #write<TResponse>(
     methodName: string,
     body: { request_id?: string },
@@ -245,6 +265,9 @@ export class ProtocolIngestClient {
         response.body,
         response.requestId,
       ),
+      ...(response.retryAfterMs === undefined
+        ? {}
+        : { retryAfterMs: response.retryAfterMs }),
     };
   }
 }

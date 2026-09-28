@@ -108,7 +108,10 @@ export class TablesClient {
    * Run one SQL statement in the declared ClickHouse dialect. The call is
    * synchronous first; while the server reports the query as still running,
    * the SDK polls transparently, then returns a result whose rows iterate
-   * across every page without exposing page tokens.
+   * across every page without exposing page tokens. Polls are paced by the
+   * client's retry backoff (initialDelayMs doubling to maxDelayMs); a
+   * Retry-After on a still-running answer replaces that wait, capped at 30
+   * seconds.
    */
   async query(
     sql: string,
@@ -127,24 +130,23 @@ export class TablesClient {
       },
       requestOptions,
     );
-    let requestId = first.requestId;
-    let body = first.body;
+    let latest = first;
     let polls = 0;
-    while ((body.state ?? "") === "RUNNING") {
+    while ((latest.body.state ?? "") === "RUNNING") {
       polls += 1;
       if (polls > MAX_QUERY_POLLS) {
         throw new MedallionError(
           `Medallion query polling exceeded ${MAX_QUERY_POLLS} attempts without completing.`,
-          { code: "MEDALLION_QUERY_POLL_LIMIT", requestId },
+          { code: "MEDALLION_QUERY_POLL_LIMIT", requestId: latest.requestId },
         );
       }
-      const poll = await this.#ingest.getQueryResults(
-        { name: body.name ?? "", page_size: options.pageSize },
+      await this.#ingest.waitBeforeQueryPoll(polls, latest, requestOptions);
+      latest = await this.#ingest.getQueryResults(
+        { name: latest.body.name ?? "", page_size: options.pageSize },
         requestOptions,
       );
-      requestId = poll.requestId;
-      body = poll.body;
     }
+    const { body, requestId } = latest;
     requireSucceeded(body, requestId);
     return new TableQueryResult(this.#ingest, body, {
       requestId,

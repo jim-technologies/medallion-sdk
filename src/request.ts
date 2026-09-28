@@ -43,6 +43,8 @@ export interface JsonRequestOptions {
 export interface ResponseEnvelope<TBody> {
   body: TBody;
   requestId?: string;
+  /** A Retry-After header on the successful response, in milliseconds. */
+  retryAfterMs?: number;
 }
 
 interface SignalState {
@@ -71,6 +73,11 @@ const DEFAULT_RETRY: NormalizedRetryOptions = {
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const MAX_CONNECT_TIMEOUT_MS = MAX_TIMER_DELAY_MS;
 const MAX_RESPONSE_BODY_BYTES = 64 * 1024 * 1024;
+/**
+ * A server's Retry-After on a still-running answer may slow polling down to
+ * this interval and no further, so a poll loop never parks its caller.
+ */
+export const MAX_POLL_DELAY_MS = 30_000;
 
 export class RequestClient {
   private readonly baseUrl: string;
@@ -388,9 +395,11 @@ export class RequestClient {
               throw apiError;
             }
 
+            const retryAfter = retryAfterMs(response.headers);
             return {
               body: responseBody as TResponse,
               requestId,
+              ...(retryAfter === undefined ? {} : { retryAfterMs: retryAfter }),
             };
           }
           throw new MedallionError(
@@ -505,9 +514,39 @@ export class RequestClient {
     }
   }
 
+  /**
+   * Milliseconds to wait before poll number `poll` of a still-running call:
+   * the retry backoff (initialDelayMs doubling to maxDelayMs, with jitter),
+   * replaced by the server's Retry-After, never above MAX_POLL_DELAY_MS.
+   */
+  pollDelayMs(poll: number, retryAfter?: number): number {
+    return Math.min(MAX_POLL_DELAY_MS, this.backoffDelay(poll, retryAfter));
+  }
+
+  /** Wait pollDelayMs before the next poll; `signal` aborts the wait. */
+  async waitBeforePoll(
+    poll: number,
+    retryAfter: number | undefined,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    try {
+      await abortableDelay(this.pollDelayMs(poll, retryAfter), signal);
+    } catch (error) {
+      throw new MedallionError("Medallion request was aborted.", {
+        code: "MEDALLION_ABORTED",
+        cause: sanitizedErrorCause(error, [this.#credential.value]),
+      });
+    }
+  }
+
   private retryDelay(attempt: number, headers?: Headers): number {
-    const retryAfter =
-      headers === undefined ? undefined : retryAfterMs(headers);
+    return this.backoffDelay(
+      attempt,
+      headers === undefined ? undefined : retryAfterMs(headers),
+    );
+  }
+
+  private backoffDelay(attempt: number, retryAfter?: number): number {
     if (retryAfter !== undefined) {
       // Retry-After is a server minimum. The total request deadline will
       // cancel a wait that cannot fit; never retry earlier than requested.

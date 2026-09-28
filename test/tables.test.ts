@@ -1,19 +1,41 @@
 import { Buffer } from "node:buffer";
 import { describe, expect, it, vi } from "vitest";
 import { MedallionClient } from "../src/index.js";
+import { MAX_POLL_DELAY_MS } from "../src/request.js";
 import { MAX_QUERY_POLLS } from "../src/tables.js";
+import type { RetryOptions } from "../src/types.js";
 
 const INGEST_SERVICE = "medallion.ingest.v1.MedallionIngestService";
 const UUID_TEXT =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const QUERY_NAME = "queries/01jz9q5g6rsf7r5ar4rah1b2c3";
 
-function newClient(fetch: typeof globalThis.fetch) {
+function newClient(fetch: typeof globalThis.fetch, retry?: RetryOptions) {
   return new MedallionClient({
     baseUrl: "https://api.example.com",
     apiKey: "scoped_api_key",
     workspaceId: "ws_01jz9q5g6rsf7r5ar4rah1b2c3",
     fetch,
+    retry,
+  });
+}
+
+const NO_POLL_DELAY: RetryOptions = { initialDelayMs: 0, maxDelayMs: 0 };
+
+function runningThenSucceeded(
+  running: number,
+  headers: Record<string, string> = {},
+) {
+  let calls = 0;
+  return vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+    calls += 1;
+    return calls <= running
+      ? jsonResponse({ name: QUERY_NAME, state: "RUNNING" }, 200, headers)
+      : jsonResponse({
+          name: QUERY_NAME,
+          state: "SUCCEEDED",
+          rows: [{ n: 1 }],
+        });
   });
 }
 
@@ -266,6 +288,94 @@ describe("tables.query", () => {
     expect(rows).toEqual([{ n: 1 }]);
   });
 
+  it("waits the retry backoff between polls", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetch = runningThenSucceeded(3);
+      const client = newClient(fetch, {
+        initialDelayMs: 100,
+        maxDelayMs: 150,
+        jitterRatio: 0,
+      });
+
+      const pending = client.tables.query("SELECT n FROM events");
+      // Waits of 100, then 150, then 150 ms: the backoff doubles from
+      // initialDelayMs and holds at maxDelayMs.
+      await vi.advanceTimersByTimeAsync(50);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(60);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(50);
+      expect(fetch).toHaveBeenCalledTimes(3);
+      await vi.advanceTimersByTimeAsync(160);
+      expect(fetch).toHaveBeenCalledTimes(4);
+
+      const rows = [];
+      for await (const row of (await pending).rows()) rows.push(row);
+      expect(rows).toEqual([{ n: 1 }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("waits a Retry-After on a running answer instead of the backoff", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetch = runningThenSucceeded(1, { "retry-after": "2" });
+      const client = newClient(fetch, NO_POLL_DELAY);
+
+      const pending = client.tables.query("SELECT n FROM events");
+      await vi.advanceTimersByTimeAsync(1_900);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(200);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      await pending;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("caps a Retry-After on a running answer", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetch = runningThenSucceeded(1, { "retry-after": "3600" });
+      const client = newClient(fetch, NO_POLL_DELAY);
+
+      const pending = client.tables.query("SELECT n FROM events");
+      await vi.advanceTimersByTimeAsync(MAX_POLL_DELAY_MS - 100);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(200);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      await pending;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("aborts a wait between polls", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetch = runningThenSucceeded(1);
+      const client = newClient(fetch);
+      const controller = new AbortController();
+
+      const pending = client.tables.query("SELECT n FROM events", {
+        signal: controller.signal,
+      });
+      const expectation = expect(pending).rejects.toMatchObject({
+        code: "MEDALLION_ABORTED",
+      });
+      await vi.advanceTimersByTimeAsync(50);
+      controller.abort();
+      await expectation;
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("paginates rows across pages without exposing page tokens", async () => {
     const fetch = vi
       .fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
@@ -356,7 +466,7 @@ describe("tables.query", () => {
       async (_input: RequestInfo | URL, _init?: RequestInit) =>
         jsonResponse({ name: QUERY_NAME, state: "RUNNING" }),
     );
-    const client = newClient(fetch);
+    const client = newClient(fetch, NO_POLL_DELAY);
 
     await expect(
       client.tables.query("SELECT sleep(3600)"),

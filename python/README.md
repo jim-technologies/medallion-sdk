@@ -142,8 +142,11 @@ success, so retries are safe.
 
 Queries run one statement in the declared ClickHouse SQL dialect, verbatim —
 this is not an ORM or a query builder. The call is synchronous first; while
-the server reports the query as running the SDK polls transparently, and
-iterating the result walks every page without exposing page tokens:
+the server reports the query as running the SDK polls transparently, paced by
+the client's retry backoff (0.2 s doubling to 2 s by default, whether or not
+retries are enabled; a `Retry-After` on a running answer replaces that wait,
+up to 30 s), and iterating the result walks every page without exposing page
+tokens:
 
 ```python
 result = client.tables.query(

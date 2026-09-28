@@ -35,6 +35,9 @@ from .tracing import (
 )
 
 DEFAULT_TIMEOUT_SECONDS = 30.0
+# A server's Retry-After on a still-running answer may slow polling down to this
+# interval and no further, so a poll loop never parks its caller indefinitely.
+MAX_POLL_DELAY_SECONDS = 30.0
 MAX_CONNECT_TIMEOUT_MS = 9_999_999_999
 MAX_RESPONSE_BYTES = 64 << 20
 _WORKSPACE_ID_PATTERN = re.compile(r"^ws_[0-9a-hjkmnp-tv-z]{26}$", re.ASCII)
@@ -85,7 +88,10 @@ class _ResponseTooLargeError(Exception):
 
 @dataclass(frozen=True)
 class RetryConfig:
-    """Bounded retry settings for idempotent ingestion and readback calls."""
+    """Bounded retry settings for idempotent ingestion and readback calls.
+
+    The same backoff paces ``tables.query()`` polls of a running query.
+    """
 
     max_attempts: int = 1
     initial_backoff: float = 0.2
@@ -125,6 +131,8 @@ class ResponseEnvelope:
     body: Mapping[str, Any]
     request_id: str | None = None
     attempts: int = 1
+    # Seconds from a Retry-After header on the successful response, if any.
+    retry_after: float | None = None
 
 
 class _RequestClient:
@@ -214,6 +222,38 @@ class _RequestClient:
     def base_url(self) -> str:
         return self._base_url
 
+    def poll_delay(self, poll: int, retry_after: float | None) -> float:
+        """Seconds to wait before poll number ``poll`` of a still-running call.
+
+        The schedule is the configured retry backoff (``initial_backoff``
+        doubling to ``max_backoff``, with jitter). A ``Retry-After`` on the
+        still-running answer replaces it, capped at ``MAX_POLL_DELAY_SECONDS``.
+        """
+
+        return min(
+            MAX_POLL_DELAY_SECONDS, _backoff_delay(self._retry, poll, retry_after)
+        )
+
+    def wait_before_poll(
+        self,
+        poll: int,
+        retry_after: float | None,
+        cancellation_event: Event | None,
+    ) -> None:
+        """Pause for ``poll_delay``; a set ``cancellation_event`` cancels it."""
+
+        _raise_if_cancelled(cancellation_event)
+        delay = self.poll_delay(poll, retry_after)
+        if delay <= 0:
+            return
+        if cancellation_event is None:
+            time.sleep(delay)
+        elif cancellation_event.wait(delay):
+            raise MedallionError(
+                "Medallion request was cancelled.",
+                code="MEDALLION_CANCELLED",
+            )
+
     def identity_headers(self) -> dict[str, str]:
         """The credential and workspace headers, and nothing else.
 
@@ -278,6 +318,7 @@ class _RequestClient:
             body={},
             request_id=envelope.request_id,
             attempts=envelope.attempts,
+            retry_after=envelope.retry_after,
         )
 
     def _post(
@@ -377,6 +418,9 @@ class _RequestClient:
                             body={"__raw__": raw},
                             request_id=request_id,
                             attempts=attempt,
+                            retry_after=_parse_retry_after(
+                                http_response.headers.get("retry-after")
+                            ),
                         )
                 except HTTPError as exc:
                     request_id = _request_id(
@@ -580,12 +624,19 @@ def _retry_delay(
     attempt: int,
     retry_after: str | None,
 ) -> float:
-    parsed_retry_after = _parse_retry_after(retry_after)
-    if parsed_retry_after is not None:
+    return _backoff_delay(config, attempt, _parse_retry_after(retry_after))
+
+
+def _backoff_delay(
+    config: RetryConfig,
+    attempt: int,
+    retry_after: float | None,
+) -> float:
+    if retry_after is not None:
         # Retry-After is server guidance, not client backoff input. Honor it as
-        # provided; the caller declines the retry when it cannot fit the total
-        # request deadline.
-        return parsed_retry_after
+        # provided; a retry is declined when it cannot fit the total request
+        # deadline, and a poll caps it at MAX_POLL_DELAY_SECONDS.
+        return retry_after
     base = min(config.max_backoff, config.initial_backoff * (2 ** (attempt - 1)))
     jitter = base * config.jitter_ratio
     return min(

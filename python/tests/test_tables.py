@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import base64
 import io
+import itertools
 import json
 import math
 import re
 import threading
+import time
 import unittest
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -14,7 +16,8 @@ from typing import Any
 import polars as pl
 import pyarrow as pa
 
-from medallion import MedallionClient, MedallionError, TableColumn
+from medallion import MedallionClient, MedallionError, RetryConfig, TableColumn
+from medallion.request import MAX_POLL_DELAY_SECONDS, _RequestClient
 
 WORKSPACE_ID = "ws_01jz9q5g6rsf7r5ar4rah1b2c3"
 INGEST_SERVICE = "/medallion.ingest.v1.MedallionIngestService"
@@ -28,13 +31,17 @@ SCHEMA = [
 ]
 
 Responder = Callable[[str, dict[str, Any]], dict[str, Any]]
+HeaderResponder = Callable[[str, dict[str, Any]], dict[str, str]]
 
 
 class IngestServer:
     """Captures ingest requests and answers from a scripted responder."""
 
-    def __init__(self, responder: Responder) -> None:
+    def __init__(
+        self, responder: Responder, headers: HeaderResponder | None = None
+    ) -> None:
         self.responder = responder
+        self.headers = headers
         self.requests: list[dict[str, Any]] = []
 
     def __enter__(self) -> IngestServer:
@@ -45,12 +52,20 @@ class IngestServer:
                 length = int(self.headers.get("content-length", "0"))
                 body = json.loads(self.rfile.read(length).decode("utf-8"))
                 outer.requests.append(
-                    {"path": self.path, "headers": self.headers, "body": body}
+                    {
+                        "path": self.path,
+                        "headers": self.headers,
+                        "body": body,
+                        "received": time.monotonic(),
+                    }
                 )
                 payload = outer.responder(self.path, body)
                 self.send_response(200)
                 self.send_header("content-type", "application/json")
                 self.send_header("x-request-id", "req_ingest")
+                if outer.headers is not None:
+                    for name, value in outer.headers(self.path, body).items():
+                        self.send_header(name, value)
                 self.end_headers()
                 self.wfile.write(json.dumps(payload).encode("utf-8"))
 
@@ -73,12 +88,30 @@ class IngestServer:
         return f"http://{host}:{port}"
 
 
-def _client(server: IngestServer) -> MedallionClient:
+def _client(server: IngestServer, retry: RetryConfig | None = None) -> MedallionClient:
     return MedallionClient(
         base_url=server.url,
         api_key="fixture-api-key",
         workspace_id=WORKSPACE_ID,
+        retry=retry,
     )
+
+
+def _gaps(server: IngestServer) -> list[float]:
+    received = [request["received"] for request in server.requests]
+    return [later - earlier for earlier, later in itertools.pairwise(received)]
+
+
+def _running_then_succeeded(running: int) -> Responder:
+    calls = {"count": 0}
+
+    def responder(_path: str, _body: dict[str, Any]) -> dict[str, Any]:
+        calls["count"] += 1
+        if calls["count"] <= running:
+            return {"name": QUERY_NAME, "state": "RUNNING"}
+        return {"name": QUERY_NAME, "state": "SUCCEEDED", "rows": [{"n": 1}]}
+
+    return responder
 
 
 def _accept_rows(count: int) -> Responder:
@@ -309,6 +342,61 @@ class TableQueryTests(unittest.TestCase):
                 server.requests[1]["path"], f"{INGEST_SERVICE}/GetQueryResults"
             )
             self.assertEqual(server.requests[1]["body"]["name"], QUERY_NAME)
+
+    def test_polls_wait_the_retry_backoff_between_requests(self) -> None:
+        retry = RetryConfig(initial_backoff=0.05, max_backoff=0.08, jitter_ratio=0)
+        with IngestServer(_running_then_succeeded(3)) as server:
+            client = _client(server, retry)
+            result = client.tables.query("SELECT n FROM events")
+            self.assertEqual(list(result.rows()), [{"n": 1}])
+            gaps = _gaps(server)
+        # Backoff doubles from initial_backoff and holds at max_backoff.
+        self.assertEqual(len(gaps), 3)
+        for gap, minimum in zip(gaps, (0.05, 0.08, 0.08), strict=True):
+            self.assertGreaterEqual(gap, minimum - 0.005)
+
+    def test_retry_after_on_a_running_answer_replaces_the_backoff(self) -> None:
+        def headers(path: str, _body: dict[str, Any]) -> dict[str, str]:
+            return {"retry-after": "1"} if path.endswith("/RunQuery") else {}
+
+        retry = RetryConfig(initial_backoff=0, max_backoff=0)
+        with IngestServer(_running_then_succeeded(1), headers) as server:
+            client = _client(server, retry)
+            result = client.tables.query("SELECT n FROM events")
+            self.assertEqual(list(result.rows()), [{"n": 1}])
+            gaps = _gaps(server)
+        self.assertEqual(len(gaps), 1)
+        self.assertGreaterEqual(gaps[0], 0.995)
+
+    def test_poll_delay_follows_the_backoff_and_caps_retry_after(self) -> None:
+        requests = _RequestClient(
+            base_url="https://api.example.com",
+            api_key="fixture-api-key",
+            workspace_id=WORKSPACE_ID,
+            retry=RetryConfig(jitter_ratio=0),
+        )
+        self.assertEqual(
+            [requests.poll_delay(poll, None) for poll in (1, 2, 3, 4, 5)],
+            [0.2, 0.4, 0.8, 1.6, 2.0],
+        )
+        self.assertEqual(requests.poll_delay(1, 0.5), 0.5)
+        self.assertEqual(requests.poll_delay(1, 3_600.0), MAX_POLL_DELAY_SECONDS)
+
+    def test_cancellation_stops_polling_before_the_next_request(self) -> None:
+        cancelled = threading.Event()
+
+        def responder(_path: str, _body: dict[str, Any]) -> dict[str, Any]:
+            cancelled.set()
+            return {"name": QUERY_NAME, "state": "RUNNING"}
+
+        with IngestServer(responder) as server:
+            client = _client(server)
+            with self.assertRaises(MedallionError) as raised:
+                client.tables.query(
+                    "SELECT n FROM events", cancellation_event=cancelled
+                )
+            self.assertEqual(raised.exception.code, "MEDALLION_CANCELLED")
+            self.assertEqual(len(server.requests), 1)
 
     def test_rows_paginate_without_exposing_page_tokens(self) -> None:
         def responder(path: str, body: dict[str, Any]) -> dict[str, Any]:

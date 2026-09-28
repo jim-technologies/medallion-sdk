@@ -163,8 +163,11 @@ await medallion.tables.update({
 `query()` runs one statement in the declared ClickHouse SQL dialect. The call
 is synchronous first: if the server finishes within the request's synchronous
 budget, rows come back immediately; otherwise the SDK transparently polls
-`GetQueryResults` while the query state is `RUNNING`. Iterating the result
-walks every page — callers never touch a page token.
+`GetQueryResults` while the query state is `RUNNING`. Polls are paced by the
+client's retry backoff — 200 ms doubling to 2 s by default, whether or not
+retries are enabled — and a `Retry-After` on a running answer replaces that
+wait, up to 30 s. Iterating the result walks every page — callers never touch
+a page token.
 
 ```ts
 const result = await medallion.tables.query(

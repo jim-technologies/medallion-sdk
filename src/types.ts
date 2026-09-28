@@ -34,6 +34,7 @@ export interface RequestOptions {
 export interface RetryOptions {
   /** Total attempts, including the first. Defaults to 1 (no automatic retry). */
   maxAttempts?: number;
+  /** First backoff; retries and tables.query() polls double it to maxDelayMs. */
   initialDelayMs?: number;
   maxDelayMs?: number;
   /** Random delay spread from 0 through 1. */

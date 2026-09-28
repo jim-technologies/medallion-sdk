@@ -88,7 +88,8 @@ contract deduplicates on. An exact replay under the same key is absorbed
 without duplication and re-acknowledged with the original counts.
 
 Queries pass one statement through verbatim in the declared ClickHouse SQL
-dialect; poll `GetQueryResults` while the state is `RUNNING` and follow
+dialect; poll `GetQueryResults` while the state is `RUNNING`, waiting between
+polls with a bounded backoff rather than back to back, and follow
 `next_page_token` until it is empty. A `FAILED` state carries its cause in
 `error`. See [`examples/tables.go`](../examples/tables.go) for the complete
 flow.

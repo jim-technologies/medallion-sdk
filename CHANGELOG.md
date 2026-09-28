@@ -6,6 +6,14 @@ annotated `vX.Y.Z` tag.
 
 ## [Unreleased]
 
+- Pace query polling instead of issuing up to 1,000 back-to-back
+  `GetQueryResults` requests: `tables.query()` in TypeScript and Python waits
+  the client's retry backoff between polls (200 ms doubling to 2 s by default,
+  whether or not retries are enabled), and a `Retry-After` on a running answer
+  replaces that wait, capped at 30 s. Cancellation (`signal`,
+  `cancellation_event`) interrupts the wait. TypeScript low-level pollers get
+  the same pacing from `client.ingest.waitBeforeQueryPoll()`, and the Go
+  quickstart paces its caller-side loop the same way.
 - `make fmt` now formats `python/tests_workflows`, which `make validate`
   already lint-checks, and `.gitignore` covers a `.ruff_cache/` at any depth.
 - Keep `make validate` offline and hermetic, as `MAKEFILE-CONTRACT.md`
