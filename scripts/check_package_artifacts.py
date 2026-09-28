@@ -148,9 +148,6 @@ TYPESCRIPT_DIST_MODULES = frozenset(
 
 PYTHON_RUNTIME_FILES = frozenset(
     {
-        "buf/__init__.py",
-        "buf/validate/__init__.py",
-        "buf/validate/validate_pb2.py",
         "medallion/__init__.py",
         "medallion/client.py",
         "medallion/error_policy_generated.py",

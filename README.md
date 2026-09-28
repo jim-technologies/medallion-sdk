@@ -66,6 +66,11 @@ Go and Python installation commands are documented in
 [`go/README.md`](./go/README.md) and [`python/README.md`](./python/README.md).
 Pin a release tag or immutable commit rather than a branch.
 
+Python consumers upgrading from versions that bundled `buf.validate` must
+rebuild their virtual environment or uninstall every old schema owner first.
+Follow the [Python migration instructions](./python/README.md) before upgrading;
+an ordinary in-place pip upgrade can remove the shared dependency's files.
+
 The install lines name the newest release tag, and only ever a tag that
 exists (`make version-check` fails otherwise). `VERSION` names the next
 release; the `[Unreleased]` section of [`CHANGELOG.md`](./CHANGELOG.md) lists
@@ -218,7 +223,7 @@ query = medallion.workflows.query_store()  # a temporaless ConnectQueryStore
 await run(store, Options(workflow_id="greet", run_id="1"), request, Reply, greet)
 ```
 
-Install the extra: `medallion[workflows]`, which pins Temporaless v0.12.0.
+Install the extra: `medallion[workflows]`, which pins Temporaless v0.12.2.
 The workspace is bound at client construction and travels as a header; no
 storage request body carries it. Caller-supplied ConnectRPC interceptors
 (retry, tracing, logging) are forwarded and cannot displace those headers.

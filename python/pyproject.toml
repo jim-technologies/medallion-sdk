@@ -25,8 +25,10 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
+  "bufbuild-protovalidate-protocolbuffers-python @ https://buf.build/gen/python/bufbuild-protovalidate-protocolbuffers-python/bufbuild_protovalidate_protocolbuffers_python-36.2.0.1.20260825204119+511051f7f437-py3-none-any.whl#sha256=1fc540461329e0768d897fb7641d7bd42eaf6a0409caed93ba8b968e07f89551",
+  "bufbuild-protovalidate-protocolbuffers-pyi @ https://buf.build/gen/python/bufbuild-protovalidate-protocolbuffers-pyi/bufbuild_protovalidate_protocolbuffers_pyi-36.2.0.1.20260825204119+511051f7f437-py3-none-any.whl#sha256=4bce3808f220e4476cc6b2b82bcbd55aae608161837576aacb6e48c13a0cfcd6",
   "opentelemetry-api>=1.44.0,<2",
-  "protobuf>=7.35.1,<8",
+  "protobuf>=7.36.2,<8",
 ]
 
 [project.optional-dependencies]
@@ -42,23 +44,15 @@ polars = [
 # commit recorded in medallion.workflows, and the compat test fails when the
 # installed contract drifts from what this SDK wraps.
 workflows = [
-  "temporaless @ git+https://github.com/jim-technologies/temporaless.git@f70cbd47779ac7fdf2101ee52954f3ac8451fc5b#subdirectory=core/py",
+  "temporaless @ git+https://github.com/jim-technologies/temporaless.git@136fdf5b5fb5ec9fc30f1e58b3fd42445b123201#subdirectory=core/py",
 ]
 
 [dependency-groups]
 # The dataframe conveniences are exercised by the unit tests, so the dev
 # environment installs the same optional stack consumers get from
 # medallion[polars].
-#
-# medallion[workflows] is deliberately absent here. Temporaless depends on
-# protovalidate, which needs a newer `buf.validate` than the one this SDK
-# vendors from its attested contract bundle. A wheel install resolves that to
-# the superset and both packages work, but an editable checkout shadows it
-# with the vendored projection. `make test-workflows` therefore runs the
-# workflows suite against a built wheel, the way a consumer installs it; it
-# installs Temporaless over the network, so it is an opt-in tier outside the
-# offline `make validate` gate.
 dev = [
+  "medallion[workflows]",
   "polars>=1.20,<2",
   "pyarrow>=19,<26",
 ]
@@ -69,21 +63,19 @@ Repository = "https://github.com/jim-technologies/medallion-sdk"
 Issues = "https://github.com/jim-technologies/medallion-sdk/issues"
 
 [tool.hatch.metadata]
-# The workflows extra pins Temporaless to an immutable commit. This project is
-# git-install only, so a direct reference is the distribution model, not an
-# escape from one.
+# Temporaless uses an immutable Git commit; the shared Buf generated modules
+# use hashed official wheel URLs so consumers need no extra package index.
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/medallion", "src/buf"]
+packages = ["src/medallion"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["/tests", "/tests_workflows", "/uv.lock"]
+exclude = ["/tests", "/uv.lock"]
 
 [tool.ruff]
 target-version = "py314"
 extend-exclude = [
-  "src/buf/validate/validate_pb2.py",
   "src/medallion/connect/v1/connect_pb2.py",
   "src/medallion/ingest/v1/ingest_pb2.py",
 ]

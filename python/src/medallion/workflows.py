@@ -32,8 +32,8 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 # The exact Temporaless release this SDK is built and gated against. Changing
 # either value requires re-running the compat check, which fails when the
 # installed package no longer matches the contract recorded below.
-TEMPORALESS_VERSION = "0.12.0"
-TEMPORALESS_COMMIT = "f70cbd47779ac7fdf2101ee52954f3ac8451fc5b"
+TEMPORALESS_VERSION = "0.12.2"
+TEMPORALESS_COMMIT = "136fdf5b5fb5ec9fc30f1e58b3fd42445b123201"
 
 RECORD_STORE_SERVICE = "temporaless.v1.RecordStoreService"
 RECORD_QUERY_SERVICE = "temporaless.v1.RecordQueryService"
@@ -297,17 +297,5 @@ def _import_connectstore() -> Any:
             "The workflows surface requires Temporaless "
             f"{TEMPORALESS_VERSION}; install 'medallion[workflows]'.",
             code="MEDALLION_TEMPORALESS_REQUIRED",
-        ) from error
-    except AttributeError as error:
-        # Both packages own the top-level `buf` module. This SDK vendors a
-        # reduced buf.validate from its attested contract bundle, and
-        # Temporaless's protovalidate needs the complete one, so whichever
-        # was installed last wins. Say so, instead of surfacing an unrelated
-        # AttributeError from deep inside protovalidate.
-        raise MedallionError(
-            "Temporaless could not import because this SDK's vendored "
-            "buf.validate is shadowing the complete one it needs. Reinstall "
-            "Temporaless after medallion so its copy resolves last.",
-            code="MEDALLION_TEMPORALESS_INCOMPATIBLE",
         ) from error
     return connectstore

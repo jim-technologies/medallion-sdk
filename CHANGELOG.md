@@ -9,7 +9,7 @@ annotated `vX.Y.Z` tag.
 - Dependency currency: the TypeScript SDK pins invariantprotocol v0.16.5
   (commit `c646cd03`) and moves `@bufbuild/protobuf` to 2.15.0, the release
   invariantprotocol now requires, so one copy is installed; the workflows
-  extra pins Temporaless v0.12.0 (commit `f70cbd47`), which moves the Python
+  extra pins Temporaless v0.12.2 (commit `136fdf5b`), which moves the Python
   lock to `connectrpc` 0.12.1 and protobuf 7.36.2. The `temporaless.v1`
   storage contract the factory wraps is unchanged between the two Temporaless
   releases: `temporaless.proto` differs only by `buf format` layout, and the
@@ -47,13 +47,24 @@ annotated `vX.Y.Z` tag.
   `cancellation_event`) interrupts the wait. TypeScript low-level pollers get
   the same pacing from `client.ingest.waitBeforeQueryPoll()`, and the Go
   quickstart paces its caller-side loop the same way.
-- `make fmt` now formats `python/tests_workflows`, which `make validate`
-  already lint-checks, and `.gitignore` covers a `.ruff_cache/` at any depth.
-- Keep `make validate` offline and hermetic, as `MAKEFILE-CONTRACT.md`
-  requires: `make test-workflows` leaves `make test` and becomes an opt-in
-  tier beside `make test-deployed`, because it installs Temporaless from
-  GitHub. The offline guard that holds the Temporaless pin in every file still
-  runs in the gate (`make version-check`).
+- Stop bundling Python's `buf.validate` namespace. The SDK and its pinned
+  Temporaless dependency use the same official Buf Python and typing wheels,
+  pinned by URL and SHA256. Connect validation rules, generated descriptors,
+  and the candidate producer attestation are unchanged. The obsolete
+  `MEDALLION_TEMPORALESS_INCOMPATIBLE` collision workaround is removed.
+- Restore workflows to the ordinary `make validate` suite. The tests live
+  under `python/tests`; clean-wheel checks exercise both new-package install
+  orders, single shared-schema ownership, uninstall/reinstall, and the
+  supported legacy upgrade path. Dependency installation may need network
+  access; workflow calls use local fixtures. Deployed tests remain opt-in.
+- Upgrading an environment with older SDK or Temporaless wheels requires a
+  fresh environment or uninstalling all previous `buf.validate` owners before
+  installing the new versions. Ordinary pip upgrades can otherwise remove
+  the new shared files; the Python README documents the migration.
+- Python auditing installs the hash-locked runtime in an isolated environment
+  and audits its package metadata, including the direct Buf wheels. It refuses
+  a report missing any installed dependency; the advisory source and strict
+  failure policy remain unchanged.
 - Expose Medallion as a durable-execution backend through `medallion.workflows`
   (Python): `store()` and `query_store()` return Temporaless's own
   `ConnectStore` / `ConnectQueryStore` pointed at the configured Medallion
@@ -63,9 +74,9 @@ annotated `vX.Y.Z` tag.
   `temporaless.v1` RPCs are restated. `capabilities()` surfaces the
   `GetStoreCapabilities` handshake and `require_capabilities()` turns a backend
   without atomic create-if-absent into a startup error. Ships as the
-  `medallion[workflows]` extra, pinning Temporaless v0.12.0 by immutable
+  `medallion[workflows]` extra, pinning Temporaless v0.12.2 by immutable
   commit; `scripts/check_versions.py` holds that pin across every file naming
-  it inside the gate, and the opt-in `make test-workflows` tier runs the suite
+  it inside the gate, and the included `make test-workflows` target runs the suite
   against a built wheel so a drifting upstream contract fails it. No operator
   client is shipped: `PutEvent`, the bounded deletions, and `Sweep` are
   enumerated in `OPERATOR_METHODS` and stay behind a separate operator

@@ -46,7 +46,6 @@ generated_files=(
   "go/gen/medallion/connect/v1/connect.pb.go"
   "go/gen/medallion/ingest/v1/ingest.pb.go"
   "proto/ingest-v1.descriptor.binpb"
-  "python/src/buf/validate/validate_pb2.py"
   "python/src/medallion/connect/v1/connect_pb2.py"
   "python/src/medallion/ingest/v1/ingest_pb2.py"
 )
@@ -54,6 +53,13 @@ for relative in "${generated_files[@]}"; do
   if ! cmp -s "$relative" "$tmp/generated/$relative"; then
     echo "$relative is stale; run make proto-bindings" >&2
     diff -u "$relative" "$tmp/generated/$relative" || true
+    exit 1
+  fi
+done
+
+for directory in python/src/buf "$tmp/generated/python/src/buf"; do
+  if [[ -d "$directory" ]] && [[ -n "$(find "$directory" ! -type d ! -path '*/__pycache__/*' -print -quit)" ]]; then
+    echo "Python generation must not own the shared buf namespace" >&2
     exit 1
   fi
 done

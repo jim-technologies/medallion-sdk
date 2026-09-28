@@ -42,11 +42,12 @@ documented deviations:
 1. `option go_package` names this repository's generated Go package. The
    upstream module path is never vendored.
 2. The upstream `(buf.validate.*)` field and message rules are omitted, along
-   with the `buf/validate/validate.proto` import. This repository vendors only
-   a narrow generated projection of those rules for the connect contract, and
-   it does not carry the rule types the ingest contract uses. The bounds and
+   with the `buf/validate/validate.proto` import. The original SDK projection
+   carried only the connect contract's reachable rule types. The bounds and
    patterns those options declared are restated in the field comments, and the
-   hand-written clients enforce them as validation constants.
+   hand-written clients enforce them as validation constants. Python now uses
+   Buf's full shared validation package, but that packaging change does not
+   alter the attested descriptors or restore omitted ingest annotations.
 3. The `(google.api.http)` annotations are omitted, along with the
    `google/api/annotations.proto` import. This repository has no `buf.lock`
    and no vendored googleapis module, so the dependency is unavailable; the

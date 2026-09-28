@@ -22,6 +22,22 @@ uv add "medallion[polars] @ git+https://github.com/jim-technologies/medallion-sd
 All language SDKs use the repository-root version and the same `vX.Y.Z` tag.
 Use a full commit SHA when a production build requires commit-level pinning.
 
+Before upgrading an environment with older SDK or Temporaless wheels, create
+a fresh virtual environment or uninstall **all** distributions that own
+`buf/validate/validate_pb2.py`. Ordinary in-place pip upgrades can install the
+new shared dependency and then remove its files while uninstalling an old
+owner. For an environment using both libraries:
+
+```sh
+python -m pip uninstall -y medallion temporaless
+python -m pip install "medallion[workflows] @ git+https://github.com/jim-technologies/medallion-sdk.git@COMMIT_SHA#subdirectory=python"
+```
+
+Include any other old owner in the uninstall step and install only versions
+that use the shared dependency. Rebuild an environment whose imports were
+already broken by an ordinary upgrade. Rollback to an older version also
+requires a fresh environment; do not mix vendored and shared schema owners.
+
 An administrator first provisions the integration through Medallion's control
 plane. Your server application receives a Medallion API base URL, scoped API
 key, workspace ID, and connector ID:
@@ -57,7 +73,7 @@ Medallion can back a Temporaless workflow runtime. This SDK ships no storage
 client of its own: `medallion.workflows` returns Temporaless's own clients,
 pointed at your Medallion endpoint with this client's credential and
 workspace attached as headers. Install the `medallion[workflows]` extra,
-which pins Temporaless v0.12.0.
+which pins Temporaless v0.12.2.
 
 ```python
 store = client.workflows.store()        # temporaless ConnectStore
@@ -83,11 +99,11 @@ separate operator credential for the operator-only RPCs
 (`medallion.workflows.OPERATOR_METHODS`): `PutEvent`, the bounded deletions,
 and `Sweep`. This SDK ships no operator client.
 
-A caveat when installing: Temporaless depends on protovalidate, which needs a
-newer `buf.validate` than this SDK vendors from its attested contract bundle,
-and both packages own that module. Install Temporaless **after** medallion so
-its complete copy resolves last. The wrong order raises
-`MEDALLION_TEMPORALESS_INCOMPATIBLE` with that instruction.
+The SDK and its pinned Temporaless release use one shared `buf.validate`
+distribution from Buf. Its generated Python and typing wheels are pinned by
+immutable URL and SHA256; clean pip installs need no extra index or special
+installation order. Neither new library bundles a competing copy of that
+module; the legacy upgrade procedure above still applies.
 
 See [`examples/workflows.py`](../examples/workflows.py) for a runnable
 quickstart.

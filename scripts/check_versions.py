@@ -25,8 +25,8 @@ INVARIANT_PROTOCOL_LOCATOR_PREFIX = (
     "https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/"
 )
 INVARIANT_PROTOCOL_LOCATOR = INVARIANT_PROTOCOL_LOCATOR_PREFIX + INVARIANT_PROTOCOL_SHA
-TEMPORALESS_VERSION = "0.12.0"
-TEMPORALESS_SHA = "f70cbd47779ac7fdf2101ee52954f3ac8451fc5b"
+TEMPORALESS_VERSION = "0.12.2"
+TEMPORALESS_SHA = "136fdf5b5fb5ec9fc30f1e58b3fd42445b123201"
 TEMPORALESS_REQUIREMENT = (
     "temporaless @ git+https://github.com/jim-technologies/temporaless.git@"
     + TEMPORALESS_SHA

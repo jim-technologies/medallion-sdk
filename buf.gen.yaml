@@ -9,6 +9,5 @@ plugins:
       - paths=source_relative
   - protoc_builtin: python
     out: python/src
-    include_imports: true
 inputs:
   - directory: proto

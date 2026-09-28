@@ -18,16 +18,15 @@ workflow runs `flox activate -- make audit`; every toolchain comes from
 requires the immutable contract attestation, the annotated-tag checks, and a
 CHANGELOG whose first release heading is the tagged version.
 
-`make validate` is offline and hermetic, so two opt-in tiers sit outside it
-and are never run by CI:
+`make validate` uses locked dependencies and local test services. It includes
+the durable-execution suite in the editable environment and against a clean
+built wheel, with installation-order and shared-schema ownership checks.
+Dependency installation can need network access; tests never need a deployed
+service. The deployed tier stays opt-in and is never run by CI:
 
 - `make test-deployed`, the deployed smoke test. Invoke it from a maintainer
   machine with caller-supplied `MEDALLION_SMOKE_*` environment variables;
   `scripts/check_smoke_env.sh` verifies the set is complete.
-- `make test-workflows`, the durable-execution suite. It installs the pinned
-  Temporaless release from GitHub into a scratch virtualenv and runs
-  `python/tests_workflows` against a built wheel. Run it whenever the
-  Temporaless pin or `medallion.workflows` changes, and before every release.
 
 ## Versions and Releases
 
@@ -78,8 +77,8 @@ Every language implementation supports the same bounded customer surfaces:
   `ConnectQueryStore`. Do not write a storage client here, and do not restate,
   subset, or re-export the `RecordStoreService` / `RecordQueryService` RPCs.
   The pinned release is recorded in `medallion.workflows` and held there by
-  `scripts/check_versions.py` inside the gate; the opt-in
-  `make test-workflows` tier fails when the installed contract drifts from
+  `scripts/check_versions.py` inside the gate; the
+  `make test-workflows` integration fails when the installed contract drifts from
   it. This SDK ships no operator client: `PutEvent`, the
   bounded deletions, and `Sweep` stay behind a separately provisioned operator
   credential and the server's per-method authorization.
@@ -166,8 +165,7 @@ To publish the one root `vX.Y.Z` release tag:
 3. Sync a reviewed, immutable external-ingestion contract export and run
    `flox activate -- make contract-release-check`; a mutable or unattested
    export is never acceptable on a release tag.
-4. Run `flox activate -- make validate` and
-   `flox activate -- make test-workflows`.
+4. Run `flox activate -- make validate`, including clean-wheel workflows.
 5. Run `flox activate -- make git-install-check`; this installs the exact tree
    by both full commit SHA and the synthetic root release tag in clean Go,
    Python, and TypeScript consumers.

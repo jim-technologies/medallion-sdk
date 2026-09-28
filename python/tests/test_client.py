@@ -7,6 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 from buf.validate import validate_pb2
+
 from medallion import MedallionClient, MedallionError, TracingConfig, connect_pb2
 from medallion.client import _audit_event_from_connect
 

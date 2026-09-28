@@ -7,6 +7,42 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "bufbuild-protovalidate-protocolbuffers-pyi"
+version = "36.2.0.1.20260825204119+511051f7f437"
+source = { url = "https://buf.build/gen/python/bufbuild-protovalidate-protocolbuffers-pyi/bufbuild_protovalidate_protocolbuffers_pyi-36.2.0.1.20260825204119+511051f7f437-py3-none-any.whl" }
+dependencies = [
+    { name = "protobuf" },
+    { name = "types-protobuf" },
+]
+wheels = [
+    { url = "https://buf.build/gen/python/bufbuild-protovalidate-protocolbuffers-pyi/bufbuild_protovalidate_protocolbuffers_pyi-36.2.0.1.20260825204119+511051f7f437-py3-none-any.whl", hash = "sha256:4bce3808f220e4476cc6b2b82bcbd55aae608161837576aacb6e48c13a0cfcd6" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "protobuf", specifier = ">=3.20" },
+    { name = "types-protobuf" },
+]
+
+[[package]]
+name = "bufbuild-protovalidate-protocolbuffers-python"
+version = "36.2.0.1.20260825204119+511051f7f437"
+source = { url = "https://buf.build/gen/python/bufbuild-protovalidate-protocolbuffers-python/bufbuild_protovalidate_protocolbuffers_python-36.2.0.1.20260825204119+511051f7f437-py3-none-any.whl" }
+dependencies = [
+    { name = "bufbuild-protovalidate-protocolbuffers-pyi" },
+    { name = "protobuf" },
+]
+wheels = [
+    { url = "https://buf.build/gen/python/bufbuild-protovalidate-protocolbuffers-python/bufbuild_protovalidate_protocolbuffers_python-36.2.0.1.20260825204119+511051f7f437-py3-none-any.whl", hash = "sha256:1fc540461329e0768d897fb7641d7bd42eaf6a0409caed93ba8b968e07f89551" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "bufbuild-protovalidate-protocolbuffers-pyi", specifier = ">=36.2.0.1.20260825204119" },
+    { name = "protobuf", specifier = ">=3.20" },
+]
+
+[[package]]
 name = "cel-python"
 version = "0.5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -89,6 +125,8 @@ name = "medallion"
 version = "0.4.0"
 source = { editable = "." }
 dependencies = [
+    { name = "bufbuild-protovalidate-protocolbuffers-pyi" },
+    { name = "bufbuild-protovalidate-protocolbuffers-python" },
     { name = "opentelemetry-api" },
     { name = "protobuf" },
 ]
@@ -104,22 +142,26 @@ workflows = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "medallion", extra = ["workflows"] },
     { name = "polars" },
     { name = "pyarrow" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "bufbuild-protovalidate-protocolbuffers-pyi", url = "https://buf.build/gen/python/bufbuild-protovalidate-protocolbuffers-pyi/bufbuild_protovalidate_protocolbuffers_pyi-36.2.0.1.20260825204119+511051f7f437-py3-none-any.whl" },
+    { name = "bufbuild-protovalidate-protocolbuffers-python", url = "https://buf.build/gen/python/bufbuild-protovalidate-protocolbuffers-python/bufbuild_protovalidate_protocolbuffers_python-36.2.0.1.20260825204119+511051f7f437-py3-none-any.whl" },
     { name = "opentelemetry-api", specifier = ">=1.44.0,<2" },
     { name = "polars", marker = "extra == 'polars'", specifier = ">=1.20,<2" },
-    { name = "protobuf", specifier = ">=7.35.1,<8" },
+    { name = "protobuf", specifier = ">=7.36.2,<8" },
     { name = "pyarrow", marker = "extra == 'polars'", specifier = ">=19,<26" },
-    { name = "temporaless", marker = "extra == 'workflows'", git = "https://github.com/jim-technologies/temporaless.git?subdirectory=core%2Fpy&rev=f70cbd47779ac7fdf2101ee52954f3ac8451fc5b" },
+    { name = "temporaless", marker = "extra == 'workflows'", git = "https://github.com/jim-technologies/temporaless.git?subdirectory=core%2Fpy&rev=136fdf5b5fb5ec9fc30f1e58b3fd42445b123201" },
 ]
 provides-extras = ["polars", "workflows"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "medallion", extras = ["workflows"] },
     { name = "polars", specifier = ">=1.20,<2" },
     { name = "pyarrow", specifier = ">=19,<26" },
 ]
@@ -383,14 +425,25 @@ wheels = [
 
 [[package]]
 name = "temporaless"
-version = "0.12.0"
-source = { git = "https://github.com/jim-technologies/temporaless.git?subdirectory=core%2Fpy&rev=f70cbd47779ac7fdf2101ee52954f3ac8451fc5b#f70cbd47779ac7fdf2101ee52954f3ac8451fc5b" }
+version = "0.12.2"
+source = { git = "https://github.com/jim-technologies/temporaless.git?subdirectory=core%2Fpy&rev=136fdf5b5fb5ec9fc30f1e58b3fd42445b123201#136fdf5b5fb5ec9fc30f1e58b3fd42445b123201" }
 dependencies = [
+    { name = "bufbuild-protovalidate-protocolbuffers-pyi" },
+    { name = "bufbuild-protovalidate-protocolbuffers-python" },
     { name = "connectrpc" },
     { name = "croniter" },
     { name = "opendal" },
     { name = "protobuf" },
     { name = "protovalidate" },
+]
+
+[[package]]
+name = "types-protobuf"
+version = "7.35.1.20260906"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e1/6c/e3e5b3e10bc328126a39637c138f9ebfd734bf14342b9f3540039b4ab995/types_protobuf-7.35.1.20260906.tar.gz", hash = "sha256:efd1a3862d4c967dad5512ef8d56b1530ac84f182c41735b94004756518c4998", size = 69895, upload-time = "2026-09-06T06:35:28.308Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/44/4e/f63e826c68f77ef875506d72f225918800346545ee99847bc28f3394f18d/types_protobuf-7.35.1.20260906-py3-none-any.whl", hash = "sha256:5155e48569e0dabff303fdf578db96cd31ea9a4a63b18018a4ceac6b0ae17462", size = 86419, upload-time = "2026-09-06T06:35:27.247Z" },
 ]
 
 [[package]]

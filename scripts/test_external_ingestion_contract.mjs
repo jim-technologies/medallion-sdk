@@ -383,7 +383,6 @@ test("generated-code check detects language binding drift", () => {
     "go/gen/medallion/ingest/v1/ingest.pb.go",
     "proto/ingest-v1.descriptor.binpb",
     "proto/medallion/ingest/v1/ingest.proto",
-    "python/src/buf/validate/validate_pb2.py",
     "python/src/medallion/connect/v1/connect_pb2.py",
     "python/src/medallion/ingest/v1/ingest_pb2.py",
     "src/connect-descriptor.ts",

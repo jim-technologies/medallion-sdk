@@ -15,7 +15,7 @@ GOVULNCHECK_VERSION ?= v1.7.0
 PIP_AUDIT_VERSION ?= 2.10.1
 # The Temporaless release the workflows surface wraps. scripts/check_versions.py
 # holds this to the pin recorded in every language.
-TEMPORALESS_COMMIT ?= f70cbd47779ac7fdf2101ee52954f3ac8451fc5b
+TEMPORALESS_COMMIT ?= 136fdf5b5fb5ec9fc30f1e58b3fd42445b123201
 
 .DEFAULT_GOAL := help
 
@@ -25,7 +25,7 @@ help: ## One-screen help (make help-all for every target)
 	@echo "Daily:"
 	@echo "  make fmt        autofix formatting, every language"
 	@echo "  make test       all tests (TS, Go, Python)"
-	@echo "  make validate   the full offline gate; exactly what CI runs"
+	@echo "  make validate   the full locked gate; exactly what CI runs"
 	@echo "  make build      build all SDK packages"
 	@echo "  make generate   regenerate schema-derived code"
 	@echo "  make release    tag vVERSION and push it, from a clean pushed tree"
@@ -94,7 +94,7 @@ public-surface: secret-check ## Guard the public surface: tracked content, paths
 check-examples: build ## Check the runnable TypeScript, Go, and Python quickstart examples.
 	scripts/check_examples.sh
 
-test: test-version test-contract-sync test-package-artifacts test-ts test-go test-python ## Run the offline suite (every language).
+test: test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-workflows ## Run the locked suite and clean-wheel workflow integration (every language).
 
 test-version: ## Test version synchronization and release-tag guardrails.
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/test_versions.py
@@ -115,7 +115,7 @@ test-go: ## Run Go tests.
 test-python: ## Run Python tests.
 	cd python && $(UV) run --locked python -m unittest discover tests
 
-test-workflows: ## Opt-in, networked: install the pinned Temporaless and run the durable-execution suite against a built wheel.
+test-workflows: build-python ## Test clean-wheel workflows and shared schema ownership against locked dependencies.
 	TEMPORALESS_COMMIT=$(TEMPORALESS_COMMIT) scripts/run_workflows_tests.sh
 
 test-deployed: node_modules/.medallion-install-stamp ## Run opt-in deployed smoke test against a locked-down workspace.
@@ -142,9 +142,9 @@ lint-go: ## Format-check and vet Go code.
 	scripts/lint_go.sh
 
 lint-python: ## Lint, format-check, and byte-compile authored Python code.
-	cd python && $(RUFF) check src tests tests_workflows
-	cd python && $(RUFF) format --check src tests tests_workflows
-	cd python && $(UV) run --locked python -m compileall -q src tests tests_workflows
+	cd python && $(RUFF) check src tests
+	cd python && $(RUFF) format --check src tests
+	cd python && $(UV) run --locked python -m compileall -q src tests
 
 lint-proto: ## Lint and format-check vendored protobuf contracts.
 	$(BUF) lint
@@ -166,8 +166,8 @@ fmt-go: ## Format Go code.
 	find go -type f -name '*.go' -exec gofmt -w {} +
 
 fmt-python: ## Apply safe Python lint fixes and formatting.
-	cd python && $(RUFF) check --fix src tests tests_workflows
-	cd python && $(RUFF) format src tests tests_workflows
+	cd python && $(RUFF) check --fix src tests
+	cd python && $(RUFF) format src tests
 
 fmt-proto: ## Format vendored protobuf contracts.
 	$(BUF) format proto --write
