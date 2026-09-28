@@ -6,6 +6,8 @@ annotated `vX.Y.Z` tag.
 
 ## [Unreleased]
 
+- `make fmt` now formats `python/tests_workflows`, which `make validate`
+  already lint-checks, and `.gitignore` covers a `.ruff_cache/` at any depth.
 - Keep `make validate` offline and hermetic, as `MAKEFILE-CONTRACT.md`
   requires: `make test-workflows` leaves `make test` and becomes an opt-in
   tier beside `make test-deployed`, because it installs Temporaless from

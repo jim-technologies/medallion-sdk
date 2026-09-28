@@ -187,8 +187,8 @@ fmt-go: ## Format Go code.
 	find go -type f -name '*.go' -exec gofmt -w {} +
 
 fmt-python: ## Apply safe Python lint fixes and formatting.
-	cd python && $(RUFF) check --fix src tests
-	cd python && $(RUFF) format src tests
+	cd python && $(RUFF) check --fix src tests tests_workflows
+	cd python && $(RUFF) format src tests tests_workflows
 
 fmt-proto: ## Format vendored protobuf contracts.
 	$(BUF) format proto --write
@@ -242,5 +242,5 @@ run: build-ts ## Smoke-test importing the built TypeScript SDK.
 
 clean: ## Remove generated build outputs and caches.
 	$(PNPM) clean
-	rm -rf coverage.out go/coverage.out python/dist python/.pytest_cache python/.ruff_cache
+	rm -rf coverage.out go/coverage.out .ruff_cache python/dist python/.pytest_cache python/.ruff_cache
 	find python -type d \( -name '__pycache__' -o -name '*.egg-info' \) -prune -exec rm -rf {} +

@@ -9,7 +9,7 @@ python/dist/
 python/*.egg-info/
 python/src/*.egg-info/
 python/.pytest_cache/
-python/.ruff_cache/
+.ruff_cache/
 python/.venv/
 
 *.test
