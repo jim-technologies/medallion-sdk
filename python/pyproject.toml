@@ -27,7 +27,7 @@ classifiers = [
 dependencies = [
   "bufbuild-protovalidate-protocolbuffers-python @ https://buf.build/gen/python/bufbuild-protovalidate-protocolbuffers-python/bufbuild_protovalidate_protocolbuffers_python-36.2.0.1.20260825204119+511051f7f437-py3-none-any.whl#sha256=1fc540461329e0768d897fb7641d7bd42eaf6a0409caed93ba8b968e07f89551",
   "bufbuild-protovalidate-protocolbuffers-pyi @ https://buf.build/gen/python/bufbuild-protovalidate-protocolbuffers-pyi/bufbuild_protovalidate_protocolbuffers_pyi-36.2.0.1.20260825204119+511051f7f437-py3-none-any.whl#sha256=4bce3808f220e4476cc6b2b82bcbd55aae608161837576aacb6e48c13a0cfcd6",
-  "opentelemetry-api>=1.44.0,<2",
+  "opentelemetry-api>=1.45.0,<2",
   "protobuf>=7.36.2,<8",
 ]
 
