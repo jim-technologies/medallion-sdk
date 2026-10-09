@@ -1,6 +1,6 @@
 module github.com/jim-technologies/medallion-sdk
 
-go 1.27.0
+go 1.27.2
 
 tool google.golang.org/protobuf/cmd/protoc-gen-go
 

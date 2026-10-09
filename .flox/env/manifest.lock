@@ -106,7 +106,7 @@
     "vars": {
       "GOENV": "off",
       "GOFLAGS": "-mod=readonly",
-      "GOTOOLCHAIN": "go1.27.0+auto"
+      "GOTOOLCHAIN": "go1.27.2+auto"
     },
     "options": {}
   },

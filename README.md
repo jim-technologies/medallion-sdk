@@ -53,7 +53,7 @@ Git tag. They are installed from Git only; this project is not published to
 npm, PyPI, or another language registry.
 
 Release tags use `vX.Y.Z` and must match `VERSION` for TypeScript, Go, and
-Python. Repository development is pinned to Go 1.27.0, pnpm 11.24.0, and
+Python. Repository development is pinned to Go 1.27.2, pnpm 11.24.0, and
 invariantprotocol v0.16.5 (commit
 `c646cd0326a72ce977cf9c221a678881f8c83ced`).
 

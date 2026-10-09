@@ -582,6 +582,12 @@ class VersionScriptsTest(unittest.TestCase):
 
     def test_checker_rejects_release_tag_with_unreleased_changes(self) -> None:
         version = (self.fixture / "VERSION").read_text().strip()
+        changelog = self.fixture / "CHANGELOG.md"
+        changelog.write_text(
+            changelog.read_text().replace(
+                "## [Unreleased]", "## [Unreleased]\n\n- Pending fixture change", 1
+            )
+        )
 
         result = self.run_script(
             "check_versions.py",

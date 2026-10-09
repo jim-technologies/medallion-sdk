@@ -44,6 +44,6 @@ gitleaks = { pkg-path = "gitleaks", pkg-group = "repo-tools" }
 buf = { pkg-path = "buf", version = "1.72.0", pkg-group = "buf", systems = ["aarch64-darwin", "aarch64-linux", "x86_64-linux"] }
 
 [vars]
-GOTOOLCHAIN = "go1.27.0+auto"
+GOTOOLCHAIN = "go1.27.2+auto"
 GOFLAGS = "-mod=readonly"
 GOENV = "off"

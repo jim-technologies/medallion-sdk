@@ -6,6 +6,10 @@ annotated `vX.Y.Z` tag.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-09
+
+- Go builds require the current 1.27.2 security patch. Public CI and audit
+  use the same SHA-pinned Flox 2.6.0 installer.
 - Dependency currency: the TypeScript SDK pins invariantprotocol v0.16.5
   (commit `c646cd03`) and moves `@bufbuild/protobuf` to 2.15.0, the release
   invariantprotocol now requires, so one copy is installed; the workflows
