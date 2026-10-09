@@ -1,5 +1,4 @@
 from .client import MedallionClient
-from .connect.v1 import connect_pb2
 from .errors import (
     KNOWN_ERROR_DOMAIN,
     KnownErrorReason,
@@ -20,22 +19,6 @@ from .tables import (
     TablesClient,
 )
 from .tracing import TracingConfig
-from .types import (
-    ActorRef,
-    AuditEventInput,
-    AuditOrigin,
-    AuditOutcome,
-    AuditRecordResponse,
-    AuditTrailEvent,
-    AuditTrailResponse,
-    CdcEventInput,
-    CdcPage,
-    CdcReadEvent,
-    EventRecordResponse,
-    PublishedAuditEventResult,
-    PublishedEventResult,
-    ResourceRef,
-)
 from .workflows import (
     OPERATOR_METHODS,
     RECORD_QUERY_METHODS,
@@ -49,17 +32,6 @@ from .workflows import (
 )
 
 __all__ = [
-    "ActorRef",
-    "AuditEventInput",
-    "AuditOrigin",
-    "AuditOutcome",
-    "AuditRecordResponse",
-    "AuditTrailEvent",
-    "AuditTrailResponse",
-    "CdcEventInput",
-    "CdcPage",
-    "CdcReadEvent",
-    "EventRecordResponse",
     "IngestClient",
     "KnownErrorReason",
     "KNOWN_ERROR_DOMAIN",
@@ -67,13 +39,10 @@ __all__ = [
     "MedallionClient",
     "MedallionError",
     "OPERATOR_METHODS",
-    "PublishedAuditEventResult",
-    "PublishedEventResult",
     "RECORD_QUERY_METHODS",
     "RECORD_QUERY_SERVICE",
     "RECORD_STORE_METHODS",
     "RECORD_STORE_SERVICE",
-    "ResourceRef",
     "RetryConfig",
     "StoreCapabilities",
     "Table",
@@ -87,7 +56,6 @@ __all__ = [
     "TEMPORALESS_VERSION",
     "TracingConfig",
     "WorkflowsClient",
-    "connect_pb2",
     "ingest_pb2",
     "stable_idempotency_key",
 ]

@@ -6,6 +6,22 @@ annotated `vX.Y.Z` tag.
 
 ## [Unreleased]
 
+- Prepare the 0.5.0 breaking source candidate: remove the deprecated
+  `medallion.connect.v1` CDC/audit clients, types, exports, bindings and
+  examples from every language. The seven ingest RPCs, tables, workspace
+  authentication and workflows remain supported. See
+  [the migration note](docs/migration-0.5.md).
+- Preserve the checksummed historical Connect proof in `archive/connect-v1`.
+  It does not attest ingest. Publication remains blocked by missing immutable
+  producer-issued ingest evidence and owner review of the intentional full
+  Buf breaking-check failure. No release tag is created by this preparation.
+- Authenticate the shared public-surface scanner and self-test by their exact
+  published paths and checksums during Git-install artifact verification; modified policy
+  bytes, copies at other paths and unrelated private references remain refused.
+- Add `make ingest-breaking-check` to compare the retained contract against
+  the fixed pre-removal commit and the real `main` baseline, without changing
+  or waiving the full compatibility gate.
+
 ## [0.4.0] - 2026-10-09
 
 - Pin `source-map-js` 1.2.2 in the locked build graph to address

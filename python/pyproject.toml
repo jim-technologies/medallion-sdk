@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "medallion"
-version = "0.4.0"
+version = "0.5.0"
 description = "Server-side Python SDK for getting data into and out of Medallion: tables, batch appends, and SQL queries."
 readme = "README.md"
 requires-python = ">=3.14"
@@ -13,7 +13,7 @@ license-files = ["LICENSE", "NOTICE"]
 authors = [
   { name = "Jim Technologies" }
 ]
-keywords = ["medallion", "tables", "ingestion", "clickhouse", "arrow", "cdc", "audit", "sdk"]
+keywords = ["medallion", "tables", "ingestion", "clickhouse", "arrow", "sdk"]
 classifiers = [
   "Private :: Do Not Upload",
   "Development Status :: 3 - Alpha",
@@ -76,14 +76,8 @@ exclude = ["/tests", "/uv.lock"]
 [tool.ruff]
 target-version = "py314"
 extend-exclude = [
-  "src/medallion/connect/v1/connect_pb2.py",
   "src/medallion/ingest/v1/ingest_pb2.py",
 ]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
-
-[tool.ruff.lint.per-file-ignores]
-# Protobuf runtime aliases deliberately remain normal assignments rather than
-# PEP 695 TypeAliasType objects.
-"src/medallion/types.py" = ["UP040"]

@@ -56,7 +56,7 @@ func TestTracingCannotOverrideProtectedRequestHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request, err := http.NewRequest(http.MethodPost, "https://api.example.com"+listCdcEventsPath, strings.NewReader("{}"))
+	request, err := http.NewRequest(http.MethodPost, "https://api.example.com"+listTablesPath, strings.NewReader("{}"))
 	if err != nil {
 		t.Fatal(err)
 	}

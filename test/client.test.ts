@@ -1,6 +1,6 @@
 import { inspect } from "node:util";
 import { describe, expect, it, vi } from "vitest";
-import { MedallionClient, ProtocolConnectClient } from "../src/index.js";
+import { MedallionClient, ProtocolIngestClient } from "../src/index.js";
 
 describe("MedallionClient", () => {
   it("exposes only the bounded customer-ingestion clients", () => {
@@ -11,26 +11,23 @@ describe("MedallionClient", () => {
       fetch: vi.fn(),
     });
 
-    expect(Object.keys(client).sort()).toEqual([
-      "audit",
-      "cdc",
-      "connect",
-      "ingest",
-      "tables",
-    ]);
-    expect(client.audit.record).toBeTypeOf("function");
-    expect(client.cdc.record).toBeTypeOf("function");
+    expect(Object.keys(client).sort()).toEqual(["ingest", "tables"]);
     expect(client.tables.append).toBeTypeOf("function");
     expect(client.tables.query).toBeTypeOf("function");
-    expect(Object.getOwnPropertyNames(ProtocolConnectClient.prototype)).toEqual(
-      [
-        "constructor",
-        "publishCdcEvents",
-        "listCdcEvents",
-        "publishAuditEvents",
-        "listAuditEvents",
-      ],
-    );
+    expect(
+      Object.getOwnPropertyNames(ProtocolIngestClient.prototype)
+        .filter((name) => name !== "constructor")
+        .sort(),
+    ).toEqual([
+      "appendRows",
+      "createTable",
+      "getQueryResults",
+      "getTable",
+      "listTables",
+      "runQuery",
+      "updateTable",
+      "waitBeforeQueryPoll",
+    ]);
   });
 
   it("requires a canonical immutable workspace before network I/O", () => {

@@ -15,12 +15,6 @@ let stale = false;
 
 const descriptors = [
   {
-    descriptor: "proto/external-ingestion-v1.descriptor.binpb",
-    output: "src/connect-descriptor.ts",
-    constant: "CONNECT_DESCRIPTOR_BASE64",
-    functionName: "connectDescriptorBytes",
-  },
-  {
     descriptor: "proto/ingest-v1.descriptor.binpb",
     output: "src/ingest-descriptor.ts",
     constant: "INGEST_DESCRIPTOR_BASE64",

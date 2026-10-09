@@ -1,11 +1,9 @@
 # Vendored contracts
 
-This directory vendors the two public contract surfaces the SDK speaks:
+This directory contains the active public ingest contract the SDK speaks:
 
 - `medallion.ingest.v1.MedallionIngestService` — the tabular tables, append,
   and query surface (`medallion/ingest/v1/ingest.proto`).
-- `medallion.connect.v1.MedallionConnectService` — the deprecated CDC/audit
-  publish surface (`medallion/connect/v1/connect.proto`).
 
 ## Ingest contract
 
@@ -63,32 +61,19 @@ upstream contract was released, replacing it was deliberately breaking.
 that transition, scoped by the content hash of the provisional blob so it
 expires by itself and every later change is compared normally.
 
-## External-ingestion contract
+## Historical Connect proof
 
-This directory also vendors the checksummed `external_ingestion_sdk_v1` contract for the
-public `medallion.connect.v1.MedallionConnectService` interface. Its only RPCs
-are `PublishCdcEvents`, `PublishAuditEvents`, `ListCdcEvents`, and
-`ListAuditEvents`. The descriptor is dependency-closed but contains only the
-messages and enums reachable from those methods.
+The byte-preserved sanitized Connect export and projection live under
+`archive/connect-v1`. They document the retired four-RPC subset and remain
+integrity-checked historical evidence. They are not active contracts or runtime
+artifacts and do not attest ingest. An independent producer-issued immutable
+ingest attestation is required before publishing this candidate. The release
+guard remains closed until that proof exists.
 
-`external-ingestion-v1.descriptor.binpb` is verified against the standalone export,
-used to generate the Go and Python bindings, and embedded in the TypeScript
-runtime:
-
-```sh
-make proto-bindings
-make proto-descriptor
-make generated-check
-```
-
-The sync input is a standalone sanitized export. Pass it explicitly with
-`MEDALLION_SDK_CONTRACT_ROOT=/path/to/export make contract-sync`, or run the
-target without the variable to deterministically regenerate from the committed
-offline copy. SDK consumers do not need Buf or Flox.
-
-Ordinary checks accept a consistent candidate export. `make
-contract-release-check` remains blocked until that export is replaced by a
-producer-issued immutable release attestation.
+The full Buf compatibility check also reports the intentional removal of the
+Connect closure. The retained ingest contract is independently compared with
+the fixed 0.4 candidate and real main baseline. No self-comparison or blanket
+compatibility exemption is used. See [migration](../docs/migration-0.5.md).
 
 ## Conventions
 

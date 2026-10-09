@@ -67,10 +67,9 @@ Every language implementation supports the same bounded customer surfaces:
   in the declared ClickHouse dialect. Its clients and wrappers must contain
   exactly `CreateTable`, `GetTable`, `ListTables`, `UpdateTable`,
   `AppendRows`, `RunQuery`, and `GetQueryResults`.
-- `medallion.connect.v1` — the deprecated CDC/audit publish surface. Its
-  generated service, low-level clients, and ergonomic wrappers must contain
-  exactly `PublishCdcEvents`, `PublishAuditEvents`, `ListCdcEvents`, and
-  `ListAuditEvents`.
+The removed Connect subset is historical integrity evidence under
+`archive/connect-v1`; it is excluded from active SDK generation and packaging.
+It cannot attest ingest or authorize a release.
 
 - `temporaless.v1` — the durable-execution storage backend, exposed only as a
   workspace-bound factory over Temporaless's own `ConnectStore` and

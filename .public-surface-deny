@@ -27,7 +27,7 @@
 # here would flag those two checkers for doing their job.
 # ---------------------------------------------------------------------------
 retired-scope | * | This scope field was retired from the v1 contract. Use workspace_id. The old name stays reserved in the schema and must not reappear in code, docs, examples or commit messages. | (^|[^a-z0-9_])(%74enant|organi%7Aation)%5f?id($|[^a-z0-9_])
-retired-scope | * | The scope-selection request header was retired with that field. The published contract selects a workspace with a request field, not a header. | x-%6aimtech-%74enant-id
+retired-scope | * | The scope-selection request header was retired with that field. The retained ingest contract selects its workspace through the verified workspace header. | x-%6aimtech-%74enant-id
 
 # ---------------------------------------------------------------------------
 # Names of private backend machinery that the SDK once carried and no longer

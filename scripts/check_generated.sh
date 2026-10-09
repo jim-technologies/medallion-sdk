@@ -19,16 +19,11 @@ command -v buf >/dev/null || {
 }
 
 mapfile -t descriptors < <(find proto -maxdepth 1 -type f -name '*.descriptor.binpb' -print | sort)
-if [[ "${descriptors[*]}" != "proto/external-ingestion-v1.descriptor.binpb proto/ingest-v1.descriptor.binpb" ]]; then
-  echo "proto must contain exactly the external-ingestion and ingest v1 descriptors" >&2
+if [[ "${descriptors[*]}" != "proto/ingest-v1.descriptor.binpb" ]]; then
+  echo "proto must contain exactly the ingest v1 descriptor" >&2
   printf 'found: %s\n' "${descriptors[*]:-(none)}" >&2
   exit 1
 fi
-
-buf generate proto/external-ingestion-v1.descriptor.binpb \
-  --template "$root/buf.gen.yaml" \
-  --path medallion/connect/v1/connect.proto \
-  --output "$tmp/generated"
 
 buf generate proto \
   --template "$root/buf.gen.yaml" \
@@ -42,11 +37,16 @@ buf build proto \
   --as-file-descriptor-set \
   -o "$tmp/generated/proto/ingest-v1.descriptor.binpb"
 
+for retired in proto/medallion/connect go/gen/medallion/connect python/src/medallion/connect src/connect-descriptor.ts; do
+  if [[ -e "$retired" ]]; then
+    echo "retired Connect API must not exist in active generated surfaces: $retired" >&2
+    exit 1
+  fi
+done
+
 generated_files=(
-  "go/gen/medallion/connect/v1/connect.pb.go"
   "go/gen/medallion/ingest/v1/ingest.pb.go"
   "proto/ingest-v1.descriptor.binpb"
-  "python/src/medallion/connect/v1/connect_pb2.py"
   "python/src/medallion/ingest/v1/ingest_pb2.py"
 )
 for relative in "${generated_files[@]}"; do
@@ -64,5 +64,5 @@ for directory in python/src/buf "$tmp/generated/python/src/buf"; do
   fi
 done
 
-node "$tool_root/scripts/embed-connect-descriptor.mjs" --check --root "$root"
+node "$tool_root/scripts/embed-ingest-descriptor.mjs" --check --root "$root"
 echo "Generated protobuf bindings and descriptors are current"

@@ -13,8 +13,8 @@
       "!coverage",
       "!go",
       "!proto",
+      "!archive",
       "!python",
-      "!src/connect-descriptor.ts",
       "!src/ingest-descriptor.ts"
     ]
   },

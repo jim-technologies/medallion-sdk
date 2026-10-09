@@ -25,14 +25,13 @@ import sys
 import buf.validate.validate_pb2 as validation
 import medallion
 from medallion import MedallionClient, MedallionError
-from medallion.connect.v1 import connect_pb2
 from medallion.ingest.v1 import ingest_pb2
 
 assert not Path(medallion.__file__).is_relative_to(Path(sys.argv[1]))
 assert not any(str(file).startswith("buf/") for file in distribution("medallion").files)
 assert hasattr(validation, "FieldPath")
-field = connect_pb2.PublishCdcEventsRequest.DESCRIPTOR.fields_by_name["connector_id"]
-assert field.GetOptions().Extensions[validation.field].string.min_len == 1
+import importlib.util
+assert importlib.util.find_spec("medallion.connect") is None
 request = ingest_pb2.GetTableRequest(name="tables/fixture")
 assert ingest_pb2.GetTableRequest.FromString(request.SerializeToString()) == request
 client = MedallionClient(base_url="http://127.0.0.1", api_key="fixture-key",
@@ -75,12 +74,13 @@ uv pip uninstall --python "$python" temporaless
 "$python" -I - <<'PY'
 import importlib.util
 from medallion import MedallionClient
-from medallion.connect.v1 import connect_pb2
 import buf.validate.validate_pb2 as validation
 
 assert importlib.util.find_spec("temporaless") is None
 assert hasattr(validation, "FieldPath")
-assert connect_pb2.PublishCdcEventsRequest(connector_id="fixture").SerializeToString()
+from medallion.ingest.v1 import ingest_pb2
+assert ingest_pb2.GetTableRequest(name="tables/fixture").SerializeToString()
+assert importlib.util.find_spec("medallion.connect") is None
 PY
 # Now install Temporaless last. It must not replace or remove shared files.
 uv pip install --python "$python" --no-deps "$requirement"

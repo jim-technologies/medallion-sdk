@@ -50,14 +50,18 @@ export const EXPECTED_ERROR_REASONS = Object.freeze([
   "WORKSPACE_SELECTOR_CONFLICT",
 ]);
 
-const VENDOR_RELATIVE = "proto/external-ingestion-contract/v1";
+const VENDOR_RELATIVE = "archive/connect-v1/export";
 const MANIFEST_NAME = "external_ingestion_sdk_v1.json";
 const LOCAL_DESCRIPTOR_RELATIVE =
-  "proto/external-ingestion-v1.descriptor.binpb";
-const LOCAL_PROTO_RELATIVE = "proto/medallion/connect/v1/connect.proto";
-const VALIDATION_PROTO_RELATIVE = "proto/buf/validate/validate.proto";
-const ALLOWLIST_RELATIVE = "proto/external-ingestion-v1.json";
-const SUPPORTED_ROUTES_RELATIVE = "proto/client-facing-routes.json";
+  "archive/connect-v1/projection/external-ingestion-v1.descriptor.binpb";
+const LOCAL_PROTO_RELATIVE =
+  "archive/connect-v1/projection/medallion/connect/v1/connect.proto";
+const VALIDATION_PROTO_RELATIVE =
+  "archive/connect-v1/projection/buf/validate/validate.proto";
+const ALLOWLIST_RELATIVE =
+  "archive/connect-v1/projection/external-ingestion-v1.json";
+const SUPPORTED_ROUTES_RELATIVE =
+  "archive/connect-v1/projection/client-facing-routes.json";
 const TYPESCRIPT_ERROR_POLICY_RELATIVE = "src/error-policy.ts";
 const GO_ERROR_POLICY_RELATIVE = "go/error_policy_generated.go";
 const PYTHON_ERROR_POLICY_RELATIVE =
@@ -1624,12 +1628,23 @@ export function checkContract(sdkRoot = SDK_ROOT) {
   return resultFrom(validated);
 }
 
-export function checkReleaseContract(sdkRoot = SDK_ROOT) {
+export function checkHistoricalReleaseContract(sdkRoot = SDK_ROOT) {
   const result = checkContract(sdkRoot);
   if (result.releaseStatus !== "released") {
     fail(`release check blocked by ${result.releaseStatus} contract`);
   }
   return result;
+}
+
+export function checkReleaseContract(sdkRoot = SDK_ROOT) {
+  const result = checkContract(sdkRoot);
+  const historical =
+    result.releaseStatus === "released"
+      ? "archived Connect proof is released"
+      : `archived Connect proof is ${result.releaseStatus}`;
+  fail(
+    `release check blocked: ${historical}; independent producer-issued INGEST attestation and its reviewed verifier are missing. Historical Connect proof does not attest medallion.ingest.v1.`,
+  );
 }
 
 function parseArguments(argv) {
@@ -1661,7 +1676,7 @@ function parseArguments(argv) {
 function printResult(action, result) {
   process.stdout.write(
     `${[
-      `External ingestion contract ${action}: ${result.methods.length} RPCs (${result.profile})`,
+      `Archived Connect proof ${action}: ${result.methods.length} RPCs (${result.profile})`,
       `contract_version=${result.contractVersion}`,
       `bundle=${result.bundleSha256} (${result.releaseStatus})`,
       `descriptor=${result.descriptorSha256}`,
@@ -1671,7 +1686,7 @@ function printResult(action, result) {
       `conformance_fixture=${result.fixtureSha256} (${result.fixtureCount} cases)`,
       `release_attestation=${result.attestationSha256}`,
       `wire_closure=${result.wireClosureSha256} (${result.messageCount} messages, ${result.enumCount} enums)`,
-      `public_rpcs=${result.service}=4`,
+      `historical_rpcs=${result.service}=4`,
     ].join("\n")}\n`,
   );
 }

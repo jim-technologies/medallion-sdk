@@ -20,6 +20,7 @@ import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 
 import {
   checkContract,
+  checkHistoricalReleaseContract,
   checkReleaseContract,
   EXPECTED_ERROR_REASONS,
   EXPECTED_PROFILE_METHODS,
@@ -30,13 +31,17 @@ import {
   syncContract,
 } from "./sync_external_ingestion_contract.mjs";
 
-const VENDOR_RELATIVE = "proto/external-ingestion-contract/v1";
+const VENDOR_RELATIVE = "archive/connect-v1/export";
 const LOCAL_DESCRIPTOR_RELATIVE =
-  "proto/external-ingestion-v1.descriptor.binpb";
-const LOCAL_PROTO_RELATIVE = "proto/medallion/connect/v1/connect.proto";
-const VALIDATION_PROTO_RELATIVE = "proto/buf/validate/validate.proto";
-const ALLOWLIST_RELATIVE = "proto/external-ingestion-v1.json";
-const ROUTES_RELATIVE = "proto/client-facing-routes.json";
+  "archive/connect-v1/projection/external-ingestion-v1.descriptor.binpb";
+const LOCAL_PROTO_RELATIVE =
+  "archive/connect-v1/projection/medallion/connect/v1/connect.proto";
+const VALIDATION_PROTO_RELATIVE =
+  "archive/connect-v1/projection/buf/validate/validate.proto";
+const ALLOWLIST_RELATIVE =
+  "archive/connect-v1/projection/external-ingestion-v1.json";
+const ROUTES_RELATIVE =
+  "archive/connect-v1/projection/client-facing-routes.json";
 const TYPESCRIPT_ERROR_POLICY_RELATIVE = "src/error-policy.ts";
 const GO_ERROR_POLICY_RELATIVE = "go/error_policy_generated.go";
 const PYTHON_ERROR_POLICY_RELATIVE =
@@ -378,14 +383,10 @@ test("generated-code check detects language binding drift", () => {
     "buf.gen.yaml",
     "go.mod",
     "go.sum",
-    LOCAL_DESCRIPTOR_RELATIVE,
-    "go/gen/medallion/connect/v1/connect.pb.go",
     "go/gen/medallion/ingest/v1/ingest.pb.go",
     "proto/ingest-v1.descriptor.binpb",
     "proto/medallion/ingest/v1/ingest.proto",
-    "python/src/medallion/connect/v1/connect_pb2.py",
     "python/src/medallion/ingest/v1/ingest_pb2.py",
-    "src/connect-descriptor.ts",
     "src/ingest-descriptor.ts",
   ];
   try {
@@ -404,7 +405,7 @@ test("generated-code check detects language binding drift", () => {
     assert.equal(current.status, 0, current.stderr || current.stdout);
     const generatedGo = path.join(
       fixture,
-      "go/gen/medallion/connect/v1/connect.pb.go",
+      "go/gen/medallion/ingest/v1/ingest.pb.go",
     );
     writeFileSync(
       generatedGo,
@@ -412,12 +413,53 @@ test("generated-code check detects language binding drift", () => {
     );
     const stale = runCheck();
     assert.notEqual(stale.status, 0);
-    assert.match(
-      `${stale.stdout}\n${stale.stderr}`,
-      /connect\.pb\.go is stale/,
-    );
+    assert.match(`${stale.stdout}\n${stale.stderr}`, /ingest\.pb\.go is stale/);
   } finally {
     rmSync(fixture, { force: true, recursive: true });
+  }
+});
+
+test("generation rejects a retired runtime binding even when ingest is current", () => {
+  const fixture = mkdtempSync(
+    path.join(tmpdir(), "retired-connect-generated-"),
+  );
+  try {
+    for (const relative of [
+      "buf.gen.yaml",
+      "go.mod",
+      "go.sum",
+      "proto/ingest-v1.descriptor.binpb",
+      "proto/medallion/ingest/v1/ingest.proto",
+      "go/gen/medallion/ingest/v1/ingest.pb.go",
+      "python/src/medallion/ingest/v1/ingest_pb2.py",
+      "src/ingest-descriptor.ts",
+    ]) {
+      const destination = path.join(fixture, relative);
+      mkdirSync(path.dirname(destination), { recursive: true });
+      cpSync(path.join(SDK_ROOT, relative), destination);
+    }
+    mkdirSync(path.join(fixture, "python/src/medallion/connect"), {
+      recursive: true,
+    });
+    writeFileSync(
+      path.join(fixture, "python/src/medallion/connect/stale.py"),
+      "retired = True\n",
+    );
+    const result = spawnSync(
+      path.join(SDK_ROOT, "scripts/check_generated.sh"),
+      [],
+      {
+        encoding: "utf8",
+        env: { ...process.env, MEDALLION_GENERATED_ROOT: fixture },
+      },
+    );
+    assert.notEqual(result.status, 0);
+    assert.match(
+      `${result.stdout}\n${result.stderr}`,
+      /retired Connect API must not exist/,
+    );
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
   }
 });
 
@@ -507,11 +549,11 @@ for (const artifact of [
 test("release check blocks the neutral candidate attestation", () => {
   assert.throws(
     () => checkReleaseContract(),
-    /release check blocked by unreleased_candidate contract/,
+    /unreleased_candidate.*independent producer-issued INGEST attestation/,
   );
 });
 
-test("release check accepts a producer-shaped immutable released export", () =>
+test("historical release proof cannot qualify the active ingest surface", () =>
   withSdkFixture((fixture) => {
     const exportRoot = createContractExport(fixture);
     resealExport(exportRoot, ({ attestation, bundle }) => {
@@ -523,7 +565,14 @@ test("release check accepts a producer-shaped immutable released export", () =>
     });
     const synced = syncContract(exportRoot, fixture);
     assert.equal(synced.releaseStatus, "released");
-    assert.equal(checkReleaseContract(fixture).releaseStatus, "released");
+    assert.equal(
+      checkHistoricalReleaseContract(fixture).releaseStatus,
+      "released",
+    );
+    assert.throws(
+      () => checkReleaseContract(fixture),
+      /independent producer-issued INGEST attestation/,
+    );
   }));
 
 test("normal checks use only committed files and perform no writes", () =>

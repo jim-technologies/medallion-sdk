@@ -4,29 +4,22 @@ Install the SDK directly from Git using the repository-wide release tag. Go,
 Python, and TypeScript use the same plain `vX.Y.Z` version:
 
 ```sh
-go get github.com/jim-technologies/medallion-sdk/go@vX.Y.Z
+go get github.com/jim-technologies/medallion-sdk/go@v0.3.1
 ```
 
 That tag is created at the repository root; there are no language-specific Go,
 Python, or TypeScript tag namespaces. Pin a full Git commit SHA instead when a
 deployment requires commit-level immutability.
 
-The Go SDK speaks two bounded surfaces and nothing else:
+This branch prepares the unreleased 0.5.0 candidate. Its active Go surface is
+`medallion.ingest.v1`: seven generated table, append and query RPCs through
+`client.Ingest`. CDC/audit clients, types and generated bindings are removed.
+See [migration and release blockers](../docs/migration-0.5.md). The install
+command above names the latest actual tag, whose older API differs from this
+source candidate.
 
-- `medallion.ingest.v1` — the tabular tables, append, and query surface
-  (`CreateTable`, `GetTable`, `ListTables`, `UpdateTable`, `AppendRows`,
-  `RunQuery`, `GetQueryResults`) through the deliberately thin `client.Ingest`,
-  built on the generated bindings in `go/gen/medallion/ingest/v1`. The richer
-  convenience layer ships Python-first.
-- `medallion.connect.v1` — the DEPRECATED CDC/audit publish surface
-  (`PublishCdcEvents`, `ListCdcEvents`, `PublishAuditEvents`,
-  `ListAuditEvents`), which keeps working for existing integrations.
-
-An operator uses Medallion's control plane to provision the workspace, API
-key, and Medallion API base URL (plus a connector ID for the deprecated
-publish surface) before a server-side application starts the SDK. The SDK
-does not automate that provisioning or expose broader platform administration
-APIs.
+An operator provisions the immutable workspace, API key and API origin. The SDK
+does not provide administration or credential provisioning.
 
 ## Durable execution
 
@@ -34,7 +27,7 @@ Medallion can also back a Temporaless workflow runtime. That surface is
 **not** part of this Go module, deliberately: Temporaless's Go module brings
 the AWS SDK, `gocloud.dev`, the Temporal SDK, and OpenDAL's native bindings,
 which would take this module's dependency graph from 25 modules to roughly 78
-for every consumer — including one that only publishes CDC events. Go has no
+for every consumer — including one that only appends tables. Go has no
 optional dependencies, and a nested module would need its own tag, which this
 repository's single-root-tag release model does not allow.
 
@@ -109,7 +102,6 @@ client, err := medallion.NewClient(medallion.ClientConfig{
 	BaseURL:            os.Getenv("MEDALLION_BASE_URL"),
 	APIKey:             os.Getenv("MEDALLION_API_KEY"),
 	WorkspaceID:        os.Getenv("MEDALLION_WORKSPACE_ID"),
-	DefaultConnectorID: os.Getenv("MEDALLION_CONNECTOR_ID"),
 	Timeout:            20 * time.Second,
 	Retry: medallion.RetryConfig{
 		MaxAttempts:    3,
@@ -122,138 +114,14 @@ if err != nil {
 }
 ```
 
-For JWT authentication, set `AccessToken` instead of `APIKey`. List requests
-carry the same configured workspace in both the header and request body;
-publish event bodies omit their server-derived workspace field.
+For JWT authentication, set `AccessToken` instead of `APIKey`. Ingest workspace
+identity is carried only in the configured request header.
 
 ## Delivery semantics
 
-Publishing is at-least-once, not exactly-once. Medallion durably deduplicates an
-event by its idempotency key, so every retry must preserve the exact event and
-key. A successful receipt reports each event as accepted or duplicate; a
-duplicate receipt is successful delivery, not an error.
-
-For database-backed producers, use a transactional outbox: write the business
-change and its event to the outbox in the same database transaction, retry the
-unchanged outbox event until the SDK returns a complete receipt, and only then
-mark the outbox row delivered. Never mint a new idempotency key for a retry.
-Durable server deduplication makes repeated delivery safe, but it does not make
-network attempts exactly-once.
-
-## Publish CDC
-
-Use a durable outbox ID, database log position, or provider event ID as the
-idempotency key. The optional helper produces the same deterministic UUIDv5
-key as the other language SDKs when a source has a compound identity. Keys are
-preserved exactly and must be valid UTF-8 between 1 and 512 bytes:
-
-```go
-key, err := medallion.StableIdempotencyKey("orders", "partition-3", "lsn-9A/BC")
-if err != nil {
-	return err
-}
-
-receipt, err := client.CDC.Record(ctx, medallion.CDCEvent{
-	StreamName:     "orders",
-	EntityType:     "order",
-	EntityID:       int64(42),
-	Operation:      "update",
-	IdempotencyKey: key,
-	Payload:        map[string]any{"status": "paid"},
-})
-```
-
-Publish up to 1000 events atomically with `RecordBatch`:
-
-```go
-receipt, err := client.CDC.RecordBatch(ctx, []medallion.CDCEvent{
-	{
-		StreamName:     "orders",
-		EntityType:     "order",
-		EntityID:       "order_1",
-		Operation:      "insert",
-		IdempotencyKey: "outbox_1",
-		Payload:        map[string]any{"status": "created"},
-	},
-	{
-		StreamName:     "orders",
-		EntityType:     "order",
-		EntityID:       "order_2",
-		Operation:      "update",
-		IdempotencyKey: "outbox_2",
-		PayloadJSON:    `{"status":"paid"}`,
-	},
-})
-```
-
-`Record` and `RecordBatch` use `ClientConfig.DefaultConnectorID`. To select a
-connector for one batch, put it on the request-level input:
-
-```go
-receipt, err := client.CDC.PublishBatch(ctx, medallion.CDCBatchInput{
-	ConnectorID: "connector_123",
-	Events:      events,
-})
-```
-
-Connector scope never belongs to a nested `CDCEvent`; the generated protobuf
-event sent on the wire therefore omits `connectorId`.
-
-`Payload` and `PayloadJSON` are mutually exclusive. `PayloadJSON` must contain
-exactly one valid JSON value and is retained byte-for-byte. The older
-`Table`/`PrimaryKey` shape remains available only as a compatibility path.
-
-## Publish audit events
-
-The action and authoritative outcome are separate. The workspace, connector,
-source system, observer, origin, durable ID, and observed time remain
-server-derived.
-
-```go
-receipt, err := client.Audit.Record(ctx, medallion.AuditRecord{
-	Actor:          medallion.ActorRef{Type: "user", ID: "user_123"},
-	Action:         "approve",
-	Outcome:        medallion.AuditOutcomeSucceeded,
-	ResourceType:   "invoice",
-	ResourceID:     "invoice_42",
-	IdempotencyKey: "billing-audit:evt-9921",
-	Payload:        map[string]any{"approvalPolicy": "four-eyes"},
-})
-```
-
-`client.Audit.RecordBatch(ctx, records)` publishes an atomic batch of up to
-1000 audit events using `ClientConfig.DefaultConnectorID`. Use `PublishBatch`
-with an `AuditBatchInput` for an explicit request-level connector. Connector
-scope is not part of `AuditRecord` and must not be supplied on a nested
-protobuf event.
-
-## Read back and paginate
-
-`List` returns one lossless page. Durable `int64` IDs are decimal strings and
-JSON payload numbers are `json.Number` values.
-
-```go
-page, err := client.CDC.List(ctx, medallion.CDCListQuery{
-	StreamName: "orders",
-	Limit:      100,
-})
-
-iterator := client.Audit.Iterate(ctx, medallion.AuditTrailQuery{
-	ResourceType: "invoice",
-	ResourceID:   "invoice_42",
-})
-for iterator.Next() {
-	event := iterator.Event()
-	fmt.Println(event.ID, event.Action, event.Outcome)
-}
-if err := iterator.Err(); err != nil {
-	return err
-}
-```
-
-Iterators reject repeated cursors and stop after 10,000 pages rather than
-looping forever. Page sizes are capped at 500. List responses fail closed if an
-event omits the configured workspace or reports a different workspace.
+Keep an append batch's exact rows, options and idempotency key stable across
+retries. A complete acknowledgement permits marking its durable outbox entry
+delivered. Server batch replay semantics do not make network attempts exactly once.
 
 ## Errors and retries
 
@@ -271,9 +139,8 @@ if errors.As(err, &apiErr) {
 ```
 
 Retries are disabled by default and capped at five total attempts. When
-enabled, the SDK retries only the four validated ingestion calls: lists are
-read-only, while publishes require complete event-level idempotency keys. The
-exact serialized body is reused. Deadlines and cancellation stop retry waits.
+enabled, retries apply to safe reads and declared idempotent writes. The exact
+serialized body and batch key are reused. Deadlines and cancellation stop retry waits.
 Client backoff is exponential and jittered; valid `Retry-After` seconds or HTTP
 dates are honored without shortening or jitter. Passing `false` to
 `APIError.Retryable` always returns false.
@@ -285,7 +152,7 @@ and credentials are never retained.
 Generated protobuf request and response types are available from:
 
 ```go
-import connectv1 "github.com/jim-technologies/medallion-sdk/go/gen/medallion/connect/v1"
+import ingestv1 "github.com/jim-technologies/medallion-sdk/go/gen/medallion/ingest/v1"
 ```
 
 Use this SDK only from trusted server-side Go services. Never embed service

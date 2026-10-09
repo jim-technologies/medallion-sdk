@@ -23,7 +23,7 @@ describe("RequestClient", () => {
     await expect(
       client.request({
         method: "POST",
-        path: "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+        path: "/medallion.ingest.v1.MedallionIngestService/ListTables",
         body: { type: "checkout.started" },
         connectProtocol: true,
       }),
@@ -33,7 +33,7 @@ describe("RequestClient", () => {
     const headers = init?.headers as Headers;
 
     expect(url).toBe(
-      "https://api.example.com/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+      "https://api.example.com/medallion.ingest.v1.MedallionIngestService/ListTables",
     );
     expect(init?.method).toBe("POST");
     expect(init?.redirect).toBe("error");
@@ -65,7 +65,7 @@ describe("RequestClient", () => {
     await expect(
       client.request({
         method: "POST",
-        path: "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+        path: "/medallion.ingest.v1.MedallionIngestService/ListTables",
       }),
     ).rejects.toMatchObject({ code: "MEDALLION_REDIRECT_REJECTED" });
   });
@@ -92,7 +92,7 @@ describe("RequestClient", () => {
     await expect(
       client.request({
         method: "POST",
-        path: "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+        path: "/medallion.ingest.v1.MedallionIngestService/ListTables",
         body: {},
       }),
     ).rejects.toMatchObject({
@@ -148,7 +148,7 @@ describe("RequestClient", () => {
     await expect(
       client.request({
         method: "POST",
-        path: "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+        path: "/medallion.ingest.v1.MedallionIngestService/ListTables",
         headers: {
           "X-Medallion-Workspace-Id": "ws_01jz9q5g6rsf7r5ar4rah1b2c4",
         },
@@ -198,7 +198,7 @@ describe("RequestClient", () => {
     await expect(
       client.request({
         method: "POST",
-        path: "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+        path: "/medallion.ingest.v1.MedallionIngestService/ListTables",
         body: { workspaceId: "ws_01jz9q5g6rsf7r5ar4rah1b2c4" },
       }),
     ).rejects.toMatchObject({
@@ -225,7 +225,7 @@ describe("RequestClient", () => {
 
     await client.request({
       method: "POST",
-      path: "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+      path: "/medallion.ingest.v1.MedallionIngestService/ListTables",
     });
     const headers = fetch.mock.calls[0]?.[1]?.headers as Headers;
     expect(headers.get("authorization")).toBeNull();
@@ -320,7 +320,7 @@ describe("RequestClient", () => {
 
     await client.request({
       method: "POST",
-      path: "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+      path: "/medallion.ingest.v1.MedallionIngestService/ListTables",
     });
     const init = fetch.mock.calls[0]?.[1];
     const headers = init?.headers as Headers;
@@ -349,7 +349,7 @@ describe("RequestClient", () => {
     await expect(
       successClient.request({
         method: "POST",
-        path: "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+        path: "/medallion.ingest.v1.MedallionIngestService/ListTables",
       }),
     ).rejects.toMatchObject({
       code: "MEDALLION_INVALID_JSON_RESPONSE",
@@ -375,7 +375,7 @@ describe("RequestClient", () => {
     await expect(
       errorClient.request({
         method: "POST",
-        path: "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+        path: "/medallion.ingest.v1.MedallionIngestService/ListTables",
       }),
     ).rejects.toMatchObject({
       name: "MedallionApiError",
@@ -401,7 +401,7 @@ describe("RequestClient", () => {
     await expect(
       client.request({
         method: "POST",
-        path: "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+        path: "/medallion.ingest.v1.MedallionIngestService/ListTables",
         body: {},
       }),
     ).resolves.toEqual({ ok: true });
@@ -429,7 +429,7 @@ describe("RequestClient", () => {
     await expect(
       client.request({
         method: "POST",
-        path: "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+        path: "/medallion.ingest.v1.MedallionIngestService/ListTables",
       }),
     ).rejects.toMatchObject({
       code: "MEDALLION_RESPONSE_TOO_LARGE",
@@ -471,7 +471,7 @@ describe("RequestClient", () => {
     await expect(
       client.request({
         method: "POST",
-        path: "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+        path: "/medallion.ingest.v1.MedallionIngestService/ListTables",
       }),
     ).rejects.toMatchObject({
       code: "MEDALLION_RESPONSE_TOO_LARGE",
@@ -524,7 +524,7 @@ describe("RequestClient", () => {
     await expect(
       retrying.request({
         method: "POST",
-        path: "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+        path: "/medallion.ingest.v1.MedallionIngestService/ListTables",
         retrySafe: true,
       }),
     ).resolves.toEqual({ ok: true });
@@ -541,7 +541,7 @@ describe("RequestClient", () => {
     await expect(
       unsafe.request({
         method: "POST",
-        path: "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+        path: "/medallion.ingest.v1.MedallionIngestService/ListTables",
       }),
     ).rejects.toMatchObject({
       code: "MEDALLION_NETWORK_ERROR",
@@ -560,7 +560,7 @@ describe("RequestClient", () => {
     await expect(
       terminal.request({
         method: "POST",
-        path: "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+        path: "/medallion.ingest.v1.MedallionIngestService/ListTables",
         retrySafe: true,
       }),
     ).rejects.toMatchObject({
@@ -590,7 +590,7 @@ describe("RequestClient", () => {
 
     const request = client.request({
       method: "POST",
-      path: "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+      path: "/medallion.ingest.v1.MedallionIngestService/ListTables",
     });
     const expectation = expect(request).rejects.toMatchObject({
       name: "MedallionError",
@@ -699,7 +699,7 @@ describe("RequestClient", () => {
     try {
       await client.request({
         method: "POST",
-        path: "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+        path: "/medallion.ingest.v1.MedallionIngestService/ListTables",
         body: { sensitive: "trace_secret_payload" },
       });
     } finally {
@@ -708,13 +708,13 @@ describe("RequestClient", () => {
 
     expect(spans).toHaveLength(1);
     expect(spans[0]).toMatchObject({
-      name: "test-medallion POST /medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+      name: "test-medallion POST /medallion.ingest.v1.MedallionIngestService/ListTables",
       ended: true,
     });
     expect(spans[0]!.attributes).toMatchObject({
       "medallion.sdk.language": "typescript",
       "medallion.request.path":
-        "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+        "/medallion.ingest.v1.MedallionIngestService/ListTables",
       "http.request.method": "POST",
       "http.response.status_code": 200,
       "medallion.request_id": "req_trace",
@@ -788,7 +788,7 @@ describe("RequestClient", () => {
     try {
       await client.request({
         method: "POST",
-        path: "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
+        path: "/medallion.ingest.v1.MedallionIngestService/ListTables",
         body: { private: secret },
       });
     } catch (error) {

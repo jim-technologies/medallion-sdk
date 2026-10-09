@@ -24,9 +24,11 @@ Medallion is also a durable-execution backend: `medallion.workflows` hands a
 Temporaless workflow runtime a storage client bound to your workspace. See
 [Durable execution](#durable-execution).
 
-The older `medallion.connect.v1` CDC/audit publish surface is DEPRECATED. Its
-four RPCs keep working and stay documented [below](#deprecated-cdc-and-audit-publishing),
-but new integrations should land data through tables.
+This branch prepares the **unreleased 0.5.0** removal of the deprecated CDC/audit
+clients and contract subset. Tables, ingest, workflows and transport remain.
+The latest actual install tag is still `v0.3.1`; 0.4.0 and 0.5.0 are source
+candidates. Read the [migration and release blockers](docs/migration-0.5.md)
+before choosing this branch.
 
 ## Boundaries
 
@@ -342,34 +344,6 @@ Tracing is optional and uses the application's OpenTelemetry provider; the
 SDK does not install or require a dedicated exporter. Telemetry is limited to
 safe transport metadata: credentials, tokens, row payloads, and SQL text are
 never attached.
-
-## Deprecated: CDC and audit publishing
-
-The `medallion.connect.v1.MedallionConnectService` surface — exactly
-`PublishCdcEvents`, `PublishAuditEvents`, `ListCdcEvents`, and
-`ListAuditEvents` — is deprecated but still served. Existing integrations
-keep working unchanged through `medallion.cdc`, `medallion.audit`, and the
-low-level `medallion.connect` clients:
-
-```ts
-const receipt = await medallion.cdc.record({
-  streamName: "orders",
-  entityType: "order",
-  entityId: "order_8421",
-  operation: "insert",
-  idempotencyKey: "orders:partition-7:offset-184392",
-  payload: { status: "created" },
-});
-```
-
-Publishing is at-least-once with durable server-side idempotency: replaying
-the exact event with the same source-derived key is safe. Batches hold 1
-through 1,000 events, receipts preserve input order, durable event IDs return
-as decimal strings, and page cursors on the list RPCs are opaque. When losing
-an event is unacceptable, pair the business write with an outbox row in one
-database transaction and mark it delivered only after decoding a valid
-receipt. The connect surface requires a provisioned `defaultConnectorId`;
-the tables surface does not use connectors.
 
 ## Development
 

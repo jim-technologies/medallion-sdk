@@ -43,10 +43,6 @@ MAX_RESPONSE_BYTES = 64 << 20
 _WORKSPACE_ID_PATTERN = re.compile(r"^ws_[0-9a-hjkmnp-tv-z]{26}$", re.ASCII)
 _CANONICAL_RPC_PATHS = frozenset(
     {
-        "/medallion.connect.v1.MedallionConnectService/PublishCdcEvents",
-        "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
-        "/medallion.connect.v1.MedallionConnectService/PublishAuditEvents",
-        "/medallion.connect.v1.MedallionConnectService/ListAuditEvents",
         "/medallion.ingest.v1.MedallionIngestService/CreateTable",
         "/medallion.ingest.v1.MedallionIngestService/GetTable",
         "/medallion.ingest.v1.MedallionIngestService/ListTables",

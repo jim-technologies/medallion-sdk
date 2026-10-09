@@ -9,19 +9,6 @@ lint:
     - COMMENT_RPC
     - COMMENT_MESSAGE
     - COMMENT_FIELD
-  ignore:
-    # This compatibility shim intentionally keeps Buf's canonical package name.
-    - proto/buf/validate
-  ignore_only:
-    # The vendored contract proto is rendered from the sanitized descriptor,
-    # which is required to omit source comments; its comment coverage is
-    # reviewed in the upstream contract export instead.
-    COMMENT_RPC:
-      - proto/medallion/connect/v1/connect.proto
-    COMMENT_MESSAGE:
-      - proto/medallion/connect/v1/connect.proto
-    COMMENT_FIELD:
-      - proto/medallion/connect/v1/connect.proto
 breaking:
   use:
     - FILE
