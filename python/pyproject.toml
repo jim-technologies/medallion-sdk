@@ -35,7 +35,7 @@ dependencies = [
 # Dataframe conveniences for the tables surface: polars append inputs,
 # query results collected with to_polars(), and Arrow IPC payloads.
 polars = [
-  "polars>=1.20,<2",
+  "polars>=2.0.0,<3",
   "pyarrow>=19,<26",
 ]
 # Durable execution: the workflows factory hands back Temporaless's own
@@ -53,7 +53,7 @@ workflows = [
 # medallion[polars].
 dev = [
   "medallion[workflows]",
-  "polars>=1.20,<2",
+  "polars>=2.0.0,<3",
   "pyarrow>=19,<26",
 ]
 
