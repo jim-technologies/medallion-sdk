@@ -4,6 +4,7 @@ packages:
 overrides:
   esbuild: "0.28.2"
   postcss: "8.5.26"
+  source-map-js: "1.2.2"
 
 # invariantprotocol is Git-distributed and builds its TypeScript output during
 # installation. Keep this exact commit allowlisted with the dependency pin.

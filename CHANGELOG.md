@@ -8,6 +8,9 @@ annotated `vX.Y.Z` tag.
 
 ## [0.4.0] - 2026-10-09
 
+- Pin `source-map-js` 1.2.2 in the locked build graph to address
+  GHSA-68fv-2mgg-jv7q without suppressing the dependency audit.
+
 - Go builds require the current 1.27.2 security patch. Public CI and audit
   use the same SHA-pinned Flox 2.6.0 installer.
 - Dependency currency: the TypeScript SDK pins invariantprotocol v0.16.5
