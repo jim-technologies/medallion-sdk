@@ -6,6 +6,17 @@ annotated `vX.Y.Z` tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Flox installs Go 1.27.2 directly (`go_1_27`, for the three systems the
+  catalog builds it on), and the version check now requires the Flox Go pin to
+  equal `go.mod`'s `go` directive.
+
+### Removed
+
+- The `GOTOOLCHAIN=go1.27.2+auto` Flox variable, which downloaded that
+  toolchain at run time on top of a Flox Go 1.26.4 bootstrap.
+
 ## [0.4.0] - 2026-10-09
 
 - Pin `source-map-js` 1.2.2 in the locked build graph to address

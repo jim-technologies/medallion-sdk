@@ -495,13 +495,18 @@ def main() -> int:
             f"go.mod must declare an exact Go patch version, got {go_version!r}"
         )
     else:
-        expected_toolchain = f"go{go_version}+auto"
-        actual_toolchain = flox_manifest.get("vars", {}).get("GOTOOLCHAIN")
-        if actual_toolchain != expected_toolchain:
+        install = flox_manifest.get("install", {})
+        flox_go_version = install.get("go", {}).get("version")
+        if flox_go_version != go_version:
             errors.append(
-                f".flox/env/manifest.toml GOTOOLCHAIN is {actual_toolchain!r}; "
-                f"expected {expected_toolchain!r}"
+                f".flox/env/manifest.toml installs Go {flox_go_version!r}; "
+                f"expected the go.mod release {go_version!r}"
             )
+    if "GOTOOLCHAIN" in flox_manifest.get("vars", {}):
+        errors.append(
+            ".flox/env/manifest.toml must not set GOTOOLCHAIN; "
+            "Flox supplies Go directly"
+        )
 
     nested_go_mods: list[Path] = []
     ignored_dirs = {".flox", ".git", ".venv", "node_modules", "target"}

@@ -283,16 +283,27 @@ class VersionScriptsTest(unittest.TestCase):
         go_version = go_version_match.group(1)
         manifest_path = self.fixture / ".flox/env/manifest.toml"
         manifest = manifest_path.read_text()
+        drifted = manifest.replace(
+            f'version = "{go_version}", pkg-group = "go"',
+            'version = "0.0.0", pkg-group = "go"',
+        )
+        self.assertNotEqual(drifted, manifest)
+        manifest_path.write_text(drifted)
+
+        result = self.run_script("check_versions.py")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(".flox/env/manifest.toml installs Go '0.0.0'", result.stderr)
+
+    def test_checker_rejects_go_toolchain_download(self) -> None:
+        manifest_path = self.fixture / ".flox/env/manifest.toml"
+        manifest = manifest_path.read_text()
         manifest_path.write_text(
-            manifest.replace(
-                f'GOTOOLCHAIN = "go{go_version}+auto"',
-                'GOTOOLCHAIN = "go0.0.0+auto"',
-            )
+            manifest.replace("[vars]\n", '[vars]\nGOTOOLCHAIN = "go0.0.0+auto"\n')
         )
 
         result = self.run_script("check_versions.py")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn(".flox/env/manifest.toml GOTOOLCHAIN", result.stderr)
+        self.assertIn("must not set GOTOOLCHAIN", result.stderr)
 
     def test_checker_rejects_unexpected_nested_go_module(self) -> None:
         nested = self.fixture / "unexpected/go.mod"
