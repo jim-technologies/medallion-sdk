@@ -36,7 +36,7 @@ dependencies = [
 # query results collected with to_polars(), and Arrow IPC payloads.
 polars = [
   "polars>=1.20,<2",
-  "pyarrow>=19,<26",
+  "pyarrow>=26.0.0,<27",
 ]
 # Durable execution: the workflows factory hands back Temporaless's own
 # ConnectStore/ConnectQueryStore, so it needs that exact release. The pin is
@@ -54,7 +54,7 @@ workflows = [
 dev = [
   "medallion[workflows]",
   "polars>=1.20,<2",
-  "pyarrow>=19,<26",
+  "pyarrow>=26.0.0,<27",
 ]
 
 [project.urls]
