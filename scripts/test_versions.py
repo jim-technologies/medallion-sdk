@@ -520,7 +520,7 @@ class VersionScriptsTest(unittest.TestCase):
         workspace_path = self.fixture / "pnpm-workspace.yaml"
         workspace_path.write_text(
             workspace_path.read_text().replace(
-                'postcss: "8.5.26"',
+                'postcss: "8.5.31"',
                 'postcss: "0.0.0"',
             )
         )
@@ -533,7 +533,7 @@ class VersionScriptsTest(unittest.TestCase):
         lock_path = self.fixture / "pnpm-lock.yaml"
         lock_path.write_text(
             lock_path.read_text().replace(
-                "  postcss@8.5.26:",
+                "  postcss@8.5.31:",
                 "  postcss@0.0.0:",
                 1,
             )
@@ -547,7 +547,7 @@ class VersionScriptsTest(unittest.TestCase):
         workspace_path = self.fixture / "pnpm-workspace.yaml"
         workspace_path.write_text(
             workspace_path.read_text().replace(
-                "- postcss@8.5.26",
+                "- postcss@8.5.31",
                 "- postcss@0.0.0",
             )
         )

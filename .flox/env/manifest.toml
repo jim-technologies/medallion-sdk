@@ -7,12 +7,8 @@ typescript-language-server.pkg-path = "typescript-language-server"
 # Flox supplies the exact patched Go release go.mod declares, so nothing
 # downloads a toolchain at run time; scripts/check_versions.py keeps this
 # version equal to go.mod's `go` directive. The catalog's 1.27 line is its own
-# package with no x86_64-darwin build, so like buf below it resolves in its
-# own group for the other three systems; Intel macOS developers use their own
-# Go. nodejs, python, uv, and protobuf stay one step back in the default group
-# because the catalog has no x86_64-darwin build of anything newer, and a
-# package group resolves every member against one catalog revision.
-go = { pkg-path = "go_1_27", version = "1.27.2", pkg-group = "go", systems = ["aarch64-darwin", "aarch64-linux", "x86_64-linux"] }
+# package, resolved in its own group.
+go = { pkg-path = "go_1_27", version = "1.27.3", pkg-group = "go" }
 python.pkg-path = "python314"
 uv.pkg-path = "uv"
 protobuf.pkg-path = "protobuf"
@@ -35,14 +31,22 @@ shellcheck = { pkg-path = "shellcheck", pkg-group = "repo-tools" }
 shfmt = { pkg-path = "shfmt", pkg-group = "repo-tools" }
 actionlint = { pkg-path = "actionlint", pkg-group = "repo-tools" }
 gitleaks = { pkg-path = "gitleaks", pkg-group = "repo-tools" }
-# The catalog has no x86_64-darwin build of buf 1.72.0, so the proto
-# toolchain resolves only for the systems listed here. The pin stays at
-# 1.72.0 because the committed contract-sync protos are this version's
-# `buf format` output and the validate gate's `buf format --diff
+# buf is pinned exactly because the committed contract-sync protos are this
+# version's `buf format` output, and the validate gate's `buf format --diff
 # --exit-code` only passes when the active formatter reproduces them
-# byte-for-byte.
-buf = { pkg-path = "buf", version = "1.72.0", pkg-group = "buf", systems = ["aarch64-darwin", "aarch64-linux", "x86_64-linux"] }
+# byte-for-byte. Re-run the gate after every bump.
+buf = { pkg-path = "buf", version = "1.73.0", pkg-group = "buf" }
 
 [vars]
 GOFLAGS = "-mod=readonly"
 GOENV = "off"
+
+[options]
+# One current lock across the supported development platforms. The Flox
+# catalog no longer publishes current toolchains for Intel macOS, whose
+# developers use their language-native toolchains.
+systems = [
+  "aarch64-darwin",
+  "aarch64-linux",
+  "x86_64-linux",
+]

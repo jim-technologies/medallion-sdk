@@ -15,8 +15,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 SEMVER_COMPONENT = r"(?:0|[1-9][0-9]*)"
 SEMVER = re.compile(rf"{SEMVER_COMPONENT}\.{SEMVER_COMPONENT}\.{SEMVER_COMPONENT}")
-INVARIANT_PROTOCOL_VERSION = "0.16.5"
-INVARIANT_PROTOCOL_SHA = "c646cd0326a72ce977cf9c221a678881f8c83ced"
+INVARIANT_PROTOCOL_VERSION = "0.16.8"
+INVARIANT_PROTOCOL_SHA = "79ead8726b4d79ee7c024b85441daf6f46851830"
 INVARIANT_PROTOCOL_PACKAGE = "@jim-technologies/invariant-protocol"
 INVARIANT_PROTOCOL_SPEC = (
     "github:jim-technologies/invariantprotocol#" + INVARIANT_PROTOCOL_SHA
@@ -33,7 +33,7 @@ TEMPORALESS_REQUIREMENT = (
     + "#subdirectory=core/py"
 )
 ESBUILD_VERSION = "0.28.2"
-POSTCSS_VERSION = "8.5.26"
+POSTCSS_VERSION = "8.5.31"
 # A concrete Git install of this repository: `medallion-sdk#vX.Y.Z`,
 # `medallion-sdk.git#vX.Y.Z`, `medallion-sdk.git@vX.Y.Z`, `medallion-sdk/go@vX.Y.Z`.
 INSTALL_TAG = re.compile(

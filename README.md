@@ -8,7 +8,6 @@ analogs — append is the insertAll analog, and queries are the modernized,
 synchronous-first jobs.query analog with transparent poll-and-paginate.
 
 The stable ingest v1 surface is exactly:
-
 - `CreateTable`
 - `GetTable`
 - `ListTables`
@@ -53,9 +52,9 @@ Git tag. They are installed from Git only; this project is not published to
 npm, PyPI, or another language registry.
 
 Release tags use `vX.Y.Z` and must match `VERSION` for TypeScript, Go, and
-Python. Repository development is pinned to Go 1.27.2, pnpm 11.24.0, and
-invariantprotocol v0.16.5 (commit
-`c646cd0326a72ce977cf9c221a678881f8c83ced`).
+Python. Repository development is pinned to Go 1.27.3, pnpm 12.9.0, and
+invariantprotocol v0.16.8 (commit
+`79ead8726b4d79ee7c024b85441daf6f46851830`).
 
 ```bash
 pnpm add 'github:jim-technologies/medallion-sdk#v0.3.1'
@@ -231,7 +230,7 @@ storage request body carries it. Caller-supplied ConnectRPC interceptors
 ### Check capabilities before relying on them
 
 A workflow runtime that coordinates claims or delivers events exactly once
-depends on the backend being able to *atomically create if absent*. Ask
+depends on the backend being able to _atomically create if absent_. Ask
 before trusting it:
 
 ```python

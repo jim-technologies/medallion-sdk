@@ -6,18 +6,33 @@ annotated `vX.Y.Z` tag.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-24
+
 ### Changed
 
-- Flox installs Go 1.27.2 directly (`go_1_27`, for the three systems the
-  catalog builds it on), and the version check now requires the Flox Go pin to
-  equal `go.mod`'s `go` directive.
-
-### Removed
-
-- The `GOTOOLCHAIN=go1.27.2+auto` Flox variable, which downloaded that
-  toolchain at run time on top of a Flox Go 1.26.4 bootstrap.
-
-## [0.4.0] - 2026-10-09
+- Toolchain currency: Flox installs Go 1.27.3 directly (`go_1_27`, equal to
+  `go.mod`'s `go` directive, which the version check enforces), Node.js
+  26.12.0, pnpm 12.9.0, Python 3.14.8, uv 0.13.1, protoc 36.2, buf 1.73.0 and
+  ruff 0.17.1. The environment now targets aarch64-darwin, aarch64-linux and
+  x86_64-linux, the systems the catalog builds current toolchains for; Intel
+  macOS developers use their language-native toolchains. Public CI and audit
+  use the SHA-pinned Flox 2.7.0 installer.
+- Dependency currency: the TypeScript SDK pins invariantprotocol v0.16.8
+  (commit `79ead872`) with `@bufbuild/protobuf` 2.16.0 and
+  `@opentelemetry/api` 1.10.0; Biome 2.6.2,
+  tsup 9.0.0, Vitest 5.0.5 and `@types/node` 26.6.5; the PostCSS override moves
+  to 8.5.31. Go moves to OpenTelemetry 1.47.0. The Python `polars` extra
+  accepts Polars 2 and PyArrow 26 (`polars>=1.20,<3`, `pyarrow>=19,<27`), the
+  lock moves to Polars 2.0.0, PyArrow 26.0.0, OpenTelemetry API 1.45.1 and
+  protovalidate 2.1.0, and the build backend is hatchling 1.32.4. Generated
+  bindings are refreshed for protoc 36.2. Temporaless stays pinned at v0.12.2.
+- The locked Python graph holds `protobuf-py` below 0.7: the pinned
+  Temporaless v0.12.2 runs on `connectrpc` 0.12.1, which fails to import with
+  `protobuf-py` 0.7.0.
+- The examples lint names `medallion` as the first-party package, which ruff
+  0.17 no longer infers for the repository-root `examples/` tree.
+- Biome 2.6 formats Markdown and YAML; both stay outside Biome so the
+  documentation layout and the pnpm-written lockfile are left as authored.
 
 - Pin `source-map-js` 1.2.2 in the locked build graph to address
   GHSA-68fv-2mgg-jv7q without suppressing the dependency audit.
@@ -126,6 +141,12 @@ annotated `vX.Y.Z` tag.
   Runnable quickstarts land in `examples/` for every language, and live tests
   stay opt-in behind the `MEDALLION_SMOKE_*` environment
   (`MEDALLION_SMOKE_INGEST_TABLE` selects the target table).
+
+### Removed
+
+- The `GOTOOLCHAIN=go1.27.2+auto` Flox variable, which downloaded that
+  toolchain at run time on top of a Flox Go 1.26.4 bootstrap.
+
 ## [0.3.1] - 2026-08-29
 
 Versions 0.2.0 and 0.3.0 were never tagged; their changes ship here.

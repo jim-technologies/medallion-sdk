@@ -11,7 +11,7 @@ SHELLCHECK ?= shellcheck
 SHFMT ?= shfmt
 ACTIONLINT ?= actionlint
 GITLEAKS ?= gitleaks
-GOVULNCHECK_VERSION ?= v1.7.0
+GOVULNCHECK_VERSION ?= v1.9.0
 PIP_AUDIT_VERSION ?= 2.10.1
 # The Temporaless release the workflows surface wraps. scripts/check_versions.py
 # holds this to the pin recorded in every language.

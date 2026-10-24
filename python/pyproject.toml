@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling==1.32.0"]
+requires = ["hatchling==1.32.4"]
 build-backend = "hatchling.build"
 
 [project]
@@ -35,8 +35,8 @@ dependencies = [
 # Dataframe conveniences for the tables surface: polars append inputs,
 # query results collected with to_polars(), and Arrow IPC payloads.
 polars = [
-  "polars>=1.20,<2",
-  "pyarrow>=19,<26",
+  "polars>=1.20,<3",
+  "pyarrow>=19,<27",
 ]
 # Durable execution: the workflows factory hands back Temporaless's own
 # ConnectStore/ConnectQueryStore, so it needs that exact release. The pin is
@@ -53,14 +53,21 @@ workflows = [
 # medallion[polars].
 dev = [
   "medallion[workflows]",
-  "polars>=1.20,<2",
-  "pyarrow>=19,<26",
+  "polars>=1.20,<3",
+  "pyarrow>=19,<27",
 ]
 
 [project.urls]
 Homepage = "https://github.com/jim-technologies/medallion-sdk"
 Repository = "https://github.com/jim-technologies/medallion-sdk"
 Issues = "https://github.com/jim-technologies/medallion-sdk/issues"
+
+[tool.uv]
+# The pinned Temporaless v0.12.2 runs on connectrpc 0.12.1, which imports
+# protobuf.wkt names that protobuf-py 0.7.0 removed. Hold the locked graph
+# below 0.7 until the workflows pin moves to a Temporaless release that
+# bounds it (Temporaless 0.12.3 declares protobuf-py<0.7 itself).
+constraint-dependencies = ["protobuf-py<0.7"]
 
 [tool.hatch.metadata]
 # Temporaless uses an immutable Git commit; the shared Buf generated modules

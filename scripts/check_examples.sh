@@ -18,5 +18,5 @@ if [[ -n "$unformatted" ]]; then
 fi
 go vet ./examples/
 
-ruff check --no-cache examples
+ruff check --no-cache --config 'lint.isort.known-first-party = ["medallion"]' examples
 PYTHONDONTWRITEBYTECODE=1 python3 -m compileall -q examples

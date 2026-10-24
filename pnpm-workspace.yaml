@@ -3,16 +3,16 @@ packages:
 
 overrides:
   esbuild: "0.28.2"
-  postcss: "8.5.26"
+  postcss: "8.5.31"
   source-map-js: "1.2.2"
 
 # invariantprotocol is Git-distributed and builds its TypeScript output during
 # installation. Keep this exact commit allowlisted with the dependency pin.
 allowBuilds:
-  "@jim-technologies/invariant-protocol@https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/c646cd0326a72ce977cf9c221a678881f8c83ced": true
+  "@jim-technologies/invariant-protocol@https://codeload.github.com/jim-technologies/invariantprotocol/tar.gz/79ead8726b4d79ee7c024b85441daf6f46851830": true
   "esbuild": true
   "protobufjs": false
 
 # Permit the patched PostCSS release through pnpm's minimum-release-age gate.
 minimumReleaseAgeExclude:
-  - postcss@8.5.26
+  - postcss@8.5.31

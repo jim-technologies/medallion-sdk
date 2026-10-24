@@ -15,7 +15,10 @@
       "!proto",
       "!python",
       "!src/connect-descriptor.ts",
-      "!src/ingest-descriptor.ts"
+      "!src/ingest-descriptor.ts",
+      "!**/*.md",
+      "!**/*.yaml",
+      "!**/*.yml"
     ]
   },
   "formatter": {
