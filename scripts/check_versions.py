@@ -72,10 +72,15 @@ def temporaless_pin_errors(pyproject: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     extras = pyproject["project"].get("optional-dependencies", {})
     workflows = extras.get("workflows") if isinstance(extras, dict) else None
-    if workflows != [TEMPORALESS_REQUIREMENT]:
+    expected_workflows = [
+        TEMPORALESS_REQUIREMENT,
+        "connectrpc>=0.12.1,<0.13",
+        "protobuf-py<0.7",
+    ]
+    if workflows != expected_workflows:
         errors.append(
             "python/pyproject.toml workflows extra is "
-            f"{workflows!r}; expected {[TEMPORALESS_REQUIREMENT]!r}"
+            f"{workflows!r}; expected {expected_workflows!r}"
         )
 
     makefile = (ROOT / "Makefile").read_text()

@@ -87,6 +87,13 @@ uv pip install --python "$python" --no-deps "$requirement"
 prove_workflows
 uv pip check --python "$python"
 
+# An unseeded consumer resolves wheel metadata, not this repository's uv.lock.
+uv venv --quiet "$tmp/fresh-workflows"
+python="$tmp/fresh-workflows/bin/python"
+uv pip install --python "$python" "${wheel}[workflows]"
+prove_workflows
+uv pip check --python "$python"
+
 # Reproduce the old co-owned namespace using the actual prior distributions.
 cd "$root"
 mkdir "$tmp/legacy"

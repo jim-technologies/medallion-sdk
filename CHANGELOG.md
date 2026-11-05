@@ -11,6 +11,9 @@ annotated `vX.Y.Z` tag.
 - Python rejects non-integer retry counts when constructing `RetryConfig`,
   using `MEDALLION_INVALID_OPTIONS` instead of a later raw `TypeError` during
   an otherwise valid table read or idempotent request.
+- Fresh Python `workflows` installations carry compatibility bounds for
+  ConnectRPC and protobuf-py matching the pinned generated client. The gate
+  now exercises workflow handshakes from an unseeded wheel installation.
 
 ## [0.4.0] - 2026-10-24
 

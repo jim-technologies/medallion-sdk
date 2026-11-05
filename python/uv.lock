@@ -83,6 +83,8 @@ polars = [
     { name = "pyarrow" },
 ]
 workflows = [
+    { name = "connectrpc" },
+    { name = "protobuf-py" },
     { name = "temporaless" },
 ]
 
@@ -97,9 +99,11 @@ dev = [
 requires-dist = [
     { name = "bufbuild-protovalidate-protocolbuffers-pyi", url = "https://buf.build/gen/python/bufbuild-protovalidate-protocolbuffers-pyi/bufbuild_protovalidate_protocolbuffers_pyi-36.2.0.1.20260825204119+511051f7f437-py3-none-any.whl" },
     { name = "bufbuild-protovalidate-protocolbuffers-python", url = "https://buf.build/gen/python/bufbuild-protovalidate-protocolbuffers-python/bufbuild_protovalidate_protocolbuffers_python-36.2.0.1.20260825204119+511051f7f437-py3-none-any.whl" },
+    { name = "connectrpc", marker = "extra == 'workflows'", specifier = ">=0.12.1,<0.13" },
     { name = "opentelemetry-api", specifier = ">=1.44.0,<2" },
     { name = "polars", marker = "extra == 'polars'", specifier = ">=1.20,<3" },
     { name = "protobuf", specifier = ">=7.36.2,<8" },
+    { name = "protobuf-py", marker = "extra == 'workflows'", specifier = "<0.7" },
     { name = "pyarrow", marker = "extra == 'polars'", specifier = ">=19,<27" },
     { name = "temporaless", marker = "extra == 'workflows'", git = "https://github.com/jim-technologies/temporaless.git?subdirectory=core%2Fpy&rev=136fdf5b5fb5ec9fc30f1e58b3fd42445b123201" },
 ]
