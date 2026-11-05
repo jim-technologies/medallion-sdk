@@ -263,6 +263,13 @@ def _error_info(reason: str, metadata: dict[str, str] | None = None) -> str:
 
 
 class IngestionTests(unittest.TestCase):
+    def test_retry_attempt_count_rejects_invalid_types_before_requests(self) -> None:
+        for value in (True, False, 2.0, 2.5, "3", None, 0, 6):
+            with self.subTest(max_attempts=value):
+                with self.assertRaises(MedallionError) as raised:
+                    RetryConfig(max_attempts=value)
+                self.assertEqual(raised.exception.code, "MEDALLION_INVALID_OPTIONS")
+
     def test_official_external_sdk_ingestion_conformance_fixtures(self) -> None:
         document = json.loads(
             (

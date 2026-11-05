@@ -99,9 +99,13 @@ class RetryConfig:
     jitter_ratio: float = 0.2
 
     def __post_init__(self) -> None:
-        if isinstance(self.max_attempts, bool) or not 1 <= self.max_attempts <= 5:
+        if (
+            isinstance(self.max_attempts, bool)
+            or not isinstance(self.max_attempts, int)
+            or not 1 <= self.max_attempts <= 5
+        ):
             raise MedallionError(
-                "retry.max_attempts must be between 1 and 5.",
+                "retry.max_attempts must be an integer between 1 and 5.",
                 code="MEDALLION_INVALID_OPTIONS",
             )
         if (

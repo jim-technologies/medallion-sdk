@@ -268,7 +268,9 @@ or an equivalent durable queue:
 3. Publish the claimed row or batch.
 4. Mark it delivered only after decoding the complete receipt.
 
-Automatic retries are opt-in (`max_attempts` defaults to one). When enabled,
+Automatic retries are opt-in (`max_attempts` defaults to one and must be an
+integer from one through five; booleans and floating-point values are rejected
+when constructing `RetryConfig`). When enabled,
 they resend the exact serialized batch, in the same order, with the same keys.
 The SDK retries only idempotent ingestion/readback operations and transient
 backpressure or availability failures. Validation, authentication,

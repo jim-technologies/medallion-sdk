@@ -6,6 +6,12 @@ annotated `vX.Y.Z` tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- Python rejects non-integer retry counts when constructing `RetryConfig`,
+  using `MEDALLION_INVALID_OPTIONS` instead of a later raw `TypeError` during
+  an otherwise valid table read or idempotent request.
+
 ## [0.4.0] - 2026-10-24
 
 ### Changed
