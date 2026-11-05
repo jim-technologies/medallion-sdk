@@ -14,6 +14,8 @@ annotated `vX.Y.Z` tag.
 - Fresh Python `workflows` installations carry compatibility bounds for
   ConnectRPC and protobuf-py matching the pinned generated client. The gate
   now exercises workflow handshakes from an unseeded wheel installation.
+- Flox selects its declared Python interpreter for uv and disables managed
+  interpreter downloads, keeping local and CI wheel checks on that toolchain.
 
 ## [0.4.0] - 2026-10-24
 

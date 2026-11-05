@@ -101,7 +101,11 @@
     },
     "vars": {
       "GOENV": "off",
-      "GOFLAGS": "-mod=readonly"
+      "GOFLAGS": "-mod=readonly",
+      "UV_PYTHON_DOWNLOADS": "never"
+    },
+    "hook": {
+      "on-activate": "  export UV_PYTHON=\"$(command -v python3.14)\"\n"
     },
     "options": {
       "systems": [
