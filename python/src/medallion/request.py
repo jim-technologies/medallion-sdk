@@ -339,11 +339,7 @@ class _RequestClient:
             )
         request_path = canonical_path
         url = self._base_url + request_path
-        sensitive_values = (
-            self._api_key,
-            self._access_token,
-            *_payload_sensitive_values(payload),
-        )
+        sensitive_values = (self._api_key, self._access_token)
         total_timeout = self._timeout if timeout is None else _timeout_seconds(timeout)
         deadline = time.monotonic() + total_timeout
         attempts_allowed = self._retry.max_attempts if retry_safe else 1
@@ -728,60 +724,6 @@ def _canonical_workspace_id(value: object) -> str:
             code="MEDALLION_INVALID_WORKSPACE_ID",
         )
     return value
-
-
-def _payload_sensitive_values(payload: bytes) -> tuple[str, ...]:
-    """Collect payload values solely so a server echo can be redacted."""
-
-    try:
-        body = json.loads(payload.decode("utf-8"))
-    except UnicodeDecodeError, json.JSONDecodeError:
-        return ()
-    if not isinstance(body, Mapping):
-        return ()
-    events = body.get("events")
-    if not isinstance(events, list):
-        return ()
-    values: set[str] = set()
-    for event in events:
-        if not isinstance(event, Mapping):
-            continue
-        raw = event.get("payloadJson")
-        if not isinstance(raw, str) or not raw:
-            continue
-        values.add(raw)
-        try:
-            decoded = json.loads(raw, parse_float=str, parse_int=str)
-        except json.JSONDecodeError, RecursionError:
-            continue
-        try:
-            _collect_sensitive_json_strings(decoded, values)
-        except RecursionError:
-            # The complete serialized payload remains in ``values`` and is
-            # sufficient to redact a wholesale server echo.
-            continue
-    return tuple(sorted(values, key=len, reverse=True))
-
-
-def _collect_sensitive_json_strings(value: Any, output: set[str]) -> None:
-    if isinstance(value, str):
-        if len(value) >= 4:
-            output.add(value)
-        return
-    if value is None or isinstance(value, bool | int | float):
-        encoded = json.dumps(value, allow_nan=False, separators=(",", ":"))
-        if len(encoded) >= 4:
-            output.add(encoded)
-        return
-    if isinstance(value, Mapping):
-        for key, item in value.items():
-            if isinstance(key, str) and len(key) >= 4:
-                output.add(key)
-            _collect_sensitive_json_strings(item, output)
-        return
-    if isinstance(value, list):
-        for item in value:
-            _collect_sensitive_json_strings(item, output)
 
 
 def _base_url_scheme_allowed(parsed_base_url: Any) -> bool:

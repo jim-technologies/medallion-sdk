@@ -12,7 +12,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -185,7 +184,7 @@ func (c *requestClient) postProtoWithOptions(ctx context.Context, path string, r
 		recordRequestSpanError(span, err)
 		return protoEnvelope{}, &Error{Code: "MEDALLION_INVALID_JSON_BODY", Message: "request body must be protobuf JSON serializable"}
 	}
-	redactions := c.redactionValues(raw)
+	redactions := c.redactionValues()
 
 	requestURL := c.baseURL + ensureLeadingSlash(path)
 	for attempt := 1; attempt <= c.retry.MaxAttempts; attempt++ {
@@ -605,69 +604,16 @@ func sanitizeText(value string, maximumBytes int) string {
 	return strings.TrimSpace(sanitized.String())
 }
 
-func (c *requestClient) redactionValues(requestRaw []byte) []string {
-	values := make(map[string]struct{})
-	addRedactionValue(values, c.apiKey, true)
-	addRedactionValue(values, c.accessToken, true)
-
-	decoder := json.NewDecoder(bytes.NewReader(requestRaw))
-	decoder.UseNumber()
-	var requestBody map[string]any
-	if err := decoder.Decode(&requestBody); err == nil {
-		if events, ok := requestBody["events"].([]any); ok {
-			for _, rawEvent := range events {
-				event, ok := rawEvent.(map[string]any)
-				if !ok {
-					continue
-				}
-				payloadJSON, ok := event["payloadJson"].(string)
-				if !ok || payloadJSON == "" {
-					continue
-				}
-				addRedactionValue(values, payloadJSON, false)
-				payloadDecoder := json.NewDecoder(strings.NewReader(payloadJSON))
-				payloadDecoder.UseNumber()
-				var payload any
-				if err := payloadDecoder.Decode(&payload); err == nil {
-					collectJSONRedactionValues(payload, values)
-				}
-			}
+// redactionValues lists what an API error must never echo: the one configured
+// credential.
+func (c *requestClient) redactionValues() []string {
+	redactions := make([]string, 0, 1)
+	for _, credential := range []string{c.accessToken, c.apiKey} {
+		if credential != "" {
+			redactions = append(redactions, credential)
 		}
 	}
-
-	redactions := make([]string, 0, len(values))
-	for value := range values {
-		redactions = append(redactions, value)
-	}
-	sort.Slice(redactions, func(left, right int) bool {
-		return len(redactions[left]) > len(redactions[right])
-	})
 	return redactions
-}
-
-func addRedactionValue(values map[string]struct{}, value string, allowShort bool) {
-	if value == "" || (!allowShort && len(value) < 4) {
-		return
-	}
-	values[value] = struct{}{}
-}
-
-func collectJSONRedactionValues(value any, values map[string]struct{}) {
-	switch typed := value.(type) {
-	case map[string]any:
-		for key, child := range typed {
-			addRedactionValue(values, key, false)
-			collectJSONRedactionValues(child, values)
-		}
-	case []any:
-		for _, child := range typed {
-			collectJSONRedactionValues(child, values)
-		}
-	case string:
-		addRedactionValue(values, typed, false)
-	case json.Number:
-		addRedactionValue(values, typed.String(), false)
-	}
 }
 
 func redactText(value string, redactions []string) string {

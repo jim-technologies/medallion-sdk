@@ -205,10 +205,7 @@ export class RequestClient {
       }
     }
 
-    const redactions = [
-      this.#credential.value,
-      ...payloadSensitiveValues(body),
-    ];
+    const redactions = [this.#credential.value];
 
     return this.dispatch<TResponse>({
       method: options.method,
@@ -566,77 +563,6 @@ export class RequestClient {
   private buildUrl(path: string): string {
     const normalizedPath = path.startsWith("/") ? path : `/${path}`;
     return new URL(`${this.baseUrl}${normalizedPath}`).toString();
-  }
-}
-
-function payloadSensitiveValues(body: string | undefined): string[] {
-  if (body === undefined) return [];
-  let request: unknown;
-  try {
-    request = JSON.parse(body);
-  } catch {
-    return [];
-  }
-  if (
-    request === null ||
-    typeof request !== "object" ||
-    Array.isArray(request)
-  ) {
-    return [];
-  }
-  const events = (request as Record<string, unknown>).events;
-  if (!Array.isArray(events)) return [];
-
-  const values = new Set<string>();
-  for (const event of events) {
-    if (event === null || typeof event !== "object" || Array.isArray(event)) {
-      continue;
-    }
-    const raw = (event as Record<string, unknown>).payloadJson;
-    if (typeof raw !== "string" || raw.length === 0) continue;
-    values.add(raw);
-    try {
-      collectSensitiveJsonValues(JSON.parse(raw), values, new Set());
-    } catch {
-      // The complete serialized payload remains sufficient to redact a
-      // wholesale server echo.
-    }
-  }
-  return [...values].toSorted((left, right) => right.length - left.length);
-}
-
-function collectSensitiveJsonValues(
-  value: unknown,
-  output: Set<string>,
-  ancestors: Set<object>,
-): void {
-  if (typeof value === "string") {
-    if (value.length >= 4) output.add(value);
-    return;
-  }
-  if (
-    value === null ||
-    typeof value === "boolean" ||
-    typeof value === "number"
-  ) {
-    const encoded = JSON.stringify(value);
-    if (encoded.length >= 4) output.add(encoded);
-    return;
-  }
-  if (typeof value !== "object" || ancestors.has(value)) return;
-  ancestors.add(value);
-  try {
-    if (Array.isArray(value)) {
-      for (const item of value)
-        collectSensitiveJsonValues(item, output, ancestors);
-      return;
-    }
-    for (const [key, item] of Object.entries(value)) {
-      if (key.length >= 4) output.add(key);
-      collectSensitiveJsonValues(item, output, ancestors);
-    }
-  } finally {
-    ancestors.delete(value);
   }
 }
 
