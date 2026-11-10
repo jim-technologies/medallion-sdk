@@ -1,11 +1,9 @@
 # Vendored contracts
 
-This directory vendors the two public contract surfaces the SDK speaks:
+This directory contains the active public ingest contract the SDK speaks:
 
 - `medallion.ingest.v1.MedallionIngestService` — the tabular tables, append,
   and query surface (`medallion/ingest/v1/ingest.proto`).
-- `medallion.connect.v1.MedallionConnectService` — the deprecated CDC/audit
-  publish surface (`medallion/connect/v1/connect.proto`).
 
 ## Ingest contract
 
@@ -63,42 +61,32 @@ upstream contract was released, replacing it was deliberately breaking.
 that transition, scoped by the content hash of the provisional blob so it
 expires by itself and every later change is compared normally.
 
-## External-ingestion contract
+## Historical Connect proof
 
-This directory also vendors the checksummed `external_ingestion_sdk_v1` contract for the
-public `medallion.connect.v1.MedallionConnectService` interface. Its only RPCs
-are `PublishCdcEvents`, `PublishAuditEvents`, `ListCdcEvents`, and
-`ListAuditEvents`. The descriptor is dependency-closed but contains only the
-messages and enums reachable from those methods.
+The byte-preserved sanitized Connect export and projection live under
+`archive/connect-v1`. They document the retired four-RPC subset and remain
+integrity-checked historical evidence. They are not active contracts or runtime
+artifacts and do not attest ingest. An independent producer-issued immutable
+ingest attestation, and a reviewed verifier for it, are required before 0.4.0
+is published. The release guard remains closed until that proof exists.
 
-`external-ingestion-v1.descriptor.binpb` is verified against the standalone export,
-used to generate the Go and Python bindings, and embedded in the TypeScript
-runtime:
-
-```sh
-make proto-bindings
-make proto-descriptor
-make generated-check
-```
-
-The sync input is a standalone sanitized export. Pass it explicitly with
-`MEDALLION_SDK_CONTRACT_ROOT=/path/to/export make contract-sync`, or run the
-target without the variable to deterministically regenerate from the committed
-offline copy. SDK consumers do not need Buf or Flox.
-
-Ordinary checks accept a consistent candidate export. `make
-contract-release-check` remains blocked until that export is replaced by a
-producer-issued immutable release attestation.
+Deleting the Connect closure from `proto/` is deliberately breaking.
+`scripts/check_proto_breaking.sh` exempts exactly that deletion: each of the
+two removed files, `medallion/connect/v1/connect.proto` and the
+`buf/validate/validate.proto` shim only it imported, is dropped from the
+baseline only while the baseline holds its exact pre-removal blob and the file
+is absent from the tree. Like the ingest re-pin exemption, it expires once
+`main` carries the removal; every other change, including any edit to a file
+that still exists, is compared normally. `make ingest-breaking-check` also
+compares the retained ingest contract with the fixed pre-removal commit and
+the `main` baseline. See the [migration note](../docs/migration-0.4.md).
 
 ## Conventions
 
 - Package names always carry a version suffix (`medallion.<domain>.v1`); a
   breaking major is a new package, never an in-place edit of an existing one.
 - `buf lint` enforces the standard rules plus comment coverage on public RPCs,
-  messages, and fields. The vendored `connect.proto` is exempt from the
-  comment rules only because it is rendered from the sanitized descriptor,
-  which must omit source comments; its documentation is reviewed in the
-  contract export.
+  messages, and fields.
 - Breaking-change detection (`buf breaking`, FILE rules) runs inside
   `make validate` against the `main` baseline because this contract is
   consumed outside the repository.

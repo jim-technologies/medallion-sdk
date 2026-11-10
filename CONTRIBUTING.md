@@ -15,8 +15,8 @@ bootstrap; do not add language setup actions or host-installed quality tools.
 CI runs exactly `flox activate -- make validate`, and a weekly secretless
 workflow runs `flox activate -- make audit`; every toolchain comes from
 `.flox/env/manifest.toml`. On a release tag the same gate additionally
-requires the immutable contract attestation, the annotated-tag checks, and a
-CHANGELOG whose first release heading is the tagged version.
+requires the immutable ingest contract attestation, the annotated-tag checks,
+and a CHANGELOG whose first release heading is the tagged version.
 
 `make validate` uses locked dependencies and local test services. It includes
 the durable-execution suite in the editable environment and against a clean
@@ -45,13 +45,14 @@ README install commands name the newest tag that exists instead;
 
 `make release` publishes a release the one way this repository is
 distributed: the annotated root tag. From a maintainer's machine it refuses
-unless the immutable contract attestation passes, the tree is clean (untracked
-files included), `HEAD` is pushed to `origin/main`, every version mirror
-equals `VERSION`, the first CHANGELOG release heading is `VERSION` with nothing
-left under `[Unreleased]`, and the tag is absent locally and on origin; then it
-creates `vVERSION`, pushes it, and exits 0. Nothing goes to npm, PyPI, or a Go
-module registry beyond what the Git tag serves. `scripts/test_versions.py`
-exercises those guards against a fixture repository with a local origin.
+unless the immutable ingest contract attestation passes, the tree is clean
+(untracked files included), `HEAD` is pushed to `origin/main`, every version
+mirror equals `VERSION`, the first CHANGELOG release heading is `VERSION` with
+nothing left under `[Unreleased]`, and the tag is absent locally and on origin;
+then it creates `vVERSION`, pushes it, and exits 0. Nothing goes to npm, PyPI,
+or a Go module registry beyond what the Git tag serves.
+`scripts/test_versions.py` exercises those guards against a fixture repository
+with a local origin.
 
 The synchronizer updates the TypeScript and Python package metadata and the
 Python lockfile together. Go derives the same version from the root Git tag.
@@ -67,11 +68,6 @@ Every language implementation supports the same bounded customer surfaces:
   in the declared ClickHouse dialect. Its clients and wrappers must contain
   exactly `CreateTable`, `GetTable`, `ListTables`, `UpdateTable`,
   `AppendRows`, `RunQuery`, and `GetQueryResults`.
-- `medallion.connect.v1` — the deprecated CDC/audit publish surface. Its
-  generated service, low-level clients, and ergonomic wrappers must contain
-  exactly `PublishCdcEvents`, `PublishAuditEvents`, `ListCdcEvents`, and
-  `ListAuditEvents`.
-
 - `temporaless.v1` — the durable-execution storage backend, exposed only as a
   workspace-bound factory over Temporaless's own `ConnectStore` and
   `ConnectQueryStore`. Do not write a storage client here, and do not restate,
@@ -82,6 +78,10 @@ Every language implementation supports the same bounded customer surfaces:
   it. This SDK ships no operator client: `PutEvent`, the
   bounded deletions, and `Sweep` stay behind a separately provisioned operator
   credential and the server's per-method authorization.
+
+The removed Connect subset is historical integrity evidence under
+`archive/connect-v1`; it is excluded from active SDK generation and packaging.
+It cannot attest ingest or authorize a release.
 
 Do not add a generic RPC dispatcher, connector provisioning, platform
 administration, first-party application APIs, actions, secrets, an ORM or
@@ -97,14 +97,18 @@ flox activate -- make generate generated-check
 ```
 
 `make validate` also runs breaking-change detection against the `main`
-baseline (`make breaking-check`). The published packages are version-suffixed
-(`medallion.connect.v1`); a breaking major ships as a new package, never an
-in-place edit of an existing one.
+baseline (`make breaking-check`) and compares the ingest contract with the
+fixed commit before the Connect removal (`make ingest-breaking-check`). The
+published packages are version-suffixed (`medallion.ingest.v1`); a breaking
+major ships as a new package, never an in-place edit of an existing one. A
+deliberate removal or re-pin is exempted only in
+`scripts/check_proto_breaking.sh`, scoped by the content hash of exactly the
+affected baseline files and with its reason recorded there; never disable the
+check.
 
-The local generated proto is the exact reachable closure of those four RPCs,
-not the entire administration or internal API. Every included message, field,
-enum, RPC signature, and validation constraint must remain identical to the
-reviewed, sanitized external-ingestion contract export.
+The vendored ingest proto stays wire-identical to the released upstream
+contract, apart from the deviations documented in
+[`proto/README.md`](proto/README.md).
 
 ## Public Surface Review
 
@@ -162,9 +166,11 @@ To publish the one root `vX.Y.Z` release tag:
    version mirror.
 2. Regenerate protocol bindings and descriptors with
    `flox activate -- make generate`.
-3. Sync a reviewed, immutable external-ingestion contract export and run
-   `flox activate -- make contract-release-check`; a mutable or unattested
-   export is never acceptable on a release tag.
+3. Obtain an independent producer-issued immutable ingest contract
+   attestation, add a reviewed verifier for it, and run
+   `flox activate -- make contract-release-check`. Until both exist the check
+   refuses every tag; the archived Connect proof cannot satisfy it, and a
+   mutable or unattested export is never acceptable on a release tag.
 4. Run `flox activate -- make validate`, including clean-wheel workflows.
 5. Run `flox activate -- make git-install-check`; this installs the exact tree
    by both full commit SHA and the synthetic root release tag in clean Go,

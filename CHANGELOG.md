@@ -6,28 +6,44 @@ annotated `vX.Y.Z` tag.
 
 ## [Unreleased]
 
+Nothing below has been tagged. `VERSION` 0.4.0 names the release that ships
+all of it: the `[0.4.0]` heading dated 2026-10-24 was preparation for a tag
+the contract release check refused, so its entries are unreleased too.
+
+### Removed
+
+- **Breaking:** remove the deprecated `medallion.connect.v1` CDC/audit surface
+  from every language: the `connect`, `cdc` and `audit` clients, their types
+  and exports, the generated Connect bindings, the connector default in client
+  options, and the CDC/audit examples and tests. This SDK change does not
+  disable those RPCs on the server, and `v0.3.1` keeps its clients. The seven
+  ingest RPCs, tables, workspace authentication, retries and workflows are
+  unchanged. See [the migration note](docs/migration-0.4.md).
+- The `GOTOOLCHAIN=go1.27.2+auto` Flox variable, which downloaded that
+  toolchain at run time on top of a Flox Go 1.26.4 bootstrap.
+
 ### Changed
 
 - Dependency currency: the TypeScript development toolchain moves to Biome
   2.6.6, Vitest 5.1.0 and `@types/node` 26.6.6; the Python lock moves to
   Polars 2.1.0, PyArrow 26.0.1 and OpenTelemetry API 1.45.2, and the build
   backend is hatchling 1.33.0. The published dependency floors are unchanged.
-
-### Fixed
-
-- Python rejects non-integer retry counts when constructing `RetryConfig`,
-  using `MEDALLION_INVALID_OPTIONS` instead of a later raw `TypeError` during
-  an otherwise valid table read or idempotent request.
-- Fresh Python `workflows` installations carry compatibility bounds for
-  ConnectRPC and protobuf-py matching the pinned generated client. The gate
-  now exercises workflow handshakes from an unseeded wheel installation.
-- Flox selects its declared Python interpreter for uv and disables managed
-  interpreter downloads, keeping local and CI wheel checks on that toolchain.
-
-## [0.4.0] - 2026-10-24
-
-### Changed
-
+- Move the checksummed Connect contract export and its projection to
+  `archive/connect-v1` as historical evidence. `make contract-check` still
+  verifies it, and its error registry still generates the shared transport
+  error policy, but it does not attest `medallion.ingest.v1`: the release check
+  now refuses every tag until an immutable producer-issued ingest attestation
+  and a reviewed verifier for it exist.
+- `make breaking-check` exempts the deletion of exactly the two removed proto
+  files, `medallion/connect/v1/connect.proto` and the `buf/validate` shim only
+  it imported, each matched by the content hash `main` carried, so the
+  exemption expires once `main` carries the removal.
+  `make ingest-breaking-check` also compares the retained ingest contract with
+  the fixed pre-removal commit and the `main` baseline.
+- Authenticate the shared public-surface scanner and self-test by their exact
+  published paths and checksums during Git-install artifact verification;
+  modified policy bytes, copies at other paths and unrelated private
+  references remain refused.
 - Toolchain currency: Flox installs Go 1.27.3 directly (`go_1_27`, equal to
   `go.mod`'s `go` directive, which the version check enforces), Node.js
   26.12.0, pnpm 12.9.0, Python 3.14.8, uv 0.13.1, protoc 36.2, buf 1.73.0 and
@@ -51,10 +67,8 @@ annotated `vX.Y.Z` tag.
   0.17 no longer infers for the repository-root `examples/` tree.
 - Biome 2.6 formats Markdown and YAML; both stay outside Biome so the
   documentation layout and the pnpm-written lockfile are left as authored.
-
 - Pin `source-map-js` 1.2.2 in the locked build graph to address
   GHSA-68fv-2mgg-jv7q without suppressing the dependency audit.
-
 - Go builds require the current 1.27.2 security patch. Public CI and audit
   use the same SHA-pinned Flox 2.6.0 installer.
 - Dependency currency: the TypeScript SDK pins invariantprotocol v0.16.5
@@ -100,9 +114,8 @@ annotated `vX.Y.Z` tag.
   quickstart paces its caller-side loop the same way.
 - Stop bundling Python's `buf.validate` namespace. The SDK and its pinned
   Temporaless dependency use the same official Buf Python and typing wheels,
-  pinned by URL and SHA256. Connect validation rules, generated descriptors,
-  and the candidate producer attestation are unchanged. The obsolete
-  `MEDALLION_TEMPORALESS_INCOMPATIBLE` collision workaround is removed.
+  pinned by URL and SHA256. The obsolete `MEDALLION_TEMPORALESS_INCOMPATIBLE`
+  collision workaround is removed.
 - Restore workflows to the ordinary `make validate` suite. The tests live
   under `python/tests`; clean-wheel checks exercise both new-package install
   orders, single shared-schema ownership, uninstall/reinstall, and the
@@ -160,10 +173,16 @@ annotated `vX.Y.Z` tag.
   stay opt-in behind the `MEDALLION_SMOKE_*` environment
   (`MEDALLION_SMOKE_INGEST_TABLE` selects the target table).
 
-### Removed
+### Fixed
 
-- The `GOTOOLCHAIN=go1.27.2+auto` Flox variable, which downloaded that
-  toolchain at run time on top of a Flox Go 1.26.4 bootstrap.
+- Python rejects non-integer retry counts when constructing `RetryConfig`,
+  using `MEDALLION_INVALID_OPTIONS` instead of a later raw `TypeError` during
+  an otherwise valid table read or idempotent request.
+- Fresh Python `workflows` installations carry compatibility bounds for
+  ConnectRPC and protobuf-py matching the pinned generated client. The gate
+  now exercises workflow handshakes from an unseeded wheel installation.
+- Flox selects its declared Python interpreter for uv and disables managed
+  interpreter downloads, keeping local and CI wheel checks on that toolchain.
 
 ## [0.3.1] - 2026-08-29
 

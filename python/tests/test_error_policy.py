@@ -17,9 +17,7 @@ AUTOMATIC_RETRY_CLASSIFICATIONS = {
 class ErrorPolicyTests(unittest.TestCase):
     def test_runtime_policy_exactly_matches_the_vendored_registry(self) -> None:
         registry = json.loads(
-            (
-                ROOT / "proto/external-ingestion-contract/v1/error-reasons.json"
-            ).read_text()
+            (ROOT / "archive/connect-v1/export/error-reasons.json").read_text()
         )
         expected = {
             KnownErrorReason(item["reason"]): item for item in registry["reasons"]

@@ -43,10 +43,6 @@ MAX_RESPONSE_BYTES = 64 << 20
 _WORKSPACE_ID_PATTERN = re.compile(r"^ws_[0-9a-hjkmnp-tv-z]{26}$", re.ASCII)
 _CANONICAL_RPC_PATHS = frozenset(
     {
-        "/medallion.connect.v1.MedallionConnectService/PublishCdcEvents",
-        "/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
-        "/medallion.connect.v1.MedallionConnectService/PublishAuditEvents",
-        "/medallion.connect.v1.MedallionConnectService/ListAuditEvents",
         "/medallion.ingest.v1.MedallionIngestService/CreateTable",
         "/medallion.ingest.v1.MedallionIngestService/GetTable",
         "/medallion.ingest.v1.MedallionIngestService/ListTables",
@@ -338,7 +334,7 @@ class _RequestClient:
         canonical_path = path if path.startswith("/") else "/" + path
         if canonical_path not in _CANONICAL_RPC_PATHS:
             raise MedallionError(
-                "Only the canonical medallion.connect.v1 and medallion.ingest.v1 RPCs are supported.",
+                "Only the canonical medallion.ingest.v1 RPCs are supported.",
                 code="MEDALLION_UNSUPPORTED_RPC",
             )
         request_path = canonical_path

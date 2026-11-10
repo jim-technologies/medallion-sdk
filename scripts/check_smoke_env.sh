@@ -6,7 +6,6 @@ required=(
   MEDALLION_SMOKE_BASE_URL
   MEDALLION_SMOKE_API_KEY
   MEDALLION_SMOKE_WORKSPACE_ID
-  MEDALLION_SMOKE_CONNECTOR_ID
 )
 
 for name in "${required[@]}"; do
@@ -16,8 +15,7 @@ for name in "${required[@]}"; do
   fi
 done
 
-# The tables live tier is opt-in on top of the connect smoke set; without a
-# target table it skips rather than fails.
+# The tables live tier skips without a caller-provisioned target table.
 if [[ -z "${MEDALLION_SMOKE_INGEST_TABLE:-}" ]]; then
   echo "note: MEDALLION_SMOKE_INGEST_TABLE is unset; the tables live tests will skip" >&2
 fi

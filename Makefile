@@ -19,7 +19,7 @@ TEMPORALESS_COMMIT ?= 136fdf5b5fb5ec9fc30f1e58b3fd42445b123201
 
 .DEFAULT_GOAL := help
 
-.PHONY: help help-all install validate lock-check version-check version-set release contract-sync contract-check contract-release-check contract-release-gate generated-check breaking-check artifact-check git-install-check public-surface check-examples test test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-workflows test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python lint-proto lint-shell lint-workflows fmt fmt-ts fmt-go fmt-python fmt-proto fmt-shell audit audit-node audit-go audit-python secret-check deps generate proto-bindings proto-descriptor clean
+.PHONY: help help-all install validate lock-check version-check version-set release contract-sync contract-check contract-release-check contract-release-gate generated-check breaking-check ingest-breaking-check artifact-check git-install-check public-surface check-examples test test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-workflows test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python lint-proto lint-shell lint-workflows fmt fmt-ts fmt-go fmt-python fmt-proto fmt-shell audit audit-node audit-go audit-python secret-check deps generate proto-bindings proto-descriptor clean
 
 help: ## One-screen help (make help-all for every target)
 	@echo "Daily:"
@@ -44,7 +44,7 @@ install: ## Install development dependencies for all languages.
 	$(GO) mod download
 	cd python && $(UV) sync --locked
 
-validate: lock-check version-check generated-check breaking-check contract-release-gate public-surface lint test build check-examples artifact-check ## Run the full local gate; exactly what CI runs.
+validate: lock-check version-check generated-check breaking-check ingest-breaking-check contract-release-gate public-surface lint test build check-examples artifact-check ## Run the full local gate; exactly what CI runs.
 
 lock-check: node_modules/.medallion-install-stamp ## Verify all language dependency locks are synchronized.
 	$(GO) mod tidy -diff
@@ -60,13 +60,13 @@ version-set: ## Synchronize every SDK version (usage: make version-set VERSION=X
 release: contract-release-check ## Publish one release: guards, then create and push the annotated vVERSION tag.
 	scripts/release
 
-contract-sync: node_modules/.medallion-install-stamp ## Sync a sanitized SDK contract export (MEDALLION_SDK_CONTRACT_ROOT), then regenerate.
+contract-sync: node_modules/.medallion-install-stamp ## Sync a sanitized SDK historical Connect export (MEDALLION_SDK_CONTRACT_ROOT), then regenerate.
 	node scripts/sync_external_ingestion_contract.mjs --sync
 	$(MAKE) proto-bindings proto-descriptor
 	node scripts/sync_external_ingestion_contract.mjs --check
 	scripts/check_generated.sh
 
-contract-check: node_modules/.medallion-install-stamp ## Verify vendored external-ingestion artifacts and wire parity offline.
+contract-check: node_modules/.medallion-install-stamp ## Verify archived Connect proof integrity and transport error policies offline.
 	node scripts/sync_external_ingestion_contract.mjs --check
 
 contract-release-check: node_modules/.medallion-install-stamp ## Require an immutable sanitized SDK contract attestation before tagging.
@@ -80,6 +80,9 @@ generated-check: contract-check node_modules/.medallion-install-stamp ## Verify 
 
 breaking-check: ## Verify protobuf contracts stay backward-compatible with the main baseline.
 	scripts/check_proto_breaking.sh
+
+ingest-breaking-check: ## Compare retained ingest against the fixed pre-removal commit and the real main baseline.
+	scripts/check_ingest_breaking.sh
 
 artifact-check: build ## Verify Git-install package payloads and exact bundled license coverage.
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/check_package_artifacts.py
@@ -197,13 +200,12 @@ deps: ## Refresh dependencies within declared compatibility ranges.
 
 generate: proto-bindings proto-descriptor ## Regenerate all schema-derived code; validate fails if committed output is stale.
 
-proto-bindings: ## Regenerate public Go and Python Connect and ingest protobuf bindings.
-	$(BUF) generate proto/external-ingestion-v1.descriptor.binpb --template buf.gen.yaml --path medallion/connect/v1/connect.proto
+proto-bindings: ## Regenerate public Go and Python ingest protobuf bindings.
 	$(BUF) generate proto --template buf.gen.yaml --path proto/medallion/ingest/v1/ingest.proto
 	$(BUF) build proto --path proto/medallion/ingest/v1/ingest.proto --exclude-source-info --as-file-descriptor-set -o proto/ingest-v1.descriptor.binpb
 
 proto-descriptor: node_modules/.medallion-install-stamp ## Regenerate TypeScript invariantprotocol descriptors.
-	node scripts/embed-connect-descriptor.mjs
+	node scripts/embed-ingest-descriptor.mjs
 
 clean: ## Remove generated build outputs and caches.
 	$(PNPM) clean

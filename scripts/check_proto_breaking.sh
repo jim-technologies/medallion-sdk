@@ -54,5 +54,27 @@ if [[ "$baseline_ingest" == "$provisional_ingest" ]]; then
   rm -f "$tmp/$ingest_path"
 fi
 
+# One-time Connect removal exemption, scoped by content hash the same way.
+# Version 0.4.0 deletes the deprecated medallion.connect.v1 binding and the
+# buf/validate shim that only it imported; byte-preserved copies move to
+# archive/connect-v1 as historical evidence. FILE_NO_DELETE would otherwise
+# report that intentional deletion. A file is dropped from the baseline only
+# while the baseline holds its exact pre-removal blob and the file is absent
+# from the tree, so every surviving file is still compared, and once main
+# carries the removal the exemption can never fire again.
+connect_removal=(
+  proto/medallion/connect/v1/connect.proto:4251c76e9af523691793df2dbe80860ddd761912
+  proto/buf/validate/validate.proto:65ef8e03dfd4d3193ce604683934eecb0d82a61d
+)
+for removed in "${connect_removal[@]}"; do
+  removed_path="${removed%%:*}"
+  removed_blob="${removed##*:}"
+  baseline_blob="$(git rev-parse --verify --quiet "$baseline:$removed_path" || true)"
+  if [[ "$baseline_blob" == "$removed_blob" && ! -e "$removed_path" ]]; then
+    echo "note: exempting the one-time removal of $removed_path" >&2
+    rm -f "$tmp/$removed_path"
+  fi
+done
+
 buf breaking . --against "$tmp"
 echo "Protobuf contracts are backward-compatible with main ($(git rev-parse --short "$baseline"))"

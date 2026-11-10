@@ -108,19 +108,19 @@ for ref in "$sha" "$tag"; do
         find "$sdk_module_dir/proto" -mindepth 1 -maxdepth 1 -type d \
           -name '*contract*' -printf '%f\n' | sort
       )
-      if [[ "${contract_directories[*]}" != "external-ingestion-contract" ]]; then
+      if [[ -n "${contract_directories[*]}" ]]; then
         echo "Go module archive has unexpected contract directories: ${contract_directories[*]}" >&2
         exit 1
       fi
-      if [[ ! -d "$sdk_module_dir/proto/external-ingestion-contract/v1" ]]; then
-        echo "Go module archive is missing the minimal ingestion contract" >&2
+      if [[ ! -d "$sdk_module_dir/archive/connect-v1/export" ]]; then
+        echo "Go module archive is missing the historical Connect proof" >&2
         exit 1
       fi
       mapfile -t descriptors < <(
         find "$sdk_module_dir/proto" -maxdepth 1 -type f \
           -name '*.descriptor.binpb' -printf '%f\n' | sort
       )
-      if [[ "${descriptors[*]}" != "external-ingestion-v1.descriptor.binpb" ]]; then
+      if [[ "${descriptors[*]}" != "ingest-v1.descriptor.binpb" ]]; then
         echo "Go module archive has unexpected service descriptors: ${descriptors[*]}" >&2
         exit 1
       fi
@@ -128,7 +128,7 @@ for ref in "$sha" "$tag"; do
         --scan-tree "$sdk_module_dir"
       python3 "$root/scripts/check_package_artifacts.py" \
         --check-contract-tree \
-        "$sdk_module_dir/proto/external-ingestion-contract/v1"
+        "$sdk_module_dir/archive/connect-v1/export"
     )
 
     echo "==> Python"

@@ -179,7 +179,7 @@ class WorkflowsFactoryTests(unittest.TestCase):
     def test_workflows_client_is_exposed_next_to_the_other_surfaces(self) -> None:
         with StorageServer(_capabilities()) as server:
             client = _client(server)
-            for surface in ("tables", "ingest", "workflows", "connect", "audit", "cdc"):
+            for surface in ("tables", "ingest", "workflows"):
                 self.assertTrue(hasattr(client, surface), surface)
 
 

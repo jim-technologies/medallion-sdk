@@ -15,7 +15,7 @@ from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON_ROOT = ROOT / "python"
-EXTERNAL_CONTRACT_ROOT = Path("proto/external-ingestion-contract/v1")
+EXTERNAL_CONTRACT_ROOT = Path("archive/connect-v1/export")
 MINIMAL_CONTRACT_FILES = frozenset(
     {
         "bundle.json",
@@ -46,6 +46,12 @@ PRIVATE_IMPLEMENTATION_MARKERS = (
     b"ter" + b"minal-" + b"com" + b"pass",
     b"source_" + b"repository",
 )
+# Exact fleet policy bytes contain public sibling names and a generic-word
+# canary. They are policy source, not a private implementation.
+PUBLIC_POLICY_SHA256 = {
+    "scripts/public-surface-check": "713864d8e5a89149fd8becca00ce9714c47afafae6418328eb8da807008f9a22",
+    "scripts/public-surface-check-test": "90a86b462fa6676735bf2a8077f335213a0e5b66dc39936a25098962590b6dc4",
+}
 ALLOWED_JIMTECH_REPOSITORIES = frozenset(
     {
         "invariantprotocol",
@@ -56,6 +62,22 @@ ALLOWED_JIMTECH_REPOSITORIES = frozenset(
     }
 )
 FORBIDDEN_INGESTION_SYMBOLS = (
+    b"PublishCdcEvents",
+    b"PublishAuditEvents",
+    b"ListCdcEvents",
+    b"ListAuditEvents",
+    b"publishCdcEvents",
+    b"publishAuditEvents",
+    b"listCdcEvents",
+    b"listAuditEvents",
+    b"publish_cdc_events",
+    b"publish_audit_events",
+    b"list_cdc_events",
+    b"list_audit_events",
+    b"ProtocolConnectClient",
+    b"class ConnectClient",
+    b"class AuditClient",
+    b"class CdcClient",
     b"PublishPlatformAuditEvents",
     b"publishPlatformAuditEvents",
     b"publish_platform_audit_events",
@@ -77,30 +99,31 @@ FORBIDDEN_INGESTION_SYMBOLS = (
     b"QueryInput",
 )
 TYPESCRIPT_INGESTION_METHODS = (
-    b"publishCdcEvents(",
-    b"publishAuditEvents(",
-    b"listCdcEvents(",
-    b"listAuditEvents(",
+    b"createTable(",
+    b"getTable(",
+    b"listTables(",
+    b"updateTable(",
+    b"appendRows(",
+    b"runQuery(",
+    b"getQueryResults(",
 )
 PYTHON_INGESTION_METHODS = (
-    b"def publish_cdc_events(",
-    b"def publish_audit_events(",
-    b"def list_cdc_events(",
-    b"def list_audit_events(",
+    b"def create_table(",
+    b"def get_table(",
+    b"def list_tables(",
+    b"def update_table(",
+    b"def append_rows(",
+    b"def run_query(",
+    b"def get_query_results(",
 )
 PYTHON_CANONICAL_RPC_PATHS = (
-    b"/medallion.connect.v1.MedallionConnectService/PublishCdcEvents",
-    b"/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
-    b"/medallion.connect.v1.MedallionConnectService/PublishAuditEvents",
-    b"/medallion.connect.v1.MedallionConnectService/ListAuditEvents",
-)
-CONNECT_RPC_METHODS = frozenset(
-    {
-        "PublishCdcEvents",
-        "PublishAuditEvents",
-        "ListCdcEvents",
-        "ListAuditEvents",
-    }
+    b"/medallion.ingest.v1.MedallionIngestService/CreateTable",
+    b"/medallion.ingest.v1.MedallionIngestService/GetTable",
+    b"/medallion.ingest.v1.MedallionIngestService/ListTables",
+    b"/medallion.ingest.v1.MedallionIngestService/UpdateTable",
+    b"/medallion.ingest.v1.MedallionIngestService/AppendRows",
+    b"/medallion.ingest.v1.MedallionIngestService/RunQuery",
+    b"/medallion.ingest.v1.MedallionIngestService/GetQueryResults",
 )
 INGEST_RPC_METHODS = frozenset(
     {
@@ -125,10 +148,7 @@ ACTIVE_LEGACY_SCOPE_MARKERS = (
 
 TYPESCRIPT_DIST_MODULES = frozenset(
     {
-        "audit",
-        "cdc",
         "client",
-        "connect-descriptor",
         "error-policy",
         "errors",
         "ids",
@@ -137,7 +157,6 @@ TYPESCRIPT_DIST_MODULES = frozenset(
         "ingest-descriptor",
         "ingestion",
         "payload",
-        "protocol-preflight",
         "protocol",
         "request",
         "tables",
@@ -158,10 +177,6 @@ PYTHON_RUNTIME_FILES = frozenset(
         "medallion/tables.py",
         "medallion/workflows.py",
         "medallion/tracing.py",
-        "medallion/types.py",
-        "medallion/connect/__init__.py",
-        "medallion/connect/v1/__init__.py",
-        "medallion/connect/v1/connect_pb2.py",
         "medallion/ingest/__init__.py",
         "medallion/ingest/v1/__init__.py",
         "medallion/ingest/v1/ingest_pb2.py",
@@ -223,8 +238,15 @@ def scan_distribution_tree(root: Path, artifact: str) -> None:
         if path.is_symlink():
             fail(f"{artifact} contains a symbolic link: {relative}")
         if path.is_file():
+            payload = path.read_bytes()
+            if (
+                relative in PUBLIC_POLICY_SHA256
+                and hashlib.sha256(payload).hexdigest()
+                == PUBLIC_POLICY_SHA256[relative]
+            ):
+                continue
             reject_private_implementation_references(
-                path.read_bytes(),
+                payload,
                 f"{artifact} file {relative}",
             )
 
@@ -417,22 +439,25 @@ def check_npm() -> None:
                 f"npm Git package {relative}",
             )
             reject_active_legacy_scope(payload, f"npm Git package {relative}")
-    protocol_declarations = (ROOT / "dist/protocol.d.ts").read_bytes()
+    protocol_declarations = (ROOT / "dist/ingest.d.ts").read_bytes()
     require_ingestion_symbols(
         protocol_declarations,
         TYPESCRIPT_INGESTION_METHODS,
-        "npm Git package dist/protocol.d.ts",
+        "npm Git package dist/ingest.d.ts",
     )
     require_exact_rpc_methods(
         protocol_declarations,
-        rb"^    ([a-z][A-Za-z0-9]*)\(request:",
+        rb"^    ([a-z][A-Za-z0-9]*)\(request\??:",
         {
-            "publishCdcEvents",
-            "publishAuditEvents",
-            "listCdcEvents",
-            "listAuditEvents",
+            "getTable",
+            "runQuery",
+            "updateTable",
+            "createTable",
+            "getQueryResults",
+            "listTables",
+            "appendRows",
         },
-        "npm Git package ProtocolConnectClient methods",
+        "npm Git package ProtocolIngestClient methods",
     )
     for prohibited in (b"\n    invoke(", b"\n    call("):
         if prohibited in protocol_declarations:
@@ -447,7 +472,6 @@ def check_go() -> None:
     require_exact_files(
         descriptors,
         {
-            "proto/external-ingestion-v1.descriptor.binpb",
             "proto/ingest-v1.descriptor.binpb",
         },
         "Go Git package descriptors",
@@ -460,7 +484,7 @@ def check_go() -> None:
     }
     require_exact_files(
         contract_directories,
-        {"external-ingestion-contract"},
+        set(),
         "Go Git package contract directories",
     )
     check_minimal_contract_tree(
@@ -489,29 +513,6 @@ def check_go() -> None:
             source.read_bytes(),
             f"Go Git package {source.relative_to(ROOT)}",
         )
-
-    generated = ROOT / "go/gen/medallion/connect/v1/connect.pb.go"
-    payload = generated.read_bytes()
-    reject_forbidden_ingestion_symbols(payload, "Go generated Connect binding")
-    require_ingestion_symbols(
-        payload,
-        tuple(
-            method.encode()
-            for method in (
-                "PublishCdcEvents",
-                "PublishAuditEvents",
-                "ListCdcEvents",
-                "ListAuditEvents",
-            )
-        ),
-        "Go generated Connect binding",
-    )
-    require_exact_rpc_methods(
-        b"\n".join(source.read_bytes() for source in go_runtime_sources),
-        rb"^func \(c \*ConnectClient\) ([A-Z][A-Za-z0-9]*)\(",
-        CONNECT_RPC_METHODS,
-        "Go ConnectClient methods",
-    )
 
     generated_ingest = ROOT / "go/gen/medallion/ingest/v1/ingest.pb.go"
     ingest_payload = generated_ingest.read_bytes()
@@ -567,33 +568,35 @@ def check_python(version: str) -> None:
             fail("wheel NOTICE bytes differ from root NOTICE")
         metadata_license_fields(archive.read(f"{prefix}/METADATA"), "wheel METADATA")
         require_ingestion_symbols(
-            archive.read("medallion/client.py"),
+            archive.read("medallion/tables.py"),
             PYTHON_INGESTION_METHODS,
-            "Python wheel medallion/client.py",
+            "Python wheel medallion/tables.py",
         )
         require_private_python_transport(
             archive.read("medallion/request.py"),
             "Python wheel medallion/request.py",
         )
-        python_client = archive.read("medallion/client.py")
-        connect_client_match = re.search(
-            rb"^class ConnectClient:\n(.*?)(?=^class [A-Za-z])",
-            python_client,
+        ingest_client_match = re.search(
+            rb"^class IngestClient:\n(.*?)(?=^class [A-Za-z])",
+            archive.read("medallion/tables.py"),
             flags=re.MULTILINE | re.DOTALL,
         )
-        if connect_client_match is None:
-            fail("Python wheel is missing ConnectClient")
+        if ingest_client_match is None:
+            fail("Python wheel is missing IngestClient")
         require_exact_rpc_methods(
-            connect_client_match.group(1),
+            ingest_client_match.group(1),
             rb"^    def ([a-z][a-z0-9_]*)\(",
             {
                 "workspace_id",
-                "publish_cdc_events",
-                "publish_audit_events",
-                "list_cdc_events",
-                "list_audit_events",
+                "create_table",
+                "get_table",
+                "list_tables",
+                "update_table",
+                "append_rows",
+                "run_query",
+                "get_query_results",
             },
-            "Python wheel ConnectClient methods",
+            "Python wheel IngestClient methods",
         )
         for name in sorted(names):
             payload = archive.read(name)
@@ -606,8 +609,7 @@ def check_python(version: str) -> None:
                     payload,
                     f"Python wheel {name}",
                 )
-                if name != "medallion/connect/v1/connect_pb2.py":
-                    reject_active_legacy_scope(payload, f"Python wheel {name}")
+                reject_active_legacy_scope(payload, f"Python wheel {name}")
 
     distribution_root = f"medallion-{version}"
     with tarfile.open(sdist, "r:gz") as archive:
@@ -644,14 +646,14 @@ def check_python(version: str) -> None:
             fail("sdist PKG-INFO could not be read")
         metadata_license_fields(metadata.read(), "sdist PKG-INFO")
         client = archive.extractfile(
-            by_name[f"{distribution_root}/src/medallion/client.py"]
+            by_name[f"{distribution_root}/src/medallion/tables.py"]
         )
         if client is None:
-            fail("sdist medallion/client.py could not be read")
+            fail("sdist medallion/tables.py could not be read")
         require_ingestion_symbols(
             client.read(),
             PYTHON_INGESTION_METHODS,
-            "Python sdist medallion/client.py",
+            "Python sdist medallion/tables.py",
         )
         request_transport = archive.extractfile(
             by_name[f"{distribution_root}/src/medallion/request.py"]
@@ -677,11 +679,7 @@ def check_python(version: str) -> None:
                             payload,
                             f"Python sdist {name}",
                         )
-                        if not name.endswith("/medallion/connect/v1/connect_pb2.py"):
-                            reject_active_legacy_scope(
-                                payload,
-                                f"Python sdist {name}",
-                            )
+                        reject_active_legacy_scope(payload, f"Python sdist {name}")
 
     with tempfile.TemporaryDirectory() as temporary:
         subprocess.run(

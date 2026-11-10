@@ -57,7 +57,7 @@ class NpmPackDescriptionTest(unittest.TestCase):
 class IngestionArtifactBoundaryTest(unittest.TestCase):
     def test_accepts_the_reviewed_ingestion_surface(self) -> None:
         reject_forbidden_ingestion_symbols(
-            b"PublishCdcEvents PublishAuditEvents ListCdcEvents ListAuditEvents",
+            b"CreateTable GetTable ListTables UpdateTable AppendRows RunQuery GetQueryResults",
             "fixture",
         )
 
@@ -78,6 +78,8 @@ class IngestionArtifactBoundaryTest(unittest.TestCase):
             b"RegisterConnector",
             b"ProtocolStorageClient",
             b"StorageClient",
+            b"PublishCdcEvents",
+            b"ProtocolConnectClient",
         ):
             with self.subTest(symbol=symbol.decode()):
                 with self.assertRaisesRegex(
@@ -110,7 +112,7 @@ class IngestionArtifactBoundaryTest(unittest.TestCase):
     def test_rejects_a_missing_stable_method(self) -> None:
         with self.assertRaisesRegex(
             AssertionError,
-            r"missing required ingestion symbols: \['listAuditEvents\('\]",
+            r"missing required ingestion symbols: \['getQueryResults\('\]",
         ):
             require_ingestion_symbols(
                 b" ".join(TYPESCRIPT_INGESTION_METHODS[:-1]),
@@ -124,10 +126,13 @@ class IngestionArtifactBoundaryTest(unittest.TestCase):
                 b"class _RequestClient:",
                 b"_CANONICAL_RPC_PATHS = frozenset()",
                 b"if canonical_path not in _CANONICAL_RPC_PATHS:",
-                b"/medallion.connect.v1.MedallionConnectService/PublishCdcEvents",
-                b"/medallion.connect.v1.MedallionConnectService/ListCdcEvents",
-                b"/medallion.connect.v1.MedallionConnectService/PublishAuditEvents",
-                b"/medallion.connect.v1.MedallionConnectService/ListAuditEvents",
+                b"/medallion.ingest.v1.MedallionIngestService/CreateTable",
+                b"/medallion.ingest.v1.MedallionIngestService/GetTable",
+                b"/medallion.ingest.v1.MedallionIngestService/ListTables",
+                b"/medallion.ingest.v1.MedallionIngestService/UpdateTable",
+                b"/medallion.ingest.v1.MedallionIngestService/AppendRows",
+                b"/medallion.ingest.v1.MedallionIngestService/RunQuery",
+                b"/medallion.ingest.v1.MedallionIngestService/GetQueryResults",
             )
         )
         require_private_python_transport(valid, "fixture")
@@ -142,6 +147,37 @@ class IngestionArtifactBoundaryTest(unittest.TestCase):
 
 
 class PrivateImplementationBoundaryTest(unittest.TestCase):
+    def test_distribution_policy_exception_requires_exact_path_and_published_bytes(
+        self,
+    ) -> None:
+        marker = b"medallion-" + b"private.git"
+        for filename in ("public-surface-check", "public-surface-check-test"):
+            with (
+                self.subTest(filename=filename),
+                tempfile.TemporaryDirectory() as temporary,
+            ):
+                published = (
+                    Path(__file__).parents[1] / "scripts" / filename
+                ).read_bytes()
+                root = Path(temporary)
+                policy = root / "scripts" / filename
+                policy.parent.mkdir()
+                policy.write_bytes(published)
+                scan_distribution_tree(root, "fixture")
+                policy.write_bytes(
+                    published + b"\nhttps://github.com/jim-technologies/" + marker
+                )
+                with self.assertRaises(AssertionError):
+                    scan_distribution_tree(root, "fixture")
+                policy.write_bytes(published)
+                other = root / "different-policy"
+                other.write_bytes(published)
+                with self.assertRaises(AssertionError):
+                    scan_distribution_tree(root, "fixture")
+                other.write_bytes(b"https://github.com/jim-technologies/" + marker)
+                with self.assertRaises(AssertionError):
+                    scan_distribution_tree(root, "fixture")
+
     def test_rejects_private_implementation_and_provenance_markers(self) -> None:
         markers = (
             b"medallion-" + b"onto" + b"logy",
@@ -247,18 +283,11 @@ class PrivateImplementationBoundaryTest(unittest.TestCase):
 
     def test_exact_rpc_surface_rejects_an_extra_dispatcher(self) -> None:
         valid = b"\n".join(
-            (
-                b"    publishCdcEvents(request: unknown): unknown;",
-                b"    publishAuditEvents(request: unknown): unknown;",
-                b"    listCdcEvents(request: unknown): unknown;",
-                b"    listAuditEvents(request: unknown): unknown;",
-            )
+            b"    " + method + b"request: unknown): unknown;"
+            for method in TYPESCRIPT_INGESTION_METHODS
         )
         expected = {
-            "publishCdcEvents",
-            "publishAuditEvents",
-            "listCdcEvents",
-            "listAuditEvents",
+            method.decode().removesuffix("(") for method in TYPESCRIPT_INGESTION_METHODS
         }
         pattern = rb"^    ([a-z][A-Za-z0-9]*)\(request:"
         require_exact_rpc_methods(valid, pattern, expected, "fixture")
