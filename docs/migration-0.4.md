@@ -29,8 +29,8 @@ Publication waits on one blocker: an independent producer-issued immutable
 Connect proof cannot attest ingest, even if its historical release status
 changed. `make breaking-check` exempts exactly the deleted Connect proto files
 by their pre-removal content hashes, and `make ingest-breaking-check` compares
-the retained ingest contract with the fixed pre-removal commit and `main`;
-neither check authorizes a release.
+the retained ingest contract with the fixed pre-removal commit; neither check
+authorizes a release.
 
 Before switching a consumer, retain its previous immutable pin and lockfile.
 Reverting that pin restores its old SDK API; no server or data rollback is

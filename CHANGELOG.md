@@ -39,7 +39,7 @@ the contract release check refused, so its entries are unreleased too.
   it imported, each matched by the content hash `main` carried, so the
   exemption expires once `main` carries the removal.
   `make ingest-breaking-check` also compares the retained ingest contract with
-  the fixed pre-removal commit and the `main` baseline.
+  the fixed pre-removal commit, a baseline that does not move with `main`.
 - Authenticate the shared public-surface scanner and self-test by their exact
   published paths and checksums during Git-install artifact verification;
   modified policy bytes, copies at other paths and unrelated private

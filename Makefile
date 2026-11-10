@@ -81,7 +81,7 @@ generated-check: contract-check node_modules/.medallion-install-stamp ## Verify 
 breaking-check: ## Verify protobuf contracts stay backward-compatible with the main baseline.
 	scripts/check_proto_breaking.sh
 
-ingest-breaking-check: ## Compare retained ingest against the fixed pre-removal commit and the real main baseline.
+ingest-breaking-check: ## Compare retained ingest against the fixed pre-removal commit; breaking-check covers main.
 	scripts/check_ingest_breaking.sh
 
 artifact-check: build ## Verify Git-install package payloads and exact bundled license coverage.

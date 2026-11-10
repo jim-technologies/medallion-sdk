@@ -78,8 +78,9 @@ baseline only while the baseline holds its exact pre-removal blob and the file
 is absent from the tree. Like the ingest re-pin exemption, it expires once
 `main` carries the removal; every other change, including any edit to a file
 that still exists, is compared normally. `make ingest-breaking-check` also
-compares the retained ingest contract with the fixed pre-removal commit and
-the `main` baseline. See the [migration note](../docs/migration-0.4.md).
+compares the retained ingest contract with the fixed pre-removal commit, a
+baseline that does not move with `main`. See the
+[migration note](../docs/migration-0.4.md).
 
 ## Conventions
 
