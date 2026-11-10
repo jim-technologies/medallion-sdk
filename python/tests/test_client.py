@@ -128,12 +128,21 @@ class ClientTests(unittest.TestCase):
                 self.assertEqual(raised.exception.code, "MEDALLION_INVALID_OPTIONS")
 
     def test_stable_batch_identity_remains_deterministic(self) -> None:
+        first = stable_idempotency_key("orders", "partition-1", 42)
+        # The same vector is pinned in the TypeScript and Go SDKs.
+        self.assertEqual(first, "orders:103ec0f8-cc69-5f19-81d9-08f2d641a5e4")
+        self.assertEqual(first, stable_idempotency_key("orders", "partition-1", 42))
+        self.assertNotEqual(first, stable_idempotency_key("orders", "partition-1", 43))
         self.assertEqual(
             stable_idempotency_key("orders", "42"), stable_idempotency_key("orders", 42)
         )
-        self.assertNotEqual(
-            stable_idempotency_key("orders", 42), stable_idempotency_key("orders", 43)
-        )
+        for values in (("x" * 512, "1"), ("orders", "\ud800")):
+            with self.subTest(values=repr(values)):
+                with self.assertRaises(MedallionError) as raised:
+                    stable_idempotency_key(*values)
+                self.assertEqual(
+                    raised.exception.code, "MEDALLION_INVALID_IDEMPOTENCY_KEY"
+                )
 
     def test_tracing_creates_client_span(self) -> None:
         tracer = FakeTracer()
