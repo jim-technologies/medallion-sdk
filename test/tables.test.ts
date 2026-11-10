@@ -1,6 +1,10 @@
 import { Buffer } from "node:buffer";
 import { describe, expect, it, vi } from "vitest";
 import { MedallionClient } from "../src/index.js";
+import {
+  assertIteratorPageWithinLimit,
+  MAX_INGESTION_ITERATOR_PAGES,
+} from "../src/ingestion.js";
 import { MAX_POLL_DELAY_MS } from "../src/request.js";
 import { MAX_QUERY_POLLS } from "../src/tables.js";
 import type { RetryOptions } from "../src/types.js";
@@ -428,6 +432,17 @@ describe("tables.query", () => {
         // drain
       }
     }).rejects.toMatchObject({ code: "MEDALLION_REPEATED_CURSOR" });
+  });
+
+  it("caps unique-cursor iteration at 10,000 pages", () => {
+    expect(() =>
+      assertIteratorPageWithinLimit(MAX_INGESTION_ITERATOR_PAGES),
+    ).not.toThrow();
+    expect(() =>
+      assertIteratorPageWithinLimit(MAX_INGESTION_ITERATOR_PAGES + 1),
+    ).toThrowError(
+      expect.objectContaining({ code: "MEDALLION_PAGINATION_LIMIT" }),
+    );
   });
 
   it("rejects a running acknowledgement without a resource name", async () => {

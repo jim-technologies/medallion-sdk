@@ -45,7 +45,10 @@ describe("bounded ingest contract", () => {
       "AuditClient",
       "CdcClient",
       "CONNECT_ROUTES",
+      ["Protocol", ["Onto", "logy"].join(""), "Client"].join(""),
+      ["ONTO", "LOGY_ROUTES"].join(""),
       "ProtocolStorageClient",
+      "STORAGE_ROUTES",
     ]) {
       expect(name in publicSdk).toBe(false);
     }

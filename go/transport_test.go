@@ -41,7 +41,7 @@ func (failingReadCloser) Close() error {
 	return nil
 }
 
-func listTables(client *Client, ctx context.Context) error {
+func listTables(ctx context.Context, client *Client) error {
 	_, _, err := client.Ingest.ListTables(ctx, &ingestv1.ListTablesRequest{})
 	return err
 }
@@ -71,7 +71,7 @@ func TestAuthenticationWorkspaceAndTimeoutHeaders(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	if err := listTables(apiClient, ctx); err != nil {
+	if err := listTables(ctx, apiClient); err != nil {
 		t.Fatalf("list with API key: %v", err)
 	}
 	if got := headers[0].Get("X-Medallion-API-Key"); got != "service-key" {
@@ -102,7 +102,7 @@ func TestAuthenticationWorkspaceAndTimeoutHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new JWT client: %v", err)
 	}
-	if err := listTables(jwtClient, context.Background()); err != nil {
+	if err := listTables(context.Background(), jwtClient); err != nil {
 		t.Fatalf("list with JWT: %v", err)
 	}
 	if got := headers[1].Get("Authorization"); got != "Bearer jwt-token" {
@@ -184,7 +184,7 @@ func TestRedirectsNeverForwardAPIKeyOrJWTHeaders(t *testing.T) {
 				if err != nil {
 					t.Fatalf("new client: %v", err)
 				}
-				err = listTables(client, context.Background())
+				err = listTables(context.Background(), client)
 				var apiErr *APIError
 				if !errors.As(err, &apiErr) || apiErr.Status != http.StatusTemporaryRedirect {
 					t.Fatalf("redirect error = %#v", err)
@@ -300,7 +300,7 @@ func TestOversizedSuccessAndErrorResponsesAreTypedAndNeverRetried(t *testing.T) 
 					t.Fatalf("new client: %v", err)
 				}
 				client.Ingest.requests.responseMax = 64
-				err = listTables(client, context.Background())
+				err = listTables(context.Background(), client)
 				assertErrorCode(t, err, "MEDALLION_RESPONSE_TOO_LARGE")
 				var sdkErr *Error
 				if !errors.As(err, &sdkErr) || sdkErr.RequestID != "req_oversized" || !errors.Is(err, errResponseTooLarge) {
@@ -341,7 +341,7 @@ func TestTerminalHTTPResponseReadFailuresAreNeverRetried(t *testing.T) {
 			if err != nil {
 				t.Fatalf("new client: %v", err)
 			}
-			err = listTables(client, context.Background())
+			err = listTables(context.Background(), client)
 			assertErrorCode(t, err, "MEDALLION_NETWORK_ERROR")
 			if !errors.Is(err, errResponseReadFailure) || strings.Contains(fmt.Sprintf("%v", errors.Unwrap(err)), "response read failed") {
 				t.Fatalf("response-read cause was not replaced with the safe SDK sentinel: %#v", err)
@@ -366,7 +366,7 @@ func TestTransportErrorCauseIsSanitizedWithoutLosingClassification(t *testing.T)
 	if err != nil {
 		t.Fatalf("new client: %v", err)
 	}
-	err = listTables(client, context.Background())
+	err = listTables(context.Background(), client)
 	assertErrorCode(t, err, "MEDALLION_NETWORK_ERROR")
 	if !errors.Is(err, errTransportFailure) {
 		t.Fatalf("transport error does not retain the safe classification sentinel: %#v", err)
@@ -413,7 +413,7 @@ func TestEveryIngestRPCRejectsEmptySuccessBodies(t *testing.T) {
 					return err
 				}},
 				{"ListTables", func() error {
-					return listTables(client, ctx)
+					return listTables(ctx, client)
 				}},
 				{"UpdateTable", func() error {
 					_, _, err := client.Ingest.UpdateTable(ctx, &ingestv1.UpdateTableRequest{
@@ -552,7 +552,7 @@ func TestUnknownErrorInfoIsStructuredAndNotRetried(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new client: %v", err)
 	}
-	err = listTables(client, context.Background())
+	err = listTables(context.Background(), client)
 	var apiErr *APIError
 	if !errors.As(err, &apiErr) {
 		t.Fatalf("error = %#v", err)
@@ -633,7 +633,7 @@ func TestAPIErrorRedactsConfiguredCredentialsEverywhere(t *testing.T) {
 			if err != nil {
 				t.Fatalf("new client: %v", err)
 			}
-			err = listTables(client, context.Background())
+			err = listTables(context.Background(), client)
 			var apiErr *APIError
 			if !errors.As(err, &apiErr) {
 				t.Fatalf("error = %#v", err)
@@ -743,7 +743,7 @@ func TestCancellationInterruptsRetryBackoff(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	time.AfterFunc(5*time.Millisecond, cancel)
-	err = listTables(client, ctx)
+	err = listTables(ctx, client)
 	assertErrorCode(t, err, "MEDALLION_ABORTED")
 	if !errors.Is(err, context.Canceled) || calls != 1 {
 		t.Fatalf("error = %#v; calls = %d", err, calls)
@@ -800,7 +800,7 @@ func TestRetryAfterThatCannotFitDeadlineDeclinesRetry(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	err = listTables(client, ctx)
+	err = listTables(ctx, client)
 	var apiErr *APIError
 	if !errors.As(err, &apiErr) || calls != 1 {
 		t.Fatalf("error = %#v; calls = %d", err, calls)
