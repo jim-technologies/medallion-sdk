@@ -6,6 +6,13 @@ annotated `vX.Y.Z` tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Dependency currency: the TypeScript development toolchain moves to Biome
+  2.6.6, Vitest 5.1.0 and `@types/node` 26.6.6; the Python lock moves to
+  Polars 2.1.0, PyArrow 26.0.1 and OpenTelemetry API 1.45.2, and the build
+  backend is hatchling 1.33.0. The published dependency floors are unchanged.
+
 ### Fixed
 
 - Python rejects non-integer retry counts when constructing `RetryConfig`,
