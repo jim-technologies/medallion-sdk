@@ -16,8 +16,9 @@
 #
 # The removed medallion.connect.v1 package remains a public historical
 # contract name in the archived proof and migration documentation. Both
-# dotted and underscored forms identify that contract. The space-separated brand phrase is not: it names a product rather
-# than the published package, and it stays off this surface.
+# dotted and underscored forms identify that contract. The space-separated
+# brand phrase is not: it names a product rather than the published package,
+# and it stays off this surface.
 # ---------------------------------------------------------------------------
 codename | * | the removed public package named by archived proof and migration documentation | %6dedallion[._]connect
 codename | * | the one service in that public package, as the generated bindings and descriptor name it | %6dedallionconnect[a-z]*service

@@ -178,7 +178,9 @@ To publish the one root `vX.Y.Z` release tag:
 6. Run `flox activate -- make audit` to scan the locked Node, Go, and Python
    dependencies and the source tree.
 7. Rename `## [Unreleased]` in `CHANGELOG.md` to `## [X.Y.Z] - YYYY-MM-DD`;
-   an empty `## [Unreleased]` may stay above it.
+   an empty `## [Unreleased]` may stay above it. Delete any note saying the
+   section is untagged, and merge successive bumps of the same dependency or
+   toolchain into one entry naming the versions that ship.
 8. Confirm the tree contains no secrets or unrelated generated output, commit
    it, and push it.
 9. Run `flox activate -- make release`. It creates and pushes exactly one
