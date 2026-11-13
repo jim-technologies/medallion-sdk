@@ -47,7 +47,7 @@ workflows = [
   "temporaless @ git+https://github.com/jim-technologies/temporaless.git@136fdf5b5fb5ec9fc30f1e58b3fd42445b123201#subdirectory=core/py",
   # Match the pinned generated client, including installations without uv.lock.
   "connectrpc>=0.12.1,<0.13",
-  "protobuf-py<0.7",
+  "protobuf-py<0.8",
 ]
 
 [dependency-groups]
@@ -70,7 +70,7 @@ Issues = "https://github.com/jim-technologies/medallion-sdk/issues"
 # protobuf.wkt names that protobuf-py 0.7.0 removed. Hold the locked graph
 # below 0.7 until the workflows pin moves to a Temporaless release that
 # bounds it (Temporaless 0.12.3 declares protobuf-py<0.7 itself).
-constraint-dependencies = ["protobuf-py<0.7"]
+constraint-dependencies = ["protobuf-py<0.8"]
 
 [tool.hatch.metadata]
 # Temporaless uses an immutable Git commit; the shared Buf generated modules
