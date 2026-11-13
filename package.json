@@ -50,7 +50,7 @@
     "test:deployed": "vitest run test/tables-live.test.ts"
   },
   "dependencies": {
-    "@bufbuild/protobuf": "2.16.0",
+    "@bufbuild/protobuf": "2.17.0",
     "@jim-technologies/invariant-protocol": "github:jim-technologies/invariantprotocol#79ead8726b4d79ee7c024b85441daf6f46851830",
     "@opentelemetry/api": "1.10.0"
   },
