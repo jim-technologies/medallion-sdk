@@ -46,7 +46,7 @@ polars = [
 workflows = [
   "temporaless @ git+https://github.com/jim-technologies/temporaless.git@136fdf5b5fb5ec9fc30f1e58b3fd42445b123201#subdirectory=core/py",
   # Match the pinned generated client, including installations without uv.lock.
-  "connectrpc>=0.12.1,<0.13",
+  "connectrpc>=0.13.0,<0.14",
   "protobuf-py<0.7",
 ]
 
