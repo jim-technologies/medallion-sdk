@@ -44,13 +44,16 @@ the contract release check refused, so its entries are unreleased too.
   published paths and checksums during Git-install artifact verification;
   modified policy bytes, copies at other paths and unrelated private
   references remain refused.
-- Toolchain currency: Flox installs Go 1.27.3 directly (`go_1_27`, equal to
-  `go.mod`'s `go` directive, which the version check enforces), Node.js
-  26.12.0, pnpm 12.9.0, Python 3.14.8, uv 0.13.1, protoc 36.2, buf 1.73.0 and
-  ruff 0.17.1. The environment now targets aarch64-darwin, aarch64-linux and
-  x86_64-linux, the systems the catalog builds current toolchains for; Intel
-  macOS developers use their language-native toolchains. Public CI and audit
-  use the SHA-pinned Flox 2.7.0 installer.
+- Toolchain currency: Flox installs Go 1.27.4 from an immutable Nixpkgs
+  flake, because the catalog's `go_1_27` stops at 1.27.3; the version check
+  holds the locked release equal to `go.mod`'s `go` directive, now 1.27.4, and
+  requires `GOTOOLCHAIN=local`. Flox pins Node.js 26.13.1, pnpm 12.9.0, Python
+  3.14.10, uv 0.13.10 (Flox's own build), buf 1.75.0, ruff 0.17.4 and
+  govulncheck 1.10.0, and resolves protoc 36.2; pnpm 12.23.0 is parked until
+  the catalog offers it. The environment now targets aarch64-darwin,
+  aarch64-linux and x86_64-linux, the systems the catalog builds current
+  toolchains for; Intel macOS developers use their language-native
+  toolchains. Public CI and audit use the SHA-pinned Flox 2.7.0 installer.
 - Dependency currency: the TypeScript SDK pins invariantprotocol v0.16.8
   (commit `79ead872`) with `@bufbuild/protobuf` 2.16.0 and
   `@opentelemetry/api` 1.10.0; Biome 2.6.2,

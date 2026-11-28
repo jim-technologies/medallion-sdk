@@ -1,16 +1,26 @@
 schema-version = "1.12.0"
 
 [install]
+# Toolchains are pinned to the newest release the Flox catalog offers. A newer
+# upstream release waits here with a review date the gate enforces
+# (scripts/check-dep-tools). Parked, review-by: 2026-12-31: pnpm 12.23.0 (the
+# catalog's newest is 12.9.0).
 nodejs.pkg-path = "nodejs_26"
+nodejs.version = "26.13.1"
 pnpm.pkg-path = "pnpm"
+pnpm.version = "12.9.0"
 typescript-language-server.pkg-path = "typescript-language-server"
-# Flox supplies the exact patched Go release go.mod declares, so nothing
-# downloads a toolchain at run time; scripts/check_versions.py keeps this
-# version equal to go.mod's `go` directive. The catalog's 1.27 line is its own
-# package, resolved in its own group.
-go = { pkg-path = "go_1_27", version = "1.27.3", pkg-group = "go" }
+# Flox supplies the exact patched Go release go.mod declares, and
+# GOTOOLCHAIN = "local" below keeps Go from downloading another one;
+# scripts/check_versions.py holds the locked version to go.mod's `go`
+# directive. The catalog's go_1_27 stops at 1.27.3, so the 1.27.4 security
+# release comes from an immutable official Nixpkgs flake.
+go.flake = "github:NixOS/nixpkgs/2578a3f6178e116798c9294895df1dba62eac78b#go_1_27"
 python.pkg-path = "python314"
-uv.pkg-path = "uv"
+python.version = "python3-3.14.10"
+# The Flox catalog's own uv build, resolved in its own group;
+# python/pyproject.toml requires at least this release.
+uv = { pkg-path = "flox/uv", version = "0.13.10", pkg-group = "uv" }
 protobuf.pkg-path = "protobuf"
 # Native Python wheels (PyArrow and google-re2) require the C++ runtime.
 gcc-unwrapped = { pkg-path = "gcc-unwrapped", outputs = ["lib"], pkg-group = "python-native", systems = ["aarch64-linux", "x86_64-linux"] }
@@ -26,20 +36,22 @@ findutils = { pkg-path = "findutils", pkg-group = "repo-tools" }
 gawk = { pkg-path = "gawk", pkg-group = "repo-tools" }
 gnused = { pkg-path = "gnused", pkg-group = "repo-tools" }
 gnugrep = { pkg-path = "gnugrep", pkg-group = "repo-tools" }
-ruff = { pkg-path = "ruff", pkg-group = "repo-tools" }
+ruff = { pkg-path = "ruff", version = "0.17.4", pkg-group = "repo-tools" }
 shellcheck = { pkg-path = "shellcheck", pkg-group = "repo-tools" }
 shfmt = { pkg-path = "shfmt", pkg-group = "repo-tools" }
 actionlint = { pkg-path = "actionlint", pkg-group = "repo-tools" }
 gitleaks = { pkg-path = "gitleaks", pkg-group = "repo-tools" }
+govulncheck = { pkg-path = "govulncheck", version = "1.10.0", pkg-group = "repo-tools" }
 # buf is pinned exactly because the committed contract-sync protos are this
 # version's `buf format` output, and the validate gate's `buf format --diff
 # --exit-code` only passes when the active formatter reproduces them
 # byte-for-byte. Re-run the gate after every bump.
-buf = { pkg-path = "buf", version = "1.73.0", pkg-group = "buf" }
+buf = { pkg-path = "buf", version = "1.75.0", pkg-group = "buf" }
 
 [vars]
 GOFLAGS = "-mod=readonly"
 GOENV = "off"
+GOTOOLCHAIN = "local"
 UV_PYTHON_DOWNLOADS = "never"
 
 [hook]

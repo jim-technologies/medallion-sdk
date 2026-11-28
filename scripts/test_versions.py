@@ -15,6 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_FILES = (
+    ".flox/env/manifest.lock",
     ".flox/env/manifest.toml",
     "CHANGELOG.md",
     "LICENSE",
@@ -277,33 +278,31 @@ class VersionScriptsTest(unittest.TestCase):
         )
 
     def test_checker_rejects_go_toolchain_drift(self) -> None:
-        go_mod = (self.fixture / "go.mod").read_text()
-        go_version_match = re.search(r"^go\s+(\S+)$", go_mod, re.MULTILINE)
-        self.assertIsNotNone(go_version_match)
-        go_version = go_version_match.group(1)
-        manifest_path = self.fixture / ".flox/env/manifest.toml"
-        manifest = manifest_path.read_text()
-        drifted = manifest.replace(
-            f'version = "{go_version}", pkg-group = "go"',
-            'version = "0.0.0", pkg-group = "go"',
-        )
-        self.assertNotEqual(drifted, manifest)
-        manifest_path.write_text(drifted)
+        lock_path = self.fixture / ".flox/env/manifest.lock"
+        lock = json.loads(lock_path.read_text())
+        go_entries = [
+            package for package in lock["packages"] if package.get("install_id") == "go"
+        ]
+        self.assertTrue(go_entries)
+        go_entries[0]["version"] = "0.0.0"
+        lock_path.write_text(json.dumps(lock, indent=2) + "\n")
 
         result = self.run_script("check_versions.py")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn(".flox/env/manifest.toml installs Go '0.0.0'", result.stderr)
+        self.assertIn(".flox/env/manifest.lock locks Go ['0.0.0',", result.stderr)
 
     def test_checker_rejects_go_toolchain_download(self) -> None:
         manifest_path = self.fixture / ".flox/env/manifest.toml"
         manifest = manifest_path.read_text()
-        manifest_path.write_text(
-            manifest.replace("[vars]\n", '[vars]\nGOTOOLCHAIN = "go0.0.0+auto"\n')
-        )
+        for replacement in ('GOTOOLCHAIN = "go0.0.0+auto"\n', ""):
+            with self.subTest(replacement=replacement):
+                drifted = manifest.replace('GOTOOLCHAIN = "local"\n', replacement)
+                self.assertNotEqual(drifted, manifest)
+                manifest_path.write_text(drifted)
 
-        result = self.run_script("check_versions.py")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("must not set GOTOOLCHAIN", result.stderr)
+                result = self.run_script("check_versions.py")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('must set GOTOOLCHAIN = "local"', result.stderr)
 
     def test_checker_rejects_unexpected_nested_go_module(self) -> None:
         nested = self.fixture / "unexpected/go.mod"

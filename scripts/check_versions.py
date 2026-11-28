@@ -500,17 +500,22 @@ def main() -> int:
             f"go.mod must declare an exact Go patch version, got {go_version!r}"
         )
     else:
-        install = flox_manifest.get("install", {})
-        flox_go_version = install.get("go", {}).get("version")
-        if flox_go_version != go_version:
+        flox_go_versions = sorted(
+            {
+                str(locked.get("version"))
+                for locked in read_json(".flox/env/manifest.lock").get("packages", [])
+                if locked.get("install_id") == "go"
+            }
+        )
+        if flox_go_versions != [go_version]:
             errors.append(
-                f".flox/env/manifest.toml installs Go {flox_go_version!r}; "
-                f"expected the go.mod release {go_version!r}"
+                f".flox/env/manifest.lock locks Go {flox_go_versions!r}; "
+                f"expected only the go.mod release {go_version!r}"
             )
-    if "GOTOOLCHAIN" in flox_manifest.get("vars", {}):
+    if flox_manifest.get("vars", {}).get("GOTOOLCHAIN") != "local":
         errors.append(
-            ".flox/env/manifest.toml must not set GOTOOLCHAIN; "
-            "Flox supplies Go directly"
+            '.flox/env/manifest.toml must set GOTOOLCHAIN = "local"; '
+            "Flox supplies Go and nothing downloads another toolchain"
         )
 
     nested_go_mods: list[Path] = []
