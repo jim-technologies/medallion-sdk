@@ -312,26 +312,6 @@ def main() -> int:
             "pnpm-workspace.yaml postcss overrides are "
             f"{workspace_postcss_versions!r}; expected only {[POSTCSS_VERSION]!r}"
         )
-    release_age_section = re.search(
-        r"^minimumReleaseAgeExclude:\s*\n((?:^[ \t]+.*(?:\n|$))*)",
-        workspace,
-        re.MULTILINE,
-    )
-    release_age_entries = (
-        re.findall(
-            r"^[ \t]*-[ \t]*[\"']?([^\"'\s]+)[\"']?[ \t]*$",
-            release_age_section.group(1),
-            re.MULTILINE,
-        )
-        if release_age_section is not None
-        else []
-    )
-    expected_release_age_entries = [f"postcss@{POSTCSS_VERSION}"]
-    if release_age_entries != expected_release_age_entries:
-        errors.append(
-            "pnpm-workspace.yaml minimumReleaseAgeExclude entries are "
-            f"{release_age_entries!r}; expected only {expected_release_age_entries!r}"
-        )
     invariant_allow_build = (
         f'"{INVARIANT_PROTOCOL_PACKAGE}@{INVARIANT_PROTOCOL_LOCATOR}": true'
     )

@@ -1,0 +1,3 @@
+# path-prefix	reason	review-by: YYYY-MM-DD   (tab-separated; an entry whose date has passed fails the gate)
+scripts/check_git_installs.sh	consumer install check: installs the exact tree with pip and npm, the tools many consumers use	review-by: 2027-02-28
+scripts/run_workflows_tests.sh	legacy-upgrade rehearsal: pip is the installer python/README.md tells upgrading consumers to use	review-by: 2027-02-28

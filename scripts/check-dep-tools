@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Fleet dependency-tool standard, as one machine check. Byte-identical in every
+# repo; a repo's only knob is scripts/dep-tools-allow.tsv
+# (path-prefix<TAB>reason<TAB>review-by: YYYY-MM-DD). Run by `make validate`.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+allow=scripts/dep-tools-allow.tsv
+today=$(date -u +%F)
+fail=0
+bad() { printf 'dep-tools: %s\n' "$*" >&2; fail=1; }
+allowed() { [[ -f $allow ]] && awk -F'\t' -v f="$1" '!/^#/ && NF >= 3 && index(f, $1) == 1 { ok = 1 } END { exit !ok }' "$allow"; }
+has() { grep -Eq -- "$1" "$2" 2>/dev/null; }
+tracked() { git ls-files -- "$@" | while IFS= read -r f; do allowed "$f" || printf '%s\n' "$f"; done; }
+
+# 1. One package manager per ecosystem: no foreign lockfiles or manifests.
+for f in $(tracked '*package-lock.json' '*npm-shrinkwrap.json' '*yarn.lock' '*bun.lock' '*bun.lockb' '*.npmrc' '*.yarnrc*' \
+  '*requirements*.txt' '*Pipfile' '*Pipfile.lock' '*poetry.lock' '*setup.py' '*setup.cfg'); do
+  bad "$f: foreign lockfile or manifest (pnpm-lock.yaml, uv.lock, go.sum and Cargo.lock only)"
+done
+
+# 2. No install that bypasses the lockfile or Flox, and no switch that relaxes pnpm
+#    (build, gate and image surfaces: make, shell, Dockerfiles, package.json, YAML, TOML).
+word='(npm|npx|yarn|bun|bunx|corepack)[[:space:]]+(install|i|ci|add|run|exec|enable|prepare)|pnpm[[:space:]]+(dlx|create)|uvx|uv[[:space:]]+tool[[:space:]]+(run|install)|(pip3?|pipx|poetry|pipenv)[[:space:]]+(install|add)|cargo[[:space:]]+install'
+fetch='(go|\$\(GO\))[[:space:]]+(install|run)([[:space:]]+-[^[:space:]]+)*[[:space:]]+[^[:space:]]+@|(curl|wget)[^|]*\|[[:space:]]*(ba|z)?sh'
+relax='/cmd/[[:alnum:]_-]+@v[0-9]|PNPM_CONFIG_STRICT_DEP_BUILDS|--config\.strict-dep-builds|strictDepBuilds: false|dangerouslyAllowAllBuilds|--ignore-registry-errors|--no-frozen-lockfile'
+bypass="(^|[^[:alnum:]_./-])(($word)([^[:alnum:]_-]|\$)|$fetch)|$relax"
+while IFS=: read -r f n line; do
+  [[ $line == *'uv pip install'* ]] || allowed "$f" || bad "$f:$n: bypasses the lockfile or Flox: ${line:0:100}"
+done < <(git grep -nIE "$bypass" -- Makefile '*.mk' '*Dockerfile*' '*.sh' 'scripts/*' '.githooks/*' '*.json' '*.yml' '*.yaml' '*.toml' \
+  ':!*.py' ':!*lock.yaml' ':!*lock.json' ':!scripts/check-dep-tools' ':!'"$allow" || true)
+
+# 3. pnpm: pinned and enforced by pnpm itself (devEngines), 24 h release age, trust policy.
+for lock in $(tracked '*pnpm-lock.yaml'); do
+  d=$(dirname "$lock")
+  has '"packageManager": "pnpm@[0-9]+\.[0-9]+\.[0-9]+"' "$d/package.json" || bad "$d/package.json: packageManager must be pnpm@X.Y.Z"
+  has '"onFail": "error"' "$d/package.json" || bad "$d/package.json: devEngines.packageManager needs onFail: error"
+  for want in 'minimumReleaseAge: 1440' 'minimumReleaseAgeStrict: true' 'trustPolicy: no-downgrade' 'blockExoticSubdeps: true'; do
+    has "^$want\$" "$d/pnpm-workspace.yaml" || bad "$d/pnpm-workspace.yaml: missing '$want'"
+  done
+done
+for f in $(tracked '*package.json'); do
+  d=$(dirname "$f")
+  until [[ -f $d/pnpm-lock.yaml || $d == . ]]; do d=$(dirname "$d"); done
+  [[ -f $d/pnpm-lock.yaml ]] || bad "$f: no pnpm-lock.yaml at or above it"
+done
+
+# 4. uv: locked, version-guarded, same 24 h cooldown.
+for f in $(tracked '*pyproject.toml'); do
+  [[ -f $(dirname "$f")/uv.lock ]] || bad "$f: no uv.lock beside it"
+  has '^required-version = ' "$f" || bad "$f: [tool.uv] required-version missing"
+  has '^exclude-newer = "1 day"$' "$f" || bad "$f: [tool.uv] exclude-newer = \"1 day\" missing"
+done
+
+# 5. Every ecosystem has its advisory scanner in the gate; Go never downloads a toolchain.
+mapfile -t gate < <(git ls-files -- Makefile 'make/*.mk' 'scripts/*' ':!scripts/check-dep-tools' ':!scripts/*test*')
+scanner() { [[ -z $(tracked "$1") ]] || grep -Eqs -- "$2" /dev/null "${gate[@]}" || bad "$1 is tracked but the gate never runs: $3"; }
+scanner '*pnpm-lock.yaml' '(pnpm|PNPM\)).*[[:space:]]audit([[:space:]]|$)' 'pnpm audit'
+scanner '*uv.lock' 'uv audit|pip-audit' 'uv audit'
+scanner '*go.mod' 'govulncheck' 'govulncheck'
+scanner '*Cargo.lock' 'cargo deny' 'cargo deny check'
+[[ -z $(tracked '*go.mod') ]] || has '^GOTOOLCHAIN = "local"$' .flox/env/manifest.toml || bad '.flox/env/manifest.toml: [vars] GOTOOLCHAIN = "local" missing'
+
+# 6. Every hold, park and exception carries a date, and the date has not passed.
+while IFS=: read -r f n line; do
+  [[ $line =~ [Rr]eview[-\ ](by|on):?\ (20[0-9]{2}-[0-9]{2}-[0-9]{2}) ]] && [[ ${BASH_REMATCH[2]} < $today ]] && bad "$f:$n: review date ${BASH_REMATCH[2]} has passed"
+done < <(git grep -nIE '[Rr]eview[- ](by|on):? 20[0-9]{2}-[0-9]{2}-[0-9]{2}' -- . ':!*.md' ':!scripts/check-dep-tools' || true)
+
+exit "$fail"

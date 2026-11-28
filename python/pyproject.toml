@@ -66,6 +66,12 @@ Repository = "https://github.com/jim-technologies/medallion-sdk"
 Issues = "https://github.com/jim-technologies/medallion-sdk/issues"
 
 [tool.uv]
+# uv refuses to run below this release (exit 2). It binds work in this
+# repository only: uv ignores a dependency's [tool.uv], so a consumer adding
+# the Git source never sees it. Resolution only considers releases at least a
+# day old, the same cooldown the pnpm workspace keeps.
+required-version = ">=0.13.10"
+exclude-newer = "1 day"
 # The pinned Temporaless v0.12.2 runs on connectrpc 0.12.1, which imports
 # protobuf.wkt names that protobuf-py 0.7.0 removed. Hold the locked graph
 # below 0.7 until the workflows pin moves to a Temporaless release that

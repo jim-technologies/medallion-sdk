@@ -13,6 +13,11 @@ allowBuilds:
   "esbuild": true
   "protobufjs": false
 
-# Permit the patched PostCSS release through pnpm's minimum-release-age gate.
-minimumReleaseAgeExclude:
-  - postcss@8.5.31
+# Install only releases at least a day old, frozen installs included. Refuse a
+# version published with weaker trust evidence than an earlier release, and
+# Git or tarball sources that only a transitive dependency names
+# (invariantprotocol is a direct dependency, so it stays allowed).
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+trustPolicy: no-downgrade
+blockExoticSubdeps: true

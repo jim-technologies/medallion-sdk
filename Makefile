@@ -19,7 +19,7 @@ TEMPORALESS_COMMIT ?= 136fdf5b5fb5ec9fc30f1e58b3fd42445b123201
 
 .DEFAULT_GOAL := help
 
-.PHONY: help help-all install validate lock-check version-check version-set release contract-sync contract-check contract-release-check contract-release-gate generated-check breaking-check ingest-breaking-check artifact-check git-install-check public-surface check-examples test test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-workflows test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python lint-proto lint-shell lint-workflows fmt fmt-ts fmt-go fmt-python fmt-proto fmt-shell audit audit-node audit-go audit-python secret-check deps generate proto-bindings proto-descriptor clean
+.PHONY: help help-all install validate dep-tools lock-check version-check version-set release contract-sync contract-check contract-release-check contract-release-gate generated-check breaking-check ingest-breaking-check artifact-check git-install-check public-surface check-examples test test-version test-contract-sync test-package-artifacts test-ts test-go test-python test-workflows test-deployed build build-ts build-go build-python lint lint-ts lint-go lint-python lint-proto lint-shell lint-workflows fmt fmt-ts fmt-go fmt-python fmt-proto fmt-shell audit audit-node audit-go audit-python secret-check deps generate proto-bindings proto-descriptor clean
 
 help: ## One-screen help (make help-all for every target)
 	@echo "Daily:"
@@ -44,7 +44,10 @@ install: ## Install development dependencies for all languages.
 	$(GO) mod download
 	cd python && $(UV) sync --locked
 
-validate: lock-check version-check generated-check breaking-check ingest-breaking-check contract-release-gate public-surface lint test build check-examples artifact-check ## Run the full local gate; exactly what CI runs.
+validate: dep-tools lock-check version-check generated-check breaking-check ingest-breaking-check contract-release-gate public-surface lint test build check-examples artifact-check ## Run the full local gate; exactly what CI runs.
+
+dep-tools: ## Enforce the dependency-tool policy: pnpm, uv and Go modules only, locked, release-aged and review-dated (exceptions in scripts/dep-tools-allow.tsv).
+	scripts/check-dep-tools
 
 lock-check: node_modules/.medallion-install-stamp ## Verify all language dependency locks are synchronized.
 	$(GO) mod tidy -diff
@@ -154,7 +157,7 @@ lint-proto: ## Lint and format-check vendored protobuf contracts.
 	$(BUF) format proto --diff --exit-code
 
 lint-shell: ## Lint and format-check repository shell scripts.
-	$(SHELLCHECK) scripts/*.sh scripts/release
+	$(SHELLCHECK) scripts/*.sh scripts/release scripts/check-dep-tools
 	$(SHFMT) -d -i 2 -ci scripts/*.sh scripts/release
 
 lint-workflows: ## Validate GitHub Actions syntax and expressions.

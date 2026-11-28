@@ -14,9 +14,12 @@ Consumers do not need Flox. Flox is the sole contributor and CI toolchain
 bootstrap; do not add language setup actions or host-installed quality tools.
 CI runs exactly `flox activate -- make validate`, and a weekly secretless
 workflow runs `flox activate -- make audit`; every toolchain comes from
-`.flox/env/manifest.toml`. On a release tag the same gate additionally
-requires the immutable ingest contract attestation, the annotated-tag checks,
-and a CHANGELOG whose first release heading is the tagged version.
+`.flox/env/manifest.toml`. The gate's first step, `scripts/check-dep-tools`,
+holds dependencies to pnpm, uv and Go modules with checked locks; an exception
+is one dated line in `scripts/dep-tools-allow.tsv`. On a release tag the same
+gate additionally requires the immutable ingest contract attestation, the
+annotated-tag checks, and a CHANGELOG whose first release heading is the
+tagged version.
 
 `make validate` uses locked dependencies and local test services. It includes
 the durable-execution suite in the editable environment and against a clean

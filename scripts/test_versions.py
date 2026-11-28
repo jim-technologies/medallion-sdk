@@ -542,19 +542,6 @@ class VersionScriptsTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("postcss package versions", result.stderr)
 
-    def test_checker_rejects_postcss_release_age_drift(self) -> None:
-        workspace_path = self.fixture / "pnpm-workspace.yaml"
-        workspace_path.write_text(
-            workspace_path.read_text().replace(
-                "- postcss@8.5.31",
-                "- postcss@0.0.0",
-            )
-        )
-
-        result = self.run_script("check_versions.py")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("minimumReleaseAgeExclude entries", result.stderr)
-
     def test_checker_accepts_readme_install_tag_that_exists(self) -> None:
         result = self.run_script("check_versions.py")
         self.assertEqual(result.returncode, 0, result.stderr)
