@@ -1,3 +1,5 @@
-# path-prefix	reason	review-by: YYYY-MM-DD   (tab-separated; an entry whose date has passed fails the gate)
+# tracked file, or directory ending in /<TAB>reason<TAB>review-by: YYYY-MM-DD   (tab-separated; scripts/check-dep-tools rejects any other line and fails once the date passes)
 scripts/check_git_installs.sh	consumer install check: installs the exact tree with pip and npm, the tools many consumers use	review-by: 2027-02-28
 scripts/run_workflows_tests.sh	legacy-upgrade rehearsal: pip is the installer python/README.md tells upgrading consumers to use	review-by: 2027-02-28
+scripts/check_versions.py	validates the npm install command the README gives consumers (line 519)	review-by: 2027-02-28
+scripts/test_versions.py	tests that README npm install validation in scripts/check_versions.py	review-by: 2027-02-28

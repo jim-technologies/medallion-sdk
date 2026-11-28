@@ -1,7 +1,7 @@
 """Tables quickstart: declare a table, append rows, replay safely, query back.
 
 Run from a trusted server with the SDK installed from Git (and polars for the
-dataframe conveniences: ``pip install "medallion[polars] @ git+https://...``).
+dataframe conveniences: ``uv add "medallion[polars] @ git+https://...``).
 Never ship the API key to a browser.
 """
 

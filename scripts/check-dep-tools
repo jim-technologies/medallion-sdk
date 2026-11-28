@@ -1,15 +1,43 @@
 #!/usr/bin/env bash
 # Fleet dependency-tool standard, as one machine check. Byte-identical in every
-# repo; a repo's only knob is scripts/dep-tools-allow.tsv
-# (path-prefix<TAB>reason<TAB>review-by: YYYY-MM-DD). Run by `make validate`.
+# repo; a repo's only knob is scripts/dep-tools-allow.tsv, one exception per line:
+# <tracked file, or directory ending in /><TAB><reason><TAB>review-by: YYYY-MM-DD.
+# An exception lapses on its date. Run by `make validate`.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 allow=scripts/dep-tools-allow.tsv
 today=$(date -u +%F)
+day='20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+# Prose, this check, and secret stores, which no check here may read.
+skip=(':!*.md' ':!scripts/check-dep-tools' ':!*.sops.*' ':!*.env')
 fail=0
 bad() { printf 'dep-tools: %s\n' "$*" >&2; fail=1; }
-allowed() { [[ -f $allow ]] && awk -F'\t' -v f="$1" '!/^#/ && NF >= 3 && index(f, $1) == 1 { ok = 1 } END { exit !ok }' "$allow"; }
-has() { grep -Eq -- "$1" "$2" 2>/dev/null; }
+
+# 0. Every exception names one tracked file or a directory/, and carries its date.
+prefixes=()
+entry=$'^([^\t]+)\t[^\t]+\treview-by: ('"$day"')$'
+if [[ -f $allow ]]; then
+  while IFS= read -r line || [[ -n $line ]]; do
+    [[ -z $line || $line == '#'* ]] && continue
+    if [[ ! $line =~ $entry ]]; then
+      bad "$allow: '$line' is not <tracked file or dir/><TAB><reason><TAB>review-by: YYYY-MM-DD"
+      continue
+    fi
+    p=${BASH_REMATCH[1]}
+    [[ ${BASH_REMATCH[2]} < $today ]] && bad "$allow: $p: review date ${BASH_REMATCH[2]} has passed"
+    if [[ $p == */ ]]; then
+      [[ -n $(git ls-files -- ":(literal)$p") ]] || bad "$allow: $p holds no tracked file"
+    else
+      [[ $(git ls-files -- ":(literal)$p") == "$p" ]] || bad "$allow: $p is not a tracked file (a directory needs its trailing /)"
+    fi
+    prefixes+=("$p")
+  done < "$allow"
+fi
+allowed() {
+  local p
+  for p in ${prefixes[@]+"${prefixes[@]}"}; do [[ $1 == "$p" || ($p == */ && $1 == "$p"*) ]] && return 0; done
+  return 1
+}
 tracked() { git ls-files -- "$@" | while IFS= read -r f; do allowed "$f" || printf '%s\n' "$f"; done; }
 
 # 1. One package manager per ecosystem: no foreign lockfiles or manifests.
@@ -18,24 +46,35 @@ for f in $(tracked '*package-lock.json' '*npm-shrinkwrap.json' '*yarn.lock' '*bu
   bad "$f: foreign lockfile or manifest (pnpm-lock.yaml, uv.lock, go.sum and Cargo.lock only)"
 done
 
-# 2. No install that bypasses the lockfile or Flox, and no switch that relaxes pnpm
-#    (build, gate and image surfaces: make, shell, Dockerfiles, package.json, YAML, TOML).
-word='(npm|npx|yarn|bun|bunx|corepack)[[:space:]]+(install|i|ci|add|run|exec|enable|prepare)|pnpm[[:space:]]+(dlx|create)|uvx|uv[[:space:]]+tool[[:space:]]+(run|install)|(pip3?|pipx|poetry|pipenv)[[:space:]]+(install|add)|cargo[[:space:]]+install'
-fetch='(go|\$\(GO\))[[:space:]]+(install|run)([[:space:]]+-[^[:space:]]+)*[[:space:]]+[^[:space:]]+@|(curl|wget)[^|]*\|[[:space:]]*(ba|z)?sh'
-relax='/cmd/[[:alnum:]_-]+@v[0-9]|PNPM_CONFIG_STRICT_DEP_BUILDS|--config\.strict-dep-builds|strictDepBuilds: false|dangerouslyAllowAllBuilds|--ignore-registry-errors|--no-frozen-lockfile'
-bypass="(^|[^[:alnum:]_./-])(($word)([^[:alnum:]_-]|\$)|$fetch)|$relax"
+# 2. No install that bypasses the lockfile or Flox, and no switch that relaxes pnpm or
+#    uv, in any tracked text file but prose and lockfiles.
+cmd='(npm|corepack)[[:space:]]+(install|i|ci|add|run|exec|x|create|init|update|up|upgrade|link|rebuild|enable|prepare|use)'
+cmd+='|bun[[:space:]]+(install|i|add|a|x|run|create|c|update|upgrade|link|init|pm)|npx|pnpx|bunx|uvx|yarn|yarnpkg'
+cmd+='|pnpm[[:space:]]+(dlx|create)|uv[[:space:]]+tool[[:space:]]+(run|install)'
+cmd+='|(pip3?|pipx|poetry|pipenv)[[:space:]]+(install|add)|cargo[[:space:]]+(install|binstall)'
+fetch='(go|\$\(GO\))[[:space:]]+(install|run)([[:space:]]+-[^[:space:]]+)*[[:space:]]+[^[:space:]]+@|/cmd/[[:alnum:]_-]+@v[0-9]'
+fetch+='|(curl|wget)[^|]*\|[[:space:]]*(sudo[[:space:]]+(-[^[:space:]]+[[:space:]]+)*)?(ba|da|z)?sh([^[:alnum:]_.-]|$)'
+fetch+='|(ba|da|z)?sh[[:space:]]+(-[[:alpha:]]+[[:space:]]+)*("?\$\(|<\()[[:space:]]*(curl|wget)'
+relax='--no-frozen-lockfile|--ignore-registry-errors|--pm-on-fail|--no-locked|--exclude-newer|UV_EXCLUDE_NEWER'
+relax+='|uv[[:space:]]+run[^;&|]*[[:space:]]--with(-editable|-requirements)?([[:space:]]|=)'
+# pnpm settings that weaken the policy, in any spelling (case-insensitive):
+# pnpm_config_*/npm_config_* variables, --config.* flags, YAML or JSON keys.
+knob='(p?npm_config_|--config\.)(minimum[-_]?release[-_]?age|trust[-_]?policy|block[-_]?exotic[-_]?subdeps|strict[-_]?dep[-_]?builds|pm[-_]?on[-_]?fail)'
+knob+='|strict[-_]?dep[-_]?builds"?:[[:space:]]*false|dangerously[-_]?allow[-_]?all[-_]?builds'
+bypass="(^|[^[:alnum:]_./-])(($cmd)([^[:alnum:]_.-]|\$)|$fetch)|$relax"
+scan=(-- . ':!*.lock' ':!*.lockb' ':!*-lock.yaml' ':!*-lock.json' ':!*go.sum' "${skip[@]}" ":!$allow")
 while IFS=: read -r f n line; do
-  [[ $line == *'uv pip install'* ]] || allowed "$f" || bad "$f:$n: bypasses the lockfile or Flox: ${line:0:100}"
-done < <(git grep -nIE "$bypass" -- Makefile '*.mk' '*Dockerfile*' '*.sh' 'scripts/*' '.githooks/*' '*.json' '*.yml' '*.yaml' '*.toml' \
-  ':!*.py' ':!*lock.yaml' ':!*lock.json' ':!scripts/check-dep-tools' ':!'"$allow" || true)
+  allowed "$f" || bad "$f:$n: bypasses the lockfile or Flox: ${line:0:100}"
+done < <({ git grep -nIE "$bypass" "${scan[@]}"; git grep -nIiE "$knob" "${scan[@]}"; } | sort -u -t: -k1,1 -k2,2n || true)
 
-# 3. pnpm: pinned and enforced by pnpm itself (devEngines), 24 h release age, trust policy.
+# 3. pnpm: pinned and enforced by pnpm itself (devEngines), 24 h release age, trust
+#    policy, and every exclusion from those is one exact name@version under a dated comment.
 for lock in $(tracked '*pnpm-lock.yaml'); do
   d=$(dirname "$lock")
-  has '"packageManager": "pnpm@[0-9]+\.[0-9]+\.[0-9]+"' "$d/package.json" || bad "$d/package.json: packageManager must be pnpm@X.Y.Z"
-  has '"onFail": "error"' "$d/package.json" || bad "$d/package.json: devEngines.packageManager needs onFail: error"
+  grep -Eq '"packageManager": "pnpm@[0-9]+\.[0-9]+\.[0-9]+"' "$d/package.json" || bad "$d/package.json: packageManager must be pnpm@X.Y.Z"
+  grep -Eq '"onFail": "error"' "$d/package.json" || bad "$d/package.json: devEngines.packageManager needs onFail: error"
   for want in 'minimumReleaseAge: 1440' 'minimumReleaseAgeStrict: true' 'trustPolicy: no-downgrade' 'blockExoticSubdeps: true'; do
-    has "^$want\$" "$d/pnpm-workspace.yaml" || bad "$d/pnpm-workspace.yaml: missing '$want'"
+    grep -Eq "^$want\$" "$d/pnpm-workspace.yaml" || bad "$d/pnpm-workspace.yaml: missing '$want'"
   done
 done
 for f in $(tracked '*package.json'); do
@@ -43,26 +82,51 @@ for f in $(tracked '*package.json'); do
   until [[ -f $d/pnpm-lock.yaml || $d == . ]]; do d=$(dirname "$d"); done
   [[ -f $d/pnpm-lock.yaml ]] || bad "$f: no pnpm-lock.yaml at or above it"
 done
+for f in $(tracked '*pnpm-workspace.yaml' '*package.json'); do
+  awk -v day="review-by: $day" '
+    function no(why) { printf "dep-tools: %s:%d: %s\n", FILENAME, FNR, why > "/dev/stderr"; bad = 1 }
+    /"(minimumReleaseAgeExclude|trustPolicyExclude)"/ { no("set exclusions in pnpm-workspace.yaml, one dated name@version per line"); next }
+    /^(minimumReleaseAgeExclude|trustPolicyExclude):/ {
+      list = 1; dated = 0; rest = $0; sub(/^[^:]*:[[:space:]]*/, "", rest)
+      if (rest != "" && rest !~ /^#/) no("write exclusions as a block list, one name@version per line")
+      next
+    }
+    list && /^[^[:space:]#-]/ { list = 0 }
+    list && /^[[:space:]]*#/ { dated = $0 ~ day; next }
+    list && /^[[:space:]]*-/ {
+      item = $0; sub(/^[[:space:]]*-[[:space:]]*/, "", item); sub(/[[:space:]]+#.*$/, "", item); gsub(/["\047]/, "", item)
+      if (item !~ /^(@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*@[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.+-]+)?$/) no("exclusion \"" item "\" is not one exact name@version")
+      else if (!dated && $0 !~ day) no("exclusion " item " needs a review-by: YYYY-MM-DD comment above it")
+    }
+    END { exit bad }' "$f" || fail=1
+done
 
 # 4. uv: locked, version-guarded, same 24 h cooldown.
 for f in $(tracked '*pyproject.toml'); do
   [[ -f $(dirname "$f")/uv.lock ]] || bad "$f: no uv.lock beside it"
-  has '^required-version = ' "$f" || bad "$f: [tool.uv] required-version missing"
-  has '^exclude-newer = "1 day"$' "$f" || bad "$f: [tool.uv] exclude-newer = \"1 day\" missing"
+  grep -Eq '^required-version = ' "$f" || bad "$f: [tool.uv] required-version missing"
+  grep -Eq '^exclude-newer = "1 day"$' "$f" || bad "$f: [tool.uv] exclude-newer = \"1 day\" missing"
 done
 
-# 5. Every ecosystem has its advisory scanner in the gate; Go never downloads a toolchain.
-mapfile -t gate < <(git ls-files -- Makefile 'make/*.mk' 'scripts/*' ':!scripts/check-dep-tools' ':!scripts/*test*')
-scanner() { [[ -z $(tracked "$1") ]] || grep -Eqs -- "$2" /dev/null "${gate[@]}" || bad "$1 is tracked but the gate never runs: $3"; }
-scanner '*pnpm-lock.yaml' '(pnpm|PNPM\)).*[[:space:]]audit([[:space:]]|$)' 'pnpm audit'
-scanner '*uv.lock' 'uv audit|pip-audit' 'uv audit'
-scanner '*go.mod' 'govulncheck' 'govulncheck'
-scanner '*Cargo.lock' 'cargo deny' 'cargo deny check'
-[[ -z $(tracked '*go.mod') ]] || has '^GOTOOLCHAIN = "local"$' .flox/env/manifest.toml || bad '.flox/env/manifest.toml: [vars] GOTOOLCHAIN = "local" missing'
+# 5. Every ecosystem's advisory scanner is run (as a command, not a comment or a word in
+#    a list) by a Makefile target or script; Go never downloads a toolchain.
+at='(^[[:space:]]*[@+-]*|[;&|(`]|(^|[[:space:]])(then|do|else|--))[[:space:]]*((env|\$\([A-Z_]+\))[[:space:]]+)*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*'
+runs() { git grep -hIE -- "$at($1)" -- Makefile '*.mk' 'scripts/*' ':!scripts/*test*' "${skip[@]}" | grep -Ev '^[[:space:]]*#' > /dev/null; }
+scanner() { [[ -z $(tracked "$1") ]] || runs "$2" || bad "$1 is tracked but no Makefile target or script runs $3"; }
+scanner '*pnpm-lock.yaml' '(pnpm|\$\(PNPM\))([[:space:]]+[^[:space:];&|]+)*[[:space:]]+audit([[:space:]]|$)' 'pnpm audit'
+scanner '*uv.lock' '(uv|\$\(UV\))([[:space:]]+[^[:space:];&|]+)*[[:space:]]+(audit|pip-audit)([[:space:]]|$)|pip-audit([[:space:]]|$)' 'uv audit'
+scanner '*go.mod' '(go[[:space:]]+tool[[:space:]]+)?(govulncheck|\$\(GOVULNCHECK\))([[:space:]]|$)' 'govulncheck'
+scanner '*Cargo.lock' 'cargo[[:space:]]+deny([[:space:]]+[^[:space:];&|]+)*[[:space:]]+check([[:space:]]|$)' 'cargo deny check'
+[[ -z $(tracked '*go.mod') ]] || grep -Eq '^GOTOOLCHAIN = "local"$' .flox/env/manifest.toml || bad '.flox/env/manifest.toml: [vars] GOTOOLCHAIN = "local" missing'
 
-# 6. Every hold, park and exception carries a date, and the date has not passed.
+# 6. Every hold, park and exception carries its date on the same line, and the date has
+#    not passed.
 while IFS=: read -r f n line; do
-  [[ $line =~ [Rr]eview[-\ ](by|on):?\ (20[0-9]{2}-[0-9]{2}-[0-9]{2}) ]] && [[ ${BASH_REMATCH[2]} < $today ]] && bad "$f:$n: review date ${BASH_REMATCH[2]} has passed"
-done < <(git grep -nIE '[Rr]eview[- ](by|on):? 20[0-9]{2}-[0-9]{2}-[0-9]{2}' -- . ':!*.md' ':!scripts/check-dep-tools' || true)
+  if [[ $line =~ [Rr]eview[-\ ](by|on):?\ ($day) ]]; then
+    [[ ${BASH_REMATCH[2]} < $today ]] && bad "$f:$n: review date ${BASH_REMATCH[2]} has passed"
+  elif [[ $line =~ (^|[^[:alpha:]])[Rr]eview(-(by|on)([^[:alnum:]]|$)|[-\ ](by|on):?[[:space:]]*$) ]]; then
+    bad "$f:$n: put the date on the same line as review-by: YYYY-MM-DD"
+  fi
+done < <(git grep -nIE '[Rr]eview[- ](by|on)([^[:alnum:]]|$)' -- . "${skip[@]}" ":!$allow" || true)
 
 exit "$fail"

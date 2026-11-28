@@ -27,9 +27,13 @@ the contract release check refused, so its entries are unreleased too.
 - `make validate` starts with `scripts/check-dep-tools`, the dependency-tool
   check the Medallion repositories share byte for byte: pnpm, uv and Go
   modules are the only dependency managers, every lock is checked, pnpm and
-  uv take only releases at least a day old, and no review date on a hold or
-  exception has passed. `scripts/dep-tools-allow.tsv` names the two install
-  checks that drive pip and npm on purpose. `package.json` names pnpm 12.9.0
+  uv take only releases at least a day old, every pnpm exclusion is one dated
+  `name@version`, and no review date on a hold or exception has passed. It
+  reads every tracked text file but prose and lockfiles.
+  `scripts/dep-tools-allow.tsv` names the two install checks that drive pip
+  and npm on purpose and the README check of the npm command with its test.
+  The table example's docstring adds the polars extra with `uv add`, as the
+  Python README does. `package.json` names pnpm 12.9.0
   in `devEngines` with `onFail: error`, and `prepare` runs `node --run build`,
   so a Git install builds without npm.
 - pnpm installs, frozen ones included, refuse a version published with weaker

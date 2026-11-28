@@ -410,9 +410,9 @@ def check_npm() -> None:
         check=True,
     )
     # devEngines names pnpm, so npm refuses this tree unless forced. npm's own
-    # Git-dependency preparation (pacote) runs `npm install --force` in the
-    # clone for the same reason; for a dry-run pack, --force only turns that
-    # refusal into a warning.
+    # Git-dependency preparation (pacote) forces its install step in the clone
+    # for the same reason; for a dry-run pack, --force only turns that refusal
+    # into a warning.
     result = subprocess.run(
         ["npm", "pack", "--dry-run", "--json", "--ignore-scripts", "--force"],
         cwd=ROOT,
