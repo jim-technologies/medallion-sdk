@@ -29,3 +29,11 @@ codename | * | the one service in that public package, as the generated bindings
 # for the retired name, not a leak of it.
 # ---------------------------------------------------------------------------
 retired-scope | archive/connect-v1/projection/medallion/connect/v1/connect.proto | a reserved name in the schema is what permanently retires it; removing the reservation would let it be reused | reserved "organi%7Aation%5fid"
+
+# ---------------------------------------------------------------------------
+# The dependency-tool check is byte-identical across the fleet, including
+# private repositories that keep encrypted stores. It names their filename
+# pattern only in a pathspec that excludes them from its scan, so the check
+# never reads or prints one. The rule masks that one pathspec in that one file.
+# ---------------------------------------------------------------------------
+secret-store | scripts/check-dep-tools | the shared dependency-tool check excludes encrypted secret stores from its scan by their filename pattern, which keeps it from ever reading one | :!\*\.%73ops\.\*
