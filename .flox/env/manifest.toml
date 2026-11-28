@@ -14,7 +14,8 @@ typescript-language-server.pkg-path = "typescript-language-server"
 # GOTOOLCHAIN = "local" below keeps Go from downloading another one;
 # scripts/check_versions.py holds the locked version to go.mod's `go`
 # directive. The catalog's go_1_27 stops at 1.27.3, so the 1.27.4 security
-# release comes from an immutable official Nixpkgs flake.
+# release comes from an immutable official Nixpkgs flake. Parked,
+# review-by: 2026-12-31: back to the catalog once it offers 1.27.4.
 go.flake = "github:NixOS/nixpkgs/2578a3f6178e116798c9294895df1dba62eac78b#go_1_27"
 python.pkg-path = "python314"
 python.version = "python3-3.14.10"
