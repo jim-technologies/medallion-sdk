@@ -40,6 +40,10 @@ the contract release check refused, so its entries are unreleased too.
 - `python/pyproject.toml` requires uv 0.13.10 or newer and resolves only
   releases at least a day old (`exclude-newer = "1 day"`), which the lock
   records.
+- `make audit` runs Flox's govulncheck 1.10.0 instead of downloading one with
+  `go run`, and audits Python with `uv audit`: the locked graph with every
+  extra (the pip-audit run covered only the base dependencies) and, as a
+  PEP 723 script, the pinned hatchling build backend.
 - Dependency currency: the TypeScript development toolchain moves to Biome
   2.6.6, Vitest 5.1.0 and `@types/node` 26.6.6; the Python lock moves to
   Polars 2.1.0, PyArrow 26.0.1 and OpenTelemetry API 1.45.2, and the build

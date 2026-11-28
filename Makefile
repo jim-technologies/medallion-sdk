@@ -11,8 +11,7 @@ SHELLCHECK ?= shellcheck
 SHFMT ?= shfmt
 ACTIONLINT ?= actionlint
 GITLEAKS ?= gitleaks
-GOVULNCHECK_VERSION ?= v1.9.0
-PIP_AUDIT_VERSION ?= 2.10.1
+GOVULNCHECK ?= govulncheck
 # The Temporaless release the workflows surface wraps. scripts/check_versions.py
 # holds this to the pin recorded in every language.
 TEMPORALESS_COMMIT ?= 136fdf5b5fb5ec9fc30f1e58b3fd42445b123201
@@ -187,10 +186,10 @@ audit-node: node_modules/.medallion-install-stamp ## Audit the locked JavaScript
 	$(PNPM) audit --audit-level=low
 
 audit-go: ## Audit Go packages and tests against the current vulnerability database.
-	$(GO) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) -test ./...
+	$(GOVULNCHECK) -test ./...
 
-audit-python: ## Audit exact Python runtime locks and the pinned build backend.
-	PIP_AUDIT_VERSION=$(PIP_AUDIT_VERSION) scripts/audit_python.sh
+audit-python: ## Audit the locked Python graph, every extra included, and the pinned build backend.
+	scripts/audit_python.sh
 
 secret-check: ## Scan the working tree for committed credentials and tokens.
 	$(GITLEAKS) dir . --no-banner --redact
