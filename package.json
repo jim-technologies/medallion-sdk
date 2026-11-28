@@ -62,7 +62,7 @@
     "@opentelemetry/api": "1.10.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.6.6",
+    "@biomejs/biome": "2.6.8",
     "@types/node": "26.6.6",
     "tsup": "9.0.0",
     "typescript": "7.0.2",
