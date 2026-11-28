@@ -59,9 +59,15 @@ invariantprotocol v0.16.8 (commit
 `79ead8726b4d79ee7c024b85441daf6f46851830`).
 
 ```bash
-pnpm add 'github:jim-technologies/medallion-sdk#v0.3.1'
 npm install --allow-git=all 'git+https://github.com/jim-technologies/medallion-sdk.git#v0.3.1'
 ```
+
+pnpm 12's defaults refuse this Git install: the package builds `dist/` in a
+`prepare` script, and pnpm runs a Git dependency's build only when the
+consumer's `allowBuilds` lists that exact source
+(`ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`), and its Git-hosted invariantprotocol
+dependency trips `blockExoticSubdeps` (`ERR_PNPM_EXOTIC_SUBDEP`). Install with
+npm until the TypeScript package installs from Git prebuilt.
 
 Go and Python installation commands are documented in
 [`go/README.md`](./go/README.md) and [`python/README.md`](./python/README.md).

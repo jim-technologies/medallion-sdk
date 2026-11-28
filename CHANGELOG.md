@@ -204,6 +204,11 @@ the contract release check refused, so its entries are unreleased too.
 
 ### Fixed
 
+- The README no longer offers a `pnpm add` Git install:
+  pnpm 12's defaults refuse it, because the package builds `dist/` in a Git
+  `prepare` script and depends on invariantprotocol from Git. It names npm,
+  which `make git-install-check` exercises, until the package installs from
+  Git prebuilt.
 - Python rejects non-integer retry counts when constructing `RetryConfig`,
   using `MEDALLION_INVALID_OPTIONS` instead of a later raw `TypeError` during
   an otherwise valid table read or idempotent request.
