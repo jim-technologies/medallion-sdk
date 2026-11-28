@@ -157,6 +157,25 @@ PY
     )"
     python3 "$root/scripts/check_package_artifacts.py" \
       --scan-tree "$installed_python_root"
+
+    # The README's primary Python path: a uv project adding the Git source.
+    echo "==> Python (uv add)"
+    uv_consumer="$tmp/uv-consumer-$suffix"
+    mkdir -p "$uv_consumer"
+    (
+      cd "$uv_consumer"
+      uv init --quiet --bare --no-workspace --name medallion-uv-install-check
+      uv add --quiet "medallion @ git+file://${source_repo}@${ref}#subdirectory=python"
+      EXPECTED_VERSION="$version" uv run --locked python - <<'PY'
+import importlib.metadata
+import os
+
+import medallion
+
+assert importlib.metadata.version("medallion") == os.environ["EXPECTED_VERSION"]
+assert medallion.MedallionClient is not None
+PY
+    )
   fi
 
   echo "==> TypeScript"
